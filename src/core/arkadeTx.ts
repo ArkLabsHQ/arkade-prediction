@@ -107,7 +107,13 @@ function attachExtension(tx: Transaction, ext: Extension): void {
     }
 }
 
-export async function buildArkadeTx(net: Network, inputs: InputSpec[], outputs: OutputSpec[]): Promise<BuiltTx> {
+/** `opts.packet` supplies a raw asset packet (issuance) for txs whose inputs and outputs carry no transfer groups. */
+export async function buildArkadeTx(
+    net: Network,
+    inputs: InputSpec[],
+    outputs: OutputSpec[],
+    opts: { packet?: asset.Packet } = {},
+): Promise<BuiltTx> {
     const entries: { vin: number; script: Uint8Array; witness: Uint8Array }[] = [];
     const signerInputs: number[] = [];
     const arkInputs = inputs.map((input, vin) => {
@@ -135,7 +141,8 @@ export async function buildArkadeTx(net: Network, inputs: InputSpec[], outputs: 
 
     const packets = [];
     const assets = assetPacket(inputs, outputs);
-    if (assets) packets.push(assets);
+    if (assets && opts.packet) throw new Error("raw packet cannot be combined with asset transfers");
+    if (assets ?? opts.packet) packets.push((assets ?? opts.packet)!);
     if (entries.length > 0) packets.push(EmulatorPacket.create(entries));
     if (packets.length > 0) attachExtension(arkTx, Extension.create(packets as never));
 
