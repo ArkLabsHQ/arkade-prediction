@@ -69,6 +69,7 @@ export function createApi(d: ApiDeps): Hono {
             exitDelaySeconds: d.net.exitDelaySeconds.toString(),
             devFaucet: d.cfg.DEV_ENDPOINTS && !!d.faucet,
             testNetwork: true,
+            maxCloseHorizonSeconds: String(d.cfg.IMPORT_MAX_HORIZON_SECONDS),
         };
         return c.json(cfg);
     });
@@ -217,7 +218,11 @@ export function createApi(d: ApiDeps): Hono {
             const last = faucetSeen.get(address) ?? 0;
             if (Date.now() - last < 10_000) throw new HttpError(429, "rate", "wait 10 s between faucet requests");
             faucetSeen.set(address, Date.now());
-            return c.json({ txid: await d.faucet!(address, amount) });
+            try {
+                return c.json({ txid: await d.faucet!(address, amount) });
+            } catch (err) {
+                throw new HttpError(503, "faucet-unavailable", `faucet wallet could not pay: ${String(err).slice(0, 160)}`);
+            }
         });
     }
     return app;

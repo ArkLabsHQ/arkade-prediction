@@ -24,6 +24,8 @@ export interface ConfigJson {
     exitDelaySeconds: string;
     devFaucet: boolean;
     testNetwork: boolean;
+    /** Latest close time the server admits for new markets, relative to now. */
+    maxCloseHorizonSeconds: string;
 }
 
 export interface MarketTermsJson {

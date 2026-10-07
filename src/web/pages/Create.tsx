@@ -1,0 +1,204 @@
+import { hex } from "@scure/base";
+import { useState } from "react";
+import { CARRIER_SATS } from "../../core/actions.js";
+import { enc } from "../api.js";
+import { MAX_SETS, VAULT_BASE_SATS, clearDraft, loadDraft, runCreate, saveDraft, type Chain, type CreateDraft, type Session } from "../chain.js";
+import { useApp } from "../ctx.js";
+import { fromUnix, n, sats, when } from "../format.js";
+import { addOracleKey, isXOnlyKey } from "../keystore.js";
+import { ActionStatus, Copy, LockedNotice, Panel, Txid, navigate, useAction } from "../ui.js";
+
+// The server only checks these at registration, after the vault is funded, so they are enforced here first.
+const MAX_QUESTION = 300;
+const MAX_RULES = 10_000;
+const MAX_LABEL = 40;
+const MIN_LEAD_SECONDS = 300;
+// ponytail: mirrors the server default IMPORT_MAX_HORIZON_SECONDS; expose it in ConfigJson if deployments change it.
+const MAX_HORIZON_SECONDS = 30 * 86400;
+const CATEGORIES = ["Crypto", "Politics", "Sports", "Economics", "Science", "Culture"];
+
+const pad = (x: number) => String(x).padStart(2, "0");
+const localInput = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+const unixOf = (local: string) => Math.floor(new Date(local).getTime() / 1000);
+
+export function CreatePage() {
+    const { session, chain } = useApp();
+    return (
+        <div className="stack narrow">
+            <div className="page-head">
+                <h1>Create a market</h1>
+                <p className="muted">A custom two-outcome market collateralised in BTC on Arkade. You fund its vault and keep one complete set.</p>
+            </div>
+            {session && chain ? <Creator key={session.script} session={session} chain={chain} /> : <LockedNotice what="create a market" />}
+        </div>
+    );
+}
+
+function Creator({ session, chain }: { session: Session; chain: Chain }) {
+    const { refreshHoldings } = useApp();
+    const [draft, setDraft] = useState(() => loadDraft(session.script));
+    const act = useAction();
+    const create = (d: CreateDraft) => act.run(async (step) => {
+        const m = await runCreate(chain, session, d, step);
+        void refreshHoldings();
+        navigate(`/markets/${enc(m.id)}`);
+        return "Market created.";
+    });
+    if (!draft) return <Form session={session} onStart={(d) => { saveDraft(session.script, d); setDraft(d); void create(d); }} />;
+    const stage = draft.vaultTxid ? "registering it with the server" : draft.genesisTxid ? "funding the vault" : "issuing its assets";
+    const late = Number(draft.definition.closeAtUnix) - Date.now() / 1000 < 60;
+    return (
+        <Panel title={act.busy ? "Creating market" : "Unfinished market"}>
+            <p className="prose strong">{draft.definition.question}</p>
+            <p>{act.busy ? `Step: ${act.step ?? "working"}.` : `Stopped while ${stage}.`}</p>
+            {(draft.genesisTxid || draft.vaultTxid) && (
+                <p className="small">
+                    {draft.genesisTxid && <>Assets <Txid txid={draft.genesisTxid} /></>}
+                    {draft.vaultTxid && <> · vault <Txid txid={draft.vaultTxid} /></>}
+                </p>
+            )}
+            {late && !act.busy && <p className="notice danger">Its close time ({when(fromUnix(draft.definition.closeAtUnix))}) is too near or past, so the server will refuse to list it.</p>}
+            {!act.busy && (
+                <div className="row2">
+                    <button type="button" className="btn primary" onClick={() => void create(draft)}>Resume</button>
+                    <button
+                        type="button"
+                        className="btn ghost"
+                        onClick={() => {
+                            if (!window.confirm(draft.vaultTxid ? "The vault is already funded. Discarding leaves its collateral locked in an unlisted market. Discard anyway?" : "Discard this unfinished market?")) return;
+                            clearDraft(session.script);
+                            setDraft(null);
+                        }}
+                    >
+                        Discard
+                    </button>
+                </div>
+            )}
+            <ActionStatus s={act} />
+        </Panel>
+    );
+}
+
+function Form({ session, onStart }: { session: Session; onStart(d: CreateDraft): void }) {
+    const { config, holdings } = useApp();
+    const [question, setQuestion] = useState("");
+    const [rules, setRules] = useState("");
+    const [labelA, setLabelA] = useState("YES");
+    const [labelB, setLabelB] = useState("NO");
+    const [category, setCategory] = useState("");
+    const [closeAt, setCloseAt] = useState(() => localInput(new Date(Math.ceil(Date.now() / 3_600_000) * 3_600_000 + 7 * 86_400_000)));
+    const [timeoutAt, setTimeoutAt] = useState("");
+    const [mode, setMode] = useState<"self" | "paste">("self");
+    const [pasted, setPasted] = useState("");
+    const [generated, setGenerated] = useState<{ publicKey: string; secretKey: string } | null>(null);
+    const [saved, setSaved] = useState(false);
+    const keygen = useAction();
+    const unit = BigInt(config.unitSats);
+    const lock = VAULT_BASE_SATS + unit;
+    const now = Date.now() / 1000;
+    const closeUnix = unixOf(closeAt);
+    const timeoutUnix = timeoutAt ? unixOf(timeoutAt) : 0;
+    const oracleKey = mode === "self" ? generated?.publicKey ?? "" : pasted.trim().toLowerCase();
+    const a = labelA.trim();
+    const b = labelB.trim();
+
+    const problems: string[] = [];
+    if (question.trim().length < 10 || question.length > MAX_QUESTION) problems.push(`Question: 10 to ${MAX_QUESTION} characters`);
+    if (!rules.trim() || rules.length > MAX_RULES) problems.push("Rules: say exactly how the outcome will be decided");
+    if (!a || !b || a.length > MAX_LABEL || b.length > MAX_LABEL || a.toLowerCase() === b.toLowerCase()) problems.push(`Outcomes: two different labels of 1 to ${MAX_LABEL} characters`);
+    if (category.trim().length > MAX_LABEL) problems.push(`Category: at most ${MAX_LABEL} characters`);
+    if (!(closeUnix >= now + MIN_LEAD_SECONDS && closeUnix <= now + MAX_HORIZON_SECONDS)) problems.push("Close time: between 5 minutes and 30 days from now");
+    if (timeoutAt && !(timeoutUnix > closeUnix)) problems.push("Timeout: must be after the close time");
+    if (mode === "self" && !(generated && saved)) problems.push("Oracle: generate your key and confirm you saved its secret");
+    if (mode === "paste" && !isXOnlyKey(oracleKey)) problems.push("Oracle: paste a valid 32-byte x-only public key (64 hex characters)");
+    if (holdings && holdings.plainSats < lock + CARRIER_SATS) problems.push(`Funds: needs ${sats(lock + CARRIER_SATS)} in spendable coins; you have ${sats(holdings.plainSats)}`);
+
+    const start = () => onStart({
+        marketId: hex.encode(crypto.getRandomValues(new Uint8Array(16))),
+        network: config.network,
+        definition: {
+            question: question.trim(), rules: rules.trim(), outcomes: [a, b], category: category.trim() || null,
+            closeAtUnix: String(closeUnix), timeoutAtUnix: String(timeoutUnix),
+        },
+        oracleKey,
+        unitSats: config.unitSats,
+        exitDelaySeconds: config.exitDelaySeconds,
+    });
+
+    return (
+        <form className="stack" onSubmit={(e) => { e.preventDefault(); if (problems.length === 0) start(); }}>
+            <Panel title="Question">
+                <label className="field">
+                    <span>Question</span>
+                    <input value={question} maxLength={MAX_QUESTION} onChange={(e) => setQuestion(e.target.value)} placeholder="Will … happen by …?" />
+                </label>
+                <label className="field">
+                    <span>Rules: the exact resolution criteria and source</span>
+                    <textarea rows={6} maxLength={MAX_RULES} value={rules} onChange={(e) => setRules(e.target.value)} />
+                </label>
+                <div className="row2">
+                    <label className="field"><span>Outcome A</span><input value={labelA} maxLength={MAX_LABEL} onChange={(e) => setLabelA(e.target.value)} /></label>
+                    <label className="field"><span>Outcome B</span><input value={labelB} maxLength={MAX_LABEL} onChange={(e) => setLabelB(e.target.value)} /></label>
+                </div>
+                <label className="field">
+                    <span>Category (optional)</span>
+                    <input list="categories" value={category} maxLength={MAX_LABEL} onChange={(e) => setCategory(e.target.value)} />
+                    <datalist id="categories">{CATEGORIES.map((c) => <option key={c} value={c} />)}</datalist>
+                </label>
+            </Panel>
+            <Panel title="Timing">
+                <div className="row2">
+                    <label className="field">
+                        <span>Close time (local)</span>
+                        <input type="datetime-local" value={closeAt} onChange={(e) => setCloseAt(e.target.value)} />
+                    </label>
+                    <label className="field">
+                        <span>Timeout (optional)</span>
+                        <input type="datetime-local" value={timeoutAt} onChange={(e) => setTimeoutAt(e.target.value)} />
+                    </label>
+                </div>
+                <p className="muted small">The oracle can resolve only after close. If a timeout is set and nobody has resolved by then, anyone can settle the market as invalid: every complete set pays 50/50.</p>
+            </Panel>
+            <Panel title="Oracle">
+                <fieldset className="choices">
+                    <legend>Who decides the outcome</legend>
+                    <label className="radio"><input type="radio" name="oracle-mode" checked={mode === "self"} onChange={() => setMode("self")} /> You resolve it, with a separate key generated in this browser</label>
+                    <label className="radio"><input type="radio" name="oracle-mode" checked={mode === "paste"} onChange={() => setMode("paste")} /> Someone else resolves it: paste their oracle public key</label>
+                </fieldset>
+                {mode === "self" && (generated ? (
+                    <div className="stack">
+                        <dl className="kv">
+                            <dt>Public key</dt><dd className="mono break">{generated.publicKey}</dd>
+                            <dt>Secret key</dt><dd><span className="mono break secret">{generated.secretKey}</span> <Copy text={generated.secretKey} label="Copy secret" /></dd>
+                        </dl>
+                        <p className="notice warn">Stored encrypted with this wallet, but your recovery phrase does not restore it. Without this secret the market can end only through its timeout, if you set one.</p>
+                        <label className="check"><input type="checkbox" checked={saved} onChange={(e) => setSaved(e.target.checked)} /> I saved the secret key somewhere safe.</label>
+                    </div>
+                ) : (
+                    <>
+                        <button type="button" className="btn" disabled={keygen.busy} onClick={() => void keygen.run(async () => { setGenerated(await addOracleKey(session.keystore)); return null; })}>
+                            Generate oracle key
+                        </button>
+                        <ActionStatus s={keygen} />
+                    </>
+                ))}
+                {mode === "paste" && (
+                    <label className="field">
+                        <span>Oracle public key (x-only, hex)</span>
+                        <input className="mono" autoComplete="off" spellCheck={false} value={pasted} onChange={(e) => setPasted(e.target.value)} />
+                    </label>
+                )}
+            </Panel>
+            <Panel title="Cost">
+                <dl className="kv">
+                    <dt>Vault lock</dt><dd>{sats(lock)}: base {n(VAULT_BASE_SATS)} plus one complete set at {n(unit)}</dd>
+                    <dt>You receive</dt><dd>1 {a || "A"} + 1 {b || "B"}, together always worth {sats(unit)}</dd>
+                    <dt>Capacity</dt><dd>the vault holds at most {n(MAX_SETS)} complete sets, including yours</dd>
+                    <dt>Transactions</dt><dd>two, signed here: asset issuance, then vault funding</dd>
+                </dl>
+            </Panel>
+            {problems.length > 0 && <ul className="plain hints">{problems.map((p) => <li key={p} className="hint">{p}</li>)}</ul>}
+            <button type="submit" className="btn primary wide" disabled={problems.length > 0}>Create market and fund vault ({sats(lock)})</button>
+        </form>
+    );
+}
