@@ -1,0 +1,242 @@
+{
+  "formatVersion": 1,
+  "contractName": "ClaimBox",
+  "constructorInputs": [
+    {
+      "name": "owner",
+      "type": "pubkey"
+    },
+    {
+      "name": "ownerProgram",
+      "type": "bytes32"
+    },
+    {
+      "name": "resolvedYes",
+      "type": "bytes32"
+    },
+    {
+      "name": "resolvedNo",
+      "type": "bytes32"
+    },
+    {
+      "name": "resolvedInvalid",
+      "type": "bytes32"
+    },
+    {
+      "name": "exit",
+      "type": "int"
+    }
+  ],
+  "functions": [
+    {
+      "name": "claim",
+      "arkade": {
+        "inputs": [],
+        "asm": [
+          "<resolvedInvalid>",
+          "<resolvedNo>",
+          "<resolvedYes>",
+          "<ownerProgram>",
+          "OP_PUSHCURRENTINPUTINDEX",
+          "1",
+          "OP_EQUAL",
+          "OP_IF",
+          "OP_INSPECTNUMINPUTS",
+          "2",
+          "OP_EQUAL",
+          "OP_ELSE",
+          "OP_0",
+          "OP_ENDIF",
+          "OP_VERIFY",
+          "0",
+          "OP_INSPECTINPUTSCRIPTPUBKEY",
+          "OP_DROP",
+          "OP_2",
+          "OP_PICK",
+          "OP_EQUAL",
+          "OP_IF",
+          "OP_1",
+          "OP_ELSE",
+          "0",
+          "OP_INSPECTINPUTSCRIPTPUBKEY",
+          "OP_DROP",
+          "OP_3",
+          "OP_PICK",
+          "OP_EQUAL",
+          "OP_ENDIF",
+          "OP_IF",
+          "OP_1",
+          "OP_ELSE",
+          "0",
+          "OP_INSPECTINPUTSCRIPTPUBKEY",
+          "OP_DROP",
+          "OP_4",
+          "OP_PICK",
+          "OP_EQUAL",
+          "OP_ENDIF",
+          "OP_VERIFY",
+          "1",
+          "OP_INSPECTOUTPUTSCRIPTPUBKEY",
+          "OP_DROP",
+          "OP_SWAP",
+          "OP_EQUALVERIFY",
+          "1",
+          "OP_INSPECTOUTPUTSCRIPTPUBKEY",
+          "OP_NIP",
+          "1",
+          "OP_EQUALVERIFY",
+          "1",
+          "OP_INSPECTOUTPUTVALUE",
+          "0",
+          "OP_INSPECTINPUTVALUE",
+          "0",
+          "OP_INSPECTOUTPUTVALUE",
+          "OP_SUB",
+          "OP_PUSHCURRENTINPUTINDEX",
+          "OP_INSPECTINPUTVALUE",
+          "OP_ADD",
+          "OP_GREATERTHANOREQUAL",
+          "OP_VERIFY",
+          "1",
+          "OP_INSPECTOUTASSETCOUNT",
+          "0",
+          "OP_EQUAL",
+          "OP_NIP",
+          "OP_NIP",
+          "OP_NIP"
+        ]
+      },
+      "leaves": [
+        {
+          "name": "claim",
+          "witness": [
+            {
+              "name": "serverSig",
+              "type": "signature",
+              "encoding": "schnorr-64",
+              "injected": true
+            },
+            {
+              "name": "emulatorSig",
+              "type": "signature",
+              "encoding": "schnorr-64",
+              "injected": true
+            }
+          ],
+          "asm": [
+            "<SERVER_KEY>",
+            "OP_CHECKSIGVERIFY",
+            "<EMULATOR_KEY:claim>",
+            "OP_CHECKSIG"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "renew",
+      "arkade": {
+        "inputs": [],
+        "asm": [
+          "OP_INSPECTVERSION",
+          "2",
+          "OP_EQUALVERIFY",
+          "OP_PUSHCURRENTINPUTINDEX",
+          "1",
+          "OP_SUB",
+          "7",
+          "0",
+          "OP_TUNNEL"
+        ]
+      },
+      "leaves": [
+        {
+          "name": "renew",
+          "witness": [
+            {
+              "name": "serverSig",
+              "type": "signature",
+              "encoding": "schnorr-64",
+              "injected": true
+            },
+            {
+              "name": "emulatorSig",
+              "type": "signature",
+              "encoding": "schnorr-64",
+              "injected": true
+            }
+          ],
+          "asm": [
+            "<SERVER_KEY>",
+            "OP_CHECKSIGVERIFY",
+            "<EMULATOR_KEY:renew>",
+            "OP_CHECKSIG"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "unilateral",
+      "leaves": [
+        {
+          "name": "unilateral",
+          "witness": [
+            {
+              "name": "ownerSig",
+              "type": "signature",
+              "encoding": "schnorr-64"
+            }
+          ],
+          "asm": [
+            "<exit>",
+            "OP_CHECKSEQUENCEVERIFY",
+            "OP_DROP",
+            "<owner>",
+            "OP_CHECKSIG"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "withdraw",
+      "leaves": [
+        {
+          "name": "withdraw",
+          "witness": [
+            {
+              "name": "ownerSig",
+              "type": "signature",
+              "encoding": "schnorr-64"
+            },
+            {
+              "name": "serverSig",
+              "type": "signature",
+              "encoding": "schnorr-64",
+              "injected": true
+            }
+          ],
+          "asm": [
+            "<owner>",
+            "OP_CHECKSIGVERIFY",
+            "<SERVER_KEY>",
+            "OP_CHECKSIG"
+          ]
+        }
+      ]
+    }
+  ],
+  "source": {
+    "entry": "claim_box.ark",
+    "files": {
+      "claim_box.ark": "pragma arkade ^0.1.0;\n\n// Holds one owner's claims for one market so they survive the owner being offline: a keeper may renew\n// the box and, once the market has resolved, redeem it. Redemption burns every claim against a resolved\n// vault (which prices the burn) and must pay everything released, plus the box's sats, to the owner.\ncontract ClaimBox(\n  pubkey owner,\n  bytes32 ownerProgram,\n  bytes32 resolvedYes,\n  bytes32 resolvedNo,\n  bytes32 resolvedInvalid,\n  int exit\n) {\n  function claim() {\n    require(this.activeInputIndex == 1 && tx.numInputs == 2, \"layout\");\n    require(\n      tx.inputs[0].scriptPubKey == resolvedYes || tx.inputs[0].scriptPubKey == resolvedNo || tx.inputs[0].scriptPubKey == resolvedInvalid,\n      \"not a resolved vault of this market\"\n    );\n    require(tx.outputs[1].scriptPubKey == ownerProgram, \"owner\");\n    require(tx.outputs[1].witnessVersion == 1, \"owner version\");\n    require(tx.outputs[1].value >= tx.inputs[0].value - tx.outputs[0].value + tx.input.current.value, \"payout\");\n    require(tx.outputs[1].assets.length == 0, \"claims must be burned\");\n  }\n\n  function renew() {\n    require(tx.version == 2, \"intent only\");\n    require(this.tunnel(this.activeInputIndex - 1), \"tunnel\");\n  }\n\n  function withdraw(signature ownerSig, signature serverSig) tapscript {\n    require(checkMultisig([owner, server], [ownerSig, serverSig]));\n  }\n\n  function unilateral(signature ownerSig) tapscript {\n    require(older(exit));\n    require(checkSig(ownerSig, owner));\n  }\n}\n"
+    }
+  },
+  "compiler": {
+    "name": "arkadec",
+    "version": "0.1.0",
+    "options": {
+      "optimize": true
+    }
+  },
+  "updatedAt": "2026-10-07T17:54:51.698250900+00:00",
+  "fingerprint": "sha256:981bbecb8da7addaa524b819adf96c3b3849366960af802b26c9a729222493af"
+}

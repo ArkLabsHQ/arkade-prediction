@@ -44,7 +44,15 @@ export function mine(blocks = 1): void {
 
 /** Pay `amount` sats offchain from the stack's funded ark CLI wallet. */
 export function faucet(address: string, amount: number): void {
-    arkdCli("ark", "send", "--to", address, "--amount", String(amount), "--password", "secret");
+    const send = () => arkdCli("ark", "send", "--to", address, "--amount", String(amount), "--password", "secret");
+    try {
+        send();
+    } catch {
+        // The stack's CLI wallet drains across runs; top it up with a fresh operator note and retry once.
+        const note = arkdCli("arkd", "note", "--amount", "500000000").split(/\s+/).pop()!;
+        arkdCli("ark", "redeem-notes", "-n", note, "--password", "secret");
+        send();
+    }
 }
 
 /**

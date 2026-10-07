@@ -48,6 +48,7 @@ const schema = z.object({
     IMPORT_PAGE_LIMIT: int(100),
     IMPORT_MAX_PAGES: int(5),
     RESOLUTION_INTERVAL_SECONDS: int(120),
+    IMPORT_TIMEOUT_DAYS: int(60),
     MARKET_UNIT_SATS: int(1000),
     MARKET_BASE_SATS: int(1000),
     MARKET_CAP_SETS: int(1000),

@@ -1,0 +1,39 @@
+pragma arkade ^0.1.0;
+
+// Holds one owner's claims for one market so they survive the owner being offline: a keeper may renew
+// the box and, once the market has resolved, redeem it. Redemption burns every claim against a resolved
+// vault (which prices the burn) and must pay everything released, plus the box's sats, to the owner.
+contract ClaimBox(
+  pubkey owner,
+  bytes32 ownerProgram,
+  bytes32 resolvedYes,
+  bytes32 resolvedNo,
+  bytes32 resolvedInvalid,
+  int exit
+) {
+  function claim() {
+    require(this.activeInputIndex == 1 && tx.numInputs == 2, "layout");
+    require(
+      tx.inputs[0].scriptPubKey == resolvedYes || tx.inputs[0].scriptPubKey == resolvedNo || tx.inputs[0].scriptPubKey == resolvedInvalid,
+      "not a resolved vault of this market"
+    );
+    require(tx.outputs[1].scriptPubKey == ownerProgram, "owner");
+    require(tx.outputs[1].witnessVersion == 1, "owner version");
+    require(tx.outputs[1].value >= tx.inputs[0].value - tx.outputs[0].value + tx.input.current.value, "payout");
+    require(tx.outputs[1].assets.length == 0, "claims must be burned");
+  }
+
+  function renew() {
+    require(tx.version == 2, "intent only");
+    require(this.tunnel(this.activeInputIndex - 1), "tunnel");
+  }
+
+  function withdraw(signature ownerSig, signature serverSig) tapscript {
+    require(checkMultisig([owner, server], [ownerSig, serverSig]));
+  }
+
+  function unilateral(signature ownerSig) tapscript {
+    require(older(exit));
+    require(checkSig(ownerSig, owner));
+  }
+}

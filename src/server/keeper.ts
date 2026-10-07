@@ -15,6 +15,8 @@ import { all, now, run, type Db } from "./db.js";
 import type { WriterLease } from "./lease.js";
 import { auditGenesis, getMarket, marketTerms, reconcileVault, type Deps, type MarketRow } from "./markets.js";
 import { openOffers, recordTrade, refreshOffer, registerOffer } from "./offers.js";
+import { watchedBoxes } from "./boxes.js";
+import { autoClaim, claimBoxContract } from "../core/claimBox.js";
 import { backoffMs, type Workflow, type Workflows } from "./workflows.js";
 
 export interface KeeperDeps extends Deps {
@@ -91,7 +93,25 @@ export class Keeper {
             }
         }
         this.planMatches(offers);
-        this.planRenewals(offers, nowS);
+        const boxes = await this.boxCoins();
+        this.planRenewals(offers, nowS, boxes);
+        for (const b of boxes) {
+            const m = getMarket(db, b.box.market_id);
+            if (m?.vault_phase === "resolved" && b.coin.assets?.length) {
+                wf.enqueue(`autoclaim:${b.coin.txid}:${b.coin.vout}`, "autoclaim", m.id, { box: b.box.script, outpoint: `${b.coin.txid}:${b.coin.vout}` });
+            }
+        }
+    }
+
+    /** One indexer read for every watched box. */
+    private async boxCoins() {
+        const boxes = watchedBoxes(this.d.db);
+        if (boxes.length === 0) return [];
+        const { vtxos } = await this.d.net.indexer.getVtxos({ scripts: boxes.map((b) => b.script), spendableOnly: true });
+        return vtxos.filter((v) => !v.isSpent).map((v) => ({
+            box: boxes.find((b) => b.script === v.script)!,
+            coin: { txid: v.txid, vout: v.vout, value: v.value, assets: v.assets, expiresAt: v.expiresAt },
+        }));
     }
 
     /** Best YES bid + best NO bid paying at least one unit per set: mint between them. */
@@ -113,9 +133,12 @@ export class Keeper {
         }
     }
 
-    private planRenewals(offers: ReturnType<typeof openOffers>, nowS: number): void {
+    private planRenewals(offers: ReturnType<typeof openOffers>, nowS: number, boxes: Awaited<ReturnType<Keeper["boxCoins"]>>): void {
         const horizon = nowS + this.d.cfg.RENEW_THRESHOLD_SECONDS;
-        const due: { kind: "vault" | "offer"; id: string; outpoint: string }[] = [];
+        const due: { kind: "vault" | "offer" | "box"; id: string; outpoint: string }[] = [];
+        for (const b of boxes) {
+            if (b.coin.expiresAt && b.coin.expiresAt.getTime() / 1000 < horizon) due.push({ kind: "box", id: b.box.script, outpoint: `${b.coin.txid}:${b.coin.vout}` });
+        }
         for (const m of all<MarketRow>(this.d.db, "SELECT * FROM markets WHERE vault_outpoint IS NOT NULL AND vault_expires_at IS NOT NULL")) {
             if (Date.parse(m.vault_expires_at!) / 1000 < horizon) due.push({ kind: "vault", id: m.id, outpoint: m.vault_outpoint! });
         }
@@ -207,6 +230,19 @@ export class Keeper {
             }
             case "renew":
                 return this.renew(wf);
+            case "autoclaim": {
+                const b = all<{ market_id: string; owner: string; owner_script: string }>(this.d.db, "SELECT * FROM boxes WHERE script = ?", wf.payload.box as string)[0];
+                if (!b || !terms || !market?.vault_outcome) throw new Error("box or resolved market not found");
+                const [txid, vout] = (wf.payload.outpoint as string).split(":");
+                const { vtxos } = await this.d.net.indexer.getVtxos({ outpoints: [{ txid: txid!, vout: Number(vout) }] });
+                const v = vtxos[0];
+                if (!v || v.isSpent) return undefined;
+                const owner = { owner: hex.decode(b.owner), ownerScript: hex.decode(b.owner_script) };
+                const res = await autoClaim(ctx, terms, market.vault_outcome, owner, { txid: v.txid, vout: v.vout, value: v.value, assets: v.assets });
+                run(this.d.db, "UPDATE boxes SET status = 'claimed', updated_at = ? WHERE script = ?", now(), wf.payload.box as string);
+                this.d.bus.publish("resolution", market.id, { box: wf.payload.box, payout: res.payout.toString(), txid: res.txid });
+                return res.txid;
+            }
             case "lp-liquidity":
                 return this.liquidity(wf, ctx);
             case "activate":
@@ -231,6 +267,11 @@ export class Keeper {
                 const { vault, resolved } = marketContracts(this.d.net.ark, terms);
                 const contract = [vault, resolved.yes, resolved.no, resolved.invalid].find((c) => hex.encode(c.pkScript) === v.script);
                 if (contract) targets.push({ coin, contract });
+            } else if (t.kind === "box") {
+                const b = all<{ market_id: string; owner: string; owner_script: string }>(this.d.db, "SELECT * FROM boxes WHERE script = ?", t.id)[0];
+                const m = b && getMarket(this.d.db, b.market_id);
+                const terms = m && marketTerms(m);
+                if (b && terms) targets.push({ coin, contract: claimBoxContract(this.d.net.ark, terms, { owner: hex.decode(b.owner), ownerScript: hex.decode(b.owner_script) }) });
             } else {
                 const o = all<{ terms: string }>(this.d.db, "SELECT terms FROM offers WHERE id = ?", t.id)[0];
                 if (o) targets.push({ coin, contract: offerContract(this.d.net.ark, offerTermsFromJson(JSON.parse(o.terms))) });

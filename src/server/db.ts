@@ -45,6 +45,11 @@ const MIGRATIONS: string[] = [
         created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
      CREATE INDEX workflows_due ON workflows(state, next_at);
      CREATE TABLE events (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL, market_id TEXT, at TEXT NOT NULL, data TEXT NOT NULL);`,
+    `CREATE TABLE boxes (
+        script TEXT PRIMARY KEY, market_id TEXT NOT NULL REFERENCES markets(id), owner TEXT NOT NULL, owner_script TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'watching', created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+     CREATE INDEX boxes_market ON boxes(market_id, status);
+     CREATE INDEX boxes_owner ON boxes(owner_script);`,
 ];
 
 export type Db = DatabaseSync;

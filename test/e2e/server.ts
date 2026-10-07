@@ -35,8 +35,13 @@ export async function startServer(opts: { port: number; dataDir?: string; env?: 
     writeFileSync(join(dataDir, "env.json"), JSON.stringify({ ...env, OPERATOR_MNEMONIC: "<redacted>", LP_MNEMONIC: "<redacted>" }));
     const proc = spawn(process.execPath, ["--import", "tsx", "src/server/main.ts"], { env: { ...process.env, ...env }, stdio: ["ignore", "pipe", "pipe"] });
     const logs: string[] = [];
-    proc.stdout!.on("data", (b) => logs.push(...String(b).split("\n").filter(Boolean)));
-    proc.stderr!.on("data", (b) => logs.push(...String(b).split("\n").filter(Boolean)));
+    const logFile = join(dataDir, `server-${opts.port}.log`);
+    const capture = (b: Buffer) => {
+        logs.push(...String(b).split("\n").filter(Boolean));
+        appendFileSync(logFile, b);
+    };
+    proc.stdout!.on("data", capture);
+    proc.stderr!.on("data", capture);
     const url = `http://127.0.0.1:${opts.port}`;
     const api: TestServer["api"] = async (path, init = {}) => {
         const headers = new Headers(init.headers);

@@ -15,6 +15,9 @@ import { Keeper } from "./keeper.js";
 import { WriterLease } from "./lease.js";
 import { connectNetwork, partyFromMnemonic, type NetworkHandle } from "./network.js";
 import { Workflows } from "./workflows.js";
+import { importOnce, replayHistorical } from "./importer.js";
+import { resolutionTick } from "./resolver.js";
+import { createPolymarketProvider } from "./sources/polymarket/index.js";
 
 const cfg = loadConfig();
 const log = (msg: string, extra: Record<string, unknown> = {}) => console.log(JSON.stringify({ ts: new Date().toISOString(), level: "info", msg, ...extra }));
@@ -102,7 +105,16 @@ async function main(): Promise<void> {
     const faucet = cfg.DEV_ENDPOINTS && operator
         ? async (address: string, amount: number) => operator.wallet.send({ address, amount })
         : undefined;
-    ready = createApi({ ...deps, keeper, health, overview, faucet });
+    const provider = cfg.POLYMARKET_ENABLED
+        ? createPolymarketProvider({ gammaUrl: cfg.POLYMARKET_GAMMA_URL, rpcUrls: cfg.POLYGON_RPC_URLS, resolverAllowlist: cfg.POLYMARKET_RESOLVERS.map((r) => r.toLowerCase()) })
+        : undefined;
+    const sourceDeps = provider && { ...deps, wf, provider, timeoutDays: cfg.IMPORT_TIMEOUT_DAYS, log };
+    const importNow = sourceDeps && (async () => {
+        if (!lease.held) throw new Error("not the writer");
+        return importOnce(sourceDeps);
+    });
+    const replay = sourceDeps && cfg.DEV_ENDPOINTS ? (sourceId: string) => replayHistorical(sourceDeps, sourceId) : undefined;
+    ready = createApi({ ...deps, keeper, health, overview, faucet, importNow, replay });
     log("api ready", { network: cfg.APM_NETWORK, operator: !!operator, lp: !!lp });
 
     if (cfg.WORKERS === "all") {
@@ -115,7 +127,14 @@ async function main(): Promise<void> {
             if (shuttingDown || !lease.held || ticking) return;
             ticking = keeper.tick().catch((e) => log("keeper tick failed", { error: String(e) })).finally(() => (ticking = undefined));
         }, cfg.KEEPER_INTERVAL_SECONDS * 1000);
+        const sourceLoops = sourceDeps
+            ? [
+                  setInterval(() => void (lease.held && importOnce(sourceDeps).then((r) => log("import pass", { ...r }), (e) => log("import failed", { error: String(e) }))), cfg.IMPORT_INTERVAL_SECONDS * 1000),
+                  setInterval(() => void (lease.held && resolutionTick(sourceDeps).catch((e) => log("resolution tick failed", { error: String(e) }))), 15_000),
+              ]
+            : [];
         onShutdown.push(async () => {
+            sourceLoops.forEach(clearInterval);
             clearInterval(acquire);
             clearInterval(loop);
             await Promise.race([ticking, new Promise((r) => setTimeout(r, 20_000))]);

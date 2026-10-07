@@ -4,7 +4,8 @@ import { streamSSE } from "hono/streaming";
 import { hex } from "@scure/base";
 import { attestationMessage, signAttestation, verifyAttestation, evidenceDigest } from "../core/attestation.js";
 import { BINARY_VECTORS, type BinaryOutcome } from "../core/payout.js";
-import type { CertificateJson, ConfigJson, CreateMarketRequest, PostOfferRequest } from "../shared/api.js";
+import type { CertificateJson, ConfigJson, CreateMarketRequest, PostOfferRequest, RegisterBoxRequest } from "../shared/api.js";
+import { boxJson, boxesByOwner, registerBox } from "./boxes.js";
 import { now, one, run } from "./db.js";
 import type { Keeper } from "./keeper.js";
 import { HttpError, getMarket, listMarkets, marketJson, marketTerms, registerCustomMarket, type Deps } from "./markets.js";
@@ -16,6 +17,7 @@ export interface ApiDeps extends Deps {
     importNow?: () => Promise<unknown>;
     overview: () => Promise<unknown>;
     faucet?: (address: string, amount: number) => Promise<string>;
+    replay?: (sourceId: string) => Promise<string>;
 }
 
 const MAX_BODY = 64 * 1024;
@@ -119,6 +121,12 @@ export function createApi(d: ApiDeps): Hono {
     });
 
     app.post("/api/offers", async (c) => c.json(await registerOffer(d, await body<PostOfferRequest>(c)), 201));
+    app.post("/api/boxes", async (c) => c.json(await boxJson(d, registerBox(d, await body<RegisterBoxRequest>(c))), 201));
+    app.get("/api/boxes", async (c) => {
+        const owner = c.req.query("ownerScript") ?? "";
+        if (!/^5120[0-9a-f]{64}$/.test(owner)) throw new HttpError(400, "script", "ownerScript must be a P2TR pkScript hex");
+        return c.json({ boxes: await Promise.all(boxesByOwner(d.db, owner).map((b) => boxJson(d, b))) });
+    });
     app.post("/api/offers/:id/refresh", async (c) => c.json(await refreshOffer(d, c.req.param("id"))));
 
     app.get("/api/portfolio", (c) => {
@@ -191,6 +199,12 @@ export function createApi(d: ApiDeps): Hono {
         run(d.db, "UPDATE markets SET resolution_status = 'certified', resolution_detail = ?, updated_at = ? WHERE id = ?", `dev oracle certified ${outcome}`, now(), row.id);
         d.bus.publish("resolution", row.id, { outcome, dev: true });
         return c.json({ ok: true });
+    });
+    admin.post("/replay", async (c) => {
+        if (!d.replay) throw new HttpError(409, "disabled", "historical replay needs DEV_ENDPOINTS and POLYMARKET_ENABLED on regtest");
+        const { sourceId } = await body<{ sourceId: string }>(c);
+        if (!/^[0-9]{1,12}$/.test(String(sourceId))) throw new HttpError(400, "source-id", "numeric Polymarket market id expected");
+        return c.json({ marketId: await d.replay(String(sourceId)) }, 201);
     });
     app.route("/api/admin", admin);
 

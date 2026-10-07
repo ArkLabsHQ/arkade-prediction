@@ -105,7 +105,9 @@ export async function auditGenesis(net: NetworkHandle, terms: VaultTerms, genesi
     }
     const t0 = packetOf(await fetchTx(net, genesisTxid));
     const [ctrl, yes, no] = t0?.groups ?? [];
-    if (!t0 || t0.groups.length !== 3 || !ctrl || !yes || !no) throw new HttpError(400, "genesis-shape", "genesis must issue exactly CTRL, YES, NO");
+    if (!t0 || !ctrl || !yes || !no) throw new HttpError(400, "genesis-shape", "genesis must issue CTRL, YES, NO as its first three groups");
+    // Later groups may only carry the creator's existing assets through; any other issuance is refused.
+    if (t0.groups.slice(3).some((g) => g.assetId === null)) throw new HttpError(400, "genesis-shape", "genesis may not issue anything besides CTRL, YES, NO");
     const fresh = (g: asset.AssetGroup) => g.assetId === null && g.inputs.length === 0;
     const byCtrl = (g: asset.AssetGroup) => g.controlAsset?.ref.type === asset.AssetRefType.ByGroup && g.controlAsset.ref.groupIndex === 0;
     if (!fresh(ctrl) || ctrl.controlAsset !== null || outSum(ctrl) !== 1n) throw new HttpError(400, "genesis-ctrl", "CTRL must be a fresh supply of 1 with no control");

@@ -1,4 +1,4 @@
-import { ArkAddress, type Identity, type IndexerProvider } from "@arkade-os/sdk";
+import { ArkAddress, asset, type Identity, type IndexerProvider } from "@arkade-os/sdk";
 import { hex } from "@scure/base";
 import {
     buildArkadeTx,
@@ -138,15 +138,22 @@ export interface MarketGenesis {
     genesisTxid: string;
 }
 
-/** T0: issue CTRL + seed YES/NO to the creator. Asset ids are fixed by this txid. */
+/**
+ * T0: issue CTRL + seed YES/NO to the creator. Asset ids are fixed by this txid. Assets the creator's coins
+ * already carry ride along as transfer groups after the three issuance groups, so ByGroup(0) still names CTRL.
+ */
 export async function issueMarketAssets(ctx: Ctx, creator: Party, marketId: string, seedSets: bigint): Promise<MarketGenesis> {
     const inputs = await selectWalletInputs(creator, CARRIER_SATS);
     const value = inputs.reduce((s, i) => s + BigInt(i.coin.value), 0n);
-    // The genesis packet must be the only asset packet: carried-over assets would need transfer groups.
-    if (holdings(inputs).size > 0) throw new Error("genesis inputs must not carry assets");
-    const built = await buildArkadeTx(ctx.net, inputs, [{ script: creator.script, amount: value }], {
-        packet: genesisPacket(marketId, 0, seedSets),
+    const carried = new Map<string, asset.AssetInput[]>();
+    inputs.forEach((i, vin) => {
+        for (const a of i.coin.assets ?? []) carried.set(a.assetId, [...(carried.get(a.assetId) ?? []), asset.AssetInput.create(vin, a.amount)]);
     });
+    const transfers = [...carried].map(([id, ins]) =>
+        asset.AssetGroup.create(asset.AssetId.fromString(id), null, ins, [asset.AssetOutput.create(0, ins.reduce((s, x) => s + x.input.amount, 0n))], []),
+    );
+    const packet = asset.Packet.create([...genesisPacket(marketId, 0, seedSets).groups, ...transfers]);
+    const built = await buildArkadeTx(ctx.net, inputs.map((i) => ({ ...i, coin: { ...i.coin, assets: [] } })) as InputSpec[], [{ script: creator.script, amount: value }], { packet });
     await signInputs(built, creator.identity, built.signerInputs);
     await ctx.beforeSubmit?.({ txid: built.arkTx.id, inputs: inputs.map((i) => `${i.coin.txid}:${i.coin.vout}`) });
     const { txid } = await submitArkadeTx(ctx.net, built, (cp) => creator.identity.sign(cp, [0]));
@@ -308,7 +315,12 @@ function legOutput(ctx: Ctx, leg: Leg): OutputSpec {
  * Taker fills one or more offers of the same asset in one atomic tx. Buying from sell offers pays sats and
  * receives units; selling into buy offers delivers units and receives sats. Fails rather than exceed limits.
  */
-export async function takeOffers(ctx: Ctx, taker: Party, legs: Leg[], limits: { maxSpendSats?: bigint; minReceiveSats?: bigint } = {}) {
+export async function takeOffers(
+    ctx: Ctx,
+    taker: Party,
+    legs: Leg[],
+    limits: { maxSpendSats?: bigint; minReceiveSats?: bigint; receiveScript?: Uint8Array } = {},
+) {
     if (legs.length === 0) throw new Error("no offers to take");
     const side = legs[0]!.offer.terms.side;
     const assetId = legs[0]!.offer.terms.assetId;
@@ -322,12 +334,16 @@ export async function takeOffers(ctx: Ctx, taker: Party, legs: Leg[], limits: { 
     }));
     const delivered = side === "buy" ? [{ assetId, amount: qty }] : [];
     const received = side === "sell" ? [{ assetId, amount: qty }] : [];
-    const walletIn = await selectWalletInputs(taker, side === "sell" ? notional + CARRIER_SATS : CARRIER_SATS, delivered);
+    // Units bought can go to a separate script (e.g. the taker's ClaimBox) on their own carrier.
+    const routed = side === "sell" && limits.receiveScript !== undefined;
+    const carrier = routed ? CARRIER_SATS : 0n;
+    const walletIn = await selectWalletInputs(taker, side === "sell" ? notional + CARRIER_SATS + carrier : CARRIER_SATS, delivered);
     const value = walletIn.reduce((s, i) => s + BigInt(i.coin.value), 0n);
-    const satsLeft = side === "sell" ? value - notional : value + notional;
+    const satsLeft = (side === "sell" ? value - notional : value + notional) - carrier;
     const result = await execute(ctx, [...offerInputs, ...walletIn], [
         ...legs.map((l) => legOutput(ctx, l)),
-        ...changeOutput(taker, walletIn, satsLeft, delivered, received),
+        ...(routed ? [{ script: limits.receiveScript!, amount: carrier, assets: received }] : []),
+        ...changeOutput(taker, walletIn, satsLeft, delivered, routed ? [] : received),
     ], taker);
     return { ...result, qty, notional };
 }

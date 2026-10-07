@@ -154,6 +154,21 @@ export interface CreateMarketRequest {
     terms: MarketTermsJson;
 }
 
+export interface RegisterBoxRequest {
+    marketId: string;
+    owner: string;
+    ownerScript: string;
+}
+
+export interface BoxJson {
+    script: string;
+    marketId: string;
+    owner: string;
+    ownerScript: string;
+    status: "watching" | "claimed";
+    coins: CoinJson[];
+}
+
 export interface PostOfferRequest {
     marketId: string;
     terms: OfferTermsJson;
