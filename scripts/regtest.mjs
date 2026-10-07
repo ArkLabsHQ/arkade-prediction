@@ -48,6 +48,7 @@ const commands = {
     test: async () => {
         sh("pnpm", ["exec", "tsc", "--noEmit", "-p", "."]);
         sh("pnpm", ["exec", "vitest", "run", "test/unit"]);
+        sh(process.execPath, ["--import", "tsx", "src/web/fills.check.ts"]);
         sh("pnpm", ["exec", "vitest", "run", "--config", "vitest.e2e.config.ts"]);
     },
 };
