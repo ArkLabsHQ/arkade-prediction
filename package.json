@@ -1,0 +1,32 @@
+{
+  "name": "arkade-prediction",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "BTC-collateralized prediction markets on Arkade",
+  "engines": {
+    "node": ">=22.12.0 <27"
+  },
+  "packageManager": "pnpm@10.34.5",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run test/unit",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts",
+    "contracts:build": "node contracts/build.mjs",
+    "contracts:check": "node contracts/build.mjs --check"
+  },
+  "dependencies": {
+    "@arkade-os/sdk": "0.4.78",
+    "@noble/curves": "2.0.1",
+    "@noble/hashes": "2.0.1",
+    "@scure/base": "2.0.0",
+    "@scure/bip39": "2.0.1",
+    "@scure/btc-signer": "2.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  }
+}

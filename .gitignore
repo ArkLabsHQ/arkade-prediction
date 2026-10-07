@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.tmp/
+data/
+coverage/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+.env
+.env.local
+docs/superpowers/
+slopo*

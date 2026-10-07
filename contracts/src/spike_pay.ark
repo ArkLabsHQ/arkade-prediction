@@ -1,0 +1,14 @@
+pragma arkade ^0.1.0;
+
+// Pipeline probe: anyone may forward the coin to `recipient`, minus at most `maxFee` sats.
+contract SpikePay(pubkey owner, bytes32 recipient, int maxFee, int exit) {
+  function forward() {
+    require(tx.outputs[0].scriptPubKey == recipient, "wrong recipient");
+    require(tx.outputs[0].value + maxFee >= tx.input.current.value, "fee too high");
+  }
+
+  function unilateral(signature ownerSig) tapscript {
+    require(older(exit));
+    require(checkSig(ownerSig, owner));
+  }
+}
