@@ -33,9 +33,9 @@ let shuttingDown = false;
 const root = new Hono();
 root.get("/api/health/live", (c) => c.json({ ok: true, shuttingDown }));
 root.all("*", async (c, next) => {
+    if (!c.req.path.startsWith("/api/")) return next();
     if (ready) return ready.fetch(c.req.raw);
-    if (c.req.path.startsWith("/api/")) return c.json({ error: "starting: waiting for arkd/emulator", code: "starting" }, 503);
-    return next();
+    return c.json({ error: "starting: waiting for arkd/emulator", code: "starting" }, 503);
 });
 const webDir = join(process.cwd(), "dist", "web");
 root.use("/*", serveStatic({ root: "./dist/web" }));

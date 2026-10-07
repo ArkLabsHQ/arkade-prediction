@@ -102,7 +102,7 @@ export async function openSession(chain: Chain, config: ConfigJson, keystore: Ke
 
 export interface Holdings {
     balance: WalletBalance;
-    /** Sats in asset-free coins: the only coins actions select to pay sats. */
+    /** Sats actions can spend: every coin's value, less one carrier that keeps leftover claims in change. */
     plainSats: bigint;
     assets: Map<string, bigint>;
 }
@@ -110,11 +110,12 @@ export interface Holdings {
 export async function readHoldings(s: Session): Promise<Holdings> {
     const [balance, coins] = await Promise.all([s.wallet.getBalance(), s.party.coins()]);
     const assets = new Map<string, bigint>();
-    let plainSats = 0n;
+    let total = 0n;
     for (const c of coins) {
-        if (!c.assets?.length) plainSats += BigInt(c.value);
+        total += BigInt(c.value);
         for (const a of c.assets ?? []) assets.set(a.assetId, (assets.get(a.assetId) ?? 0n) + a.amount);
     }
+    const plainSats = assets.size > 0 ? (total > CARRIER_SATS ? total - CARRIER_SATS : 0n) : total;
     return { balance, plainSats, assets };
 }
 
