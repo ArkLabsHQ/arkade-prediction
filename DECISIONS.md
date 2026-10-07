@@ -21,3 +21,24 @@ Each entry: decision, reason, rejected alternatives. Newest last.
    arkd v0.9.16 requires the control asset to be *spent* for any reissuance (tx_validation.go:109-145) and
    exact input declarations (no silent inflation). Every vault spend path constrains YES/NO/CTRL deltas,
    because any spend of CTRL would otherwise authorize reissuance in the same tx.
+7. **Genesis in two txs.** T0 issues CTRL(1) + YES/NO(seed) with control = CTRL (ByGroup); T1 spends T0's
+   CTRL output directly into the vault with seed x unit collateral. Asset ids are fixed by T0, so the vault
+   script can name them (one tx cannot: the vault script would depend on its own txid). Activation audits
+   T0/T1 from indexer data; after T1 only vault covenants can reissue.
+8. **One-shot resolution to precommitted ResolvedVault scripts** (YES [1,0]/1, NO [0,1]/1, INVALID [1,1]/2).
+   The open vault moves its whole balance once; redemptions then use the vector fixed in the script, so an
+   equivocating oracle can pick the winner but cannot make the vault pay two vectors (insolvency).
+   Rejected: per-redemption oracle signatures (equivocation => inconsistent payouts across redemptions).
+9. **Attestation is verified in the covenant:** message = sha256("APM/attest/v1" || binding || evidence ||
+   num2bin(n0,8) || num2bin(n1,8) || num2bin(D,8)); binding commits network, keys, templates, market, terms,
+   claim ids, source and oracle policy. Rejected: compiler example pattern of verifying a caller-supplied hash.
+10. **Timeout = precommitted INVALID vector** (50/50 per complete set) after `timeoutAt` (emulator clock),
+    mutually exclusive with attested resolution because both consume the same open vault.
+11. **Vault exit leaf = CSV + BIP341 NUMS key (unspendable).** arkd v0.9.16 refuses intents for VTXOs with no
+    exit leaf ("failed to get smallest exit delay: no exit leaf"), so renewable contracts need one; any
+    signable exit could withdraw collateral backing other holders. Consequence: pooled collateral has no
+    unilateral exit; claims' economic value depends on arkd + emulator (documented in threat model).
+    Next step if needed: CSV + anyone-key + emulator-tweaked L1 covenant via SubmitOnchainTx (untested upstream).
+12. **Keeper renewal** = emulator-signed intent proof tunnelling each covenant VTXO (vin k+1 -> vout k), musig
+    session key only, forfeits co-signed by the emulator. Proven for the CTRL-holding vault (renewal.test.ts).
+13. **Node EventSource** via the `eventsource` package + `configureEventSource` (SDK batch streams are SSE).

@@ -1,0 +1,59 @@
+pragma arkade ^0.1.0;
+
+// Standing offer to buy `asset` at `price` sats per unit from a funded budget. The continuation at the
+// offer's own input index keeps the unspent budget (never below `reserve`) and accumulates bought units.
+contract BuyOffer(
+  pubkey maker,
+  bytes32 makerProgram,
+  bytes32 assetTxid, int assetGidx,
+  int price,
+  int minFill,
+  int expiresAt,
+  int reserve,
+  int exit
+) {
+  // The fill that leaves less than one unit of budget pays the maker directly.
+  function fill(int qty) {
+    int i = this.activeInputIndex;
+    int spend = qty * price;
+    int left = tx.input.current.value - spend - reserve;
+    int held = 0;
+    if (tx.inputs[i].assets.has(assetTxid, assetGidx)) {
+      held = tx.inputs[i].assets.lookup(assetTxid, assetGidx);
+    }
+    require(qty > 0 && left >= 0, "qty");
+    require(expiresAt == 0 || !checkTime(expiresAt), "expired");
+    require(qty >= minFill || left < minFill * price, "below min fill");
+    require(tx.outputs[i].witnessVersion == 1, "output version");
+    require(tx.outputs[i].value >= tx.input.current.value - spend, "overspend");
+    require(tx.outputs[i].assets.length == 1 && tx.outputs[i].assets.lookup(assetTxid, assetGidx) == held + qty, "delivery");
+    require(
+      (left < price && tx.outputs[i].scriptPubKey == makerProgram) ||
+        (left >= price && tx.outputs[i].scriptPubKey == tx.input.current.scriptPubKey),
+      "continuation"
+    );
+  }
+
+  // Anyone may return an expired offer to the maker. No asset opcodes: OP_TUNNEL also covers an asset-free offer.
+  function settle() {
+    int i = this.activeInputIndex;
+    require(expiresAt > 0 && checkTime(expiresAt), "still live");
+    require(tx.outputs[i].scriptPubKey == makerProgram, "maker");
+    require(tx.outputs[i].witnessVersion == 1, "maker version");
+    require(this.tunnel(i, {scriptPubKey: false, value: true, assets: true}), "settle");
+  }
+
+  function renew() {
+    require(tx.version == 2, "intent only");
+    require(this.tunnel(this.activeInputIndex - 1), "tunnel");
+  }
+
+  function cancel(signature makerSig, signature serverSig) tapscript {
+    require(checkMultisig([maker, server], [makerSig, serverSig]));
+  }
+
+  function unilateral(signature makerSig) tapscript {
+    require(older(exit));
+    require(checkSig(makerSig, maker));
+  }
+}

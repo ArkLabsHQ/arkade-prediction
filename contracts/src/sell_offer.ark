@@ -1,0 +1,53 @@
+pragma arkade ^0.1.0;
+
+// Standing offer to sell `asset` at `price` sats per unit. The continuation at the offer's own input
+// index keeps the unsold units and accumulates proceeds, so two offers can never share one output.
+contract SellOffer(
+  pubkey maker,
+  bytes32 makerProgram,
+  bytes32 assetTxid, int assetGidx,
+  int price,
+  int minFill,
+  int expiresAt,
+  int exit
+) {
+  // The fill that sells the last unit pays the maker directly instead of leaving an empty offer.
+  function fill(int qty) {
+    int i = this.activeInputIndex;
+    int remaining = tx.inputs[i].assets.lookup(assetTxid, assetGidx);
+    require(qty > 0 && qty <= remaining, "qty");
+    require(qty >= minFill || qty == remaining, "below min fill");
+    require(expiresAt == 0 || !checkTime(expiresAt), "expired");
+    require(tx.outputs[i].witnessVersion == 1, "output version");
+    require(tx.outputs[i].value >= tx.input.current.value + qty * price, "proceeds");
+    require(
+      (qty == remaining && tx.outputs[i].scriptPubKey == makerProgram && tx.outputs[i].assets.length == 0) ||
+        (qty < remaining && tx.outputs[i].scriptPubKey == tx.input.current.scriptPubKey &&
+          tx.outputs[i].assets.length == 1 && tx.outputs[i].assets.lookup(assetTxid, assetGidx) == remaining - qty),
+      "remainder"
+    );
+  }
+
+  // Anyone may return an expired offer to the maker. No asset opcodes: OP_TUNNEL also covers an asset-free offer.
+  function settle() {
+    int i = this.activeInputIndex;
+    require(expiresAt > 0 && checkTime(expiresAt), "still live");
+    require(tx.outputs[i].scriptPubKey == makerProgram, "maker");
+    require(tx.outputs[i].witnessVersion == 1, "maker version");
+    require(this.tunnel(i, {scriptPubKey: false, value: true, assets: true}), "settle");
+  }
+
+  function renew() {
+    require(tx.version == 2, "intent only");
+    require(this.tunnel(this.activeInputIndex - 1), "tunnel");
+  }
+
+  function cancel(signature makerSig, signature serverSig) tapscript {
+    require(checkMultisig([maker, server], [makerSig, serverSig]));
+  }
+
+  function unilateral(signature makerSig) tapscript {
+    require(older(exit));
+    require(checkSig(makerSig, maker));
+  }
+}

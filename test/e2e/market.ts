@@ -2,7 +2,15 @@ import { ArkAddress, Extension, asset } from "@arkade-os/sdk";
 import { schnorr } from "@noble/curves/secp256k1.js";
 import { randomBytes } from "@noble/hashes/utils.js";
 import { hex } from "@scure/base";
-import { buildArkadeTx, signInputs, submitArkadeTx, type Coin, type InputSpec, type Network } from "../../src/core/arkadeTx.js";
+import {
+    buildArkadeTx,
+    signInputs,
+    submitArkadeTx,
+    type Coin,
+    type InputSpec,
+    type Network,
+    type OutputSpec,
+} from "../../src/core/arkadeTx.js";
 import { assetIdOf } from "../../src/core/assets.js";
 import { bindingHash } from "../../src/core/attestation.js";
 import {
@@ -45,6 +53,21 @@ export async function coinAt(script: Uint8Array, what: string, txid?: string): P
 export async function assetBalance(w: TestWallet, assetId: string): Promise<bigint> {
     const coins = await w.wallet.getVtxos();
     return coins.reduce((s, c) => s + (c.assets ?? []).filter((a) => a.assetId === assetId).reduce((t, a) => t + a.amount, 0n), 0n);
+}
+
+/** Spend every wallet coin into `outputs` plus one change output carrying leftover sats and assets. */
+export async function walletSend(ark: ArkadeClient, w: TestWallet, outputs: OutputSpec[]): Promise<string> {
+    const inputs = await walletInputs(w);
+    const left = new Map<string, bigint>();
+    for (const i of inputs) for (const a of i.coin.assets ?? []) left.set(a.assetId, (left.get(a.assetId) ?? 0n) + a.amount);
+    for (const o of outputs) for (const a of o.assets ?? []) left.set(a.assetId, (left.get(a.assetId) ?? 0n) - a.amount);
+    if ([...left.values()].some((v) => v < 0n)) throw new Error("insufficient asset balance");
+    const changeAssets = [...left].filter(([, v]) => v > 0n).map(([assetId, amount]) => ({ assetId, amount }));
+    const change = sumValue(inputs) - outputs.reduce((s, o) => s + o.amount, 0n);
+    if (change < 330n) throw new Error("insufficient sats for change");
+    const built = await buildArkadeTx(network(ark), inputs, [...outputs, { script: await scriptOf(w), amount: change, assets: changeAssets }]);
+    await signInputs(built, w.identity, built.signerInputs);
+    return (await submitArkadeTx(network(ark), built, (cp) => w.identity.sign(cp, [0]))).txid;
 }
 
 export interface TestMarket {
