@@ -6,7 +6,9 @@ import { attestationMessage, signAttestation, verifyAttestation, evidenceDigest 
 import { BINARY_VECTORS, type BinaryOutcome } from "../core/payout.js";
 import type { CertificateJson, ConfigJson, CreateMarketRequest, PostOfferRequest, RegisterBoxRequest } from "../shared/api.js";
 import { boxJson, boxesByOwner, registerBox } from "./boxes.js";
-import { now, one, run } from "./db.js";
+import { backup, now, one, run } from "./db.js";
+import { mkdirSync } from "node:fs";
+import { dirname, join } from "node:path";
 import type { Keeper } from "./keeper.js";
 import { HttpError, getMarket, listMarkets, marketJson, marketTerms, registerCustomMarket, type Deps } from "./markets.js";
 import { listOffers, offerJson, offersByMaker, refreshOffer, registerOffer, trades } from "./offers.js";
@@ -59,9 +61,10 @@ export function createApi(d: ApiDeps): Hono {
         const cfg: ConfigJson = {
             network: d.cfg.APM_NETWORK,
             deploymentId: d.cfg.APM_DEPLOYMENT_ID,
-            arkServerUrl: d.cfg.ARK_SERVER_URL,
-            emulatorUrl: d.cfg.EMULATOR_URL,
-            esploraUrl: d.cfg.ESPLORA_URL,
+            // Browsers may need different hostnames than the server uses on the container network.
+            arkServerUrl: d.cfg.PUBLIC_ARK_SERVER_URL ?? d.cfg.ARK_SERVER_URL,
+            emulatorUrl: d.cfg.PUBLIC_EMULATOR_URL ?? d.cfg.EMULATOR_URL,
+            esploraUrl: d.cfg.PUBLIC_ESPLORA_URL ?? d.cfg.ESPLORA_URL,
             arkSignerPubkey: d.net.info.signerPubkey,
             emulatorPubkey: d.net.emulatorPubkey,
             explorerUrl: d.cfg.EXPLORER_URL ?? null,
@@ -200,6 +203,12 @@ export function createApi(d: ApiDeps): Hono {
         run(d.db, "UPDATE markets SET resolution_status = 'certified', resolution_detail = ?, updated_at = ? WHERE id = ?", `dev oracle certified ${outcome}`, now(), row.id);
         d.bus.publish("resolution", row.id, { outcome, dev: true });
         return c.json({ ok: true });
+    });
+    admin.post("/backup", (c) => {
+        const target = join(d.cfg.DATA_DIR, "backups", `apm-${new Date().toISOString().replace(/[:.]/g, "-")}.sqlite`);
+        mkdirSync(dirname(target), { recursive: true });
+        backup(d.db, target);
+        return c.json({ path: target }, 201);
     });
     admin.post("/replay", async (c) => {
         if (!d.replay) throw new HttpError(409, "disabled", "historical replay needs DEV_ENDPOINTS and POLYMARKET_ENABLED on regtest");

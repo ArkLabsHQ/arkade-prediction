@@ -6,7 +6,9 @@ coverage/
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
-.env
-.env.local
+.env*
+!.env.example
+!.env.regtest.example
+!.env.mutinynet.example
 docs/superpowers/
 slopo*

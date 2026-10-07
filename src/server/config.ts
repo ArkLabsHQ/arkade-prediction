@@ -30,6 +30,9 @@ const schema = z.object({
     EMULATOR_URL: z.url(),
     ESPLORA_URL: z.url(),
     EXPLORER_URL: z.url().optional(),
+    PUBLIC_ARK_SERVER_URL: z.url().optional(),
+    PUBLIC_EMULATOR_URL: z.url().optional(),
+    PUBLIC_ESPLORA_URL: z.url().optional(),
     ARK_SIGNER_PUBKEY: hexKey(33).optional(),
     EMULATOR_PUBKEY: hexKey(33).optional(),
     DATA_DIR: z.string().default("/data"),
@@ -71,7 +74,8 @@ export type Config = z.infer<typeof schema> & {
 };
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
-    const parsed = schema.safeParse(env);
+    // Compose passes unset optional variables as empty strings.
+    const parsed = schema.safeParse(Object.fromEntries(Object.entries(env).filter(([, v]) => v !== "")));
     if (!parsed.success) {
         const issues = parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
         throw new Error(`invalid configuration: ${issues}`);

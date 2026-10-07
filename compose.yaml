@@ -1,0 +1,97 @@
+# Single-instance deployment: one app container (UI/API + single-writer workflows) and one attestor.
+# Every variable is passed explicitly: Dokploy's environment UI only reaches services that reference it.
+name: arkade-prediction
+
+x-image: &image
+  image: ${APM_IMAGE:-arkade-prediction:local}
+  build: .
+
+services:
+  app:
+    <<: *image
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 30s
+    ports:
+      - "${APM_HTTP_PORT:-37400}:37400"
+    volumes:
+      - apm-data:/data
+    environment:
+      APM_NETWORK: ${APM_NETWORK:?set APM_NETWORK}
+      APM_DEPLOYMENT_ID: ${APM_DEPLOYMENT_ID:?set APM_DEPLOYMENT_ID}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?set PUBLIC_BASE_URL}
+      HOST: 0.0.0.0
+      PORT: "37400"
+      DATA_DIR: /data
+      ARK_SERVER_URL: ${ARK_SERVER_URL:?set ARK_SERVER_URL}
+      EMULATOR_URL: ${EMULATOR_URL:?set EMULATOR_URL}
+      ESPLORA_URL: ${ESPLORA_URL:?set ESPLORA_URL}
+      PUBLIC_ARK_SERVER_URL: ${PUBLIC_ARK_SERVER_URL:-}
+      PUBLIC_EMULATOR_URL: ${PUBLIC_EMULATOR_URL:-}
+      PUBLIC_ESPLORA_URL: ${PUBLIC_ESPLORA_URL:-}
+      EXPLORER_URL: ${EXPLORER_URL:-}
+      ARK_SIGNER_PUBKEY: ${ARK_SIGNER_PUBKEY:-}
+      EMULATOR_PUBKEY: ${EMULATOR_PUBKEY:-}
+      OPERATOR_MNEMONIC: ${OPERATOR_MNEMONIC:-}
+      OPERATOR_MNEMONIC_FILE: ${OPERATOR_MNEMONIC_FILE:-}
+      LP_MNEMONIC: ${LP_MNEMONIC:-}
+      LP_MNEMONIC_FILE: ${LP_MNEMONIC_FILE:-}
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-}
+      ADMIN_TOKEN_FILE: ${ADMIN_TOKEN_FILE:-}
+      DEV_ORACLE_SECRET: ${DEV_ORACLE_SECRET:-}
+      ORACLE_URL: ${ORACLE_URL:-http://oracle:37410}
+      ORACLE_PUBKEYS: ${ORACLE_PUBKEYS:-}
+      ORACLE_EPOCH: ${ORACLE_EPOCH:-1}
+      POLYMARKET_ENABLED: ${POLYMARKET_ENABLED:-false}
+      POLYMARKET_GAMMA_URL: ${POLYMARKET_GAMMA_URL:-https://gamma-api.polymarket.com}
+      POLYGON_RPC_URLS: ${POLYGON_RPC_URLS:-}
+      POLYMARKET_RESOLVERS: ${POLYMARKET_RESOLVERS:-}
+      IMPORT_TAGS: ${IMPORT_TAGS:-}
+      IMPORT_MAX_ACTIVE: ${IMPORT_MAX_ACTIVE:-5}
+      IMPORT_MIN_HORIZON_SECONDS: ${IMPORT_MIN_HORIZON_SECONDS:-3600}
+      IMPORT_MAX_HORIZON_SECONDS: ${IMPORT_MAX_HORIZON_SECONDS:-2592000}
+      IMPORT_INTERVAL_SECONDS: ${IMPORT_INTERVAL_SECONDS:-600}
+      IMPORT_PAGE_LIMIT: ${IMPORT_PAGE_LIMIT:-100}
+      IMPORT_MAX_PAGES: ${IMPORT_MAX_PAGES:-5}
+      IMPORT_TIMEOUT_DAYS: ${IMPORT_TIMEOUT_DAYS:-60}
+      RESOLUTION_INTERVAL_SECONDS: ${RESOLUTION_INTERVAL_SECONDS:-120}
+      MARKET_UNIT_SATS: ${MARKET_UNIT_SATS:-1000}
+      MARKET_BASE_SATS: ${MARKET_BASE_SATS:-1000}
+      MARKET_CAP_SETS: ${MARKET_CAP_SETS:-1000}
+      KEEPER_INTERVAL_SECONDS: ${KEEPER_INTERVAL_SECONDS:-15}
+      RENEW_THRESHOLD_SECONDS: ${RENEW_THRESHOLD_SECONDS:-3600}
+      LP_BOOTSTRAP_SETS: ${LP_BOOTSTRAP_SETS:-0}
+      LP_ASK_YES_SATS: ${LP_ASK_YES_SATS:-0}
+      LP_ASK_NO_SATS: ${LP_ASK_NO_SATS:-0}
+      DEV_ENDPOINTS: ${DEV_ENDPOINTS:-false}
+      WORKERS: ${WORKERS:-all}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+
+  oracle:
+    <<: *image
+    command: ["node", "dist/oracle/main.js"]
+    init: true
+    restart: unless-stopped
+    volumes:
+      - apm-oracle:/data
+    environment:
+      ORACLE_SECRET_KEY: ${ORACLE_SECRET_KEY:-}
+      ORACLE_SECRET_KEY_FILE: ${ORACLE_SECRET_KEY_FILE:-}
+      ORACLE_PORT: "37410"
+      ORACLE_DATA_DIR: /data/oracle
+      ORACLE_EPOCH: ${ORACLE_EPOCH:-1}
+      APM_NETWORK: ${APM_NETWORK:?set APM_NETWORK}
+      ARK_SIGNER_XONLY: ${ARK_SIGNER_XONLY:-}
+      EMULATOR_PUBKEY: ${EMULATOR_PUBKEY:-}
+      POLYMARKET_GAMMA_URL: ${POLYMARKET_GAMMA_URL:-https://gamma-api.polymarket.com}
+      POLYGON_RPC_URLS: ${POLYGON_RPC_URLS:-}
+      POLYMARKET_RESOLVERS: ${POLYMARKET_RESOLVERS:-}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:37410/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  apm-data:
+  apm-oracle:

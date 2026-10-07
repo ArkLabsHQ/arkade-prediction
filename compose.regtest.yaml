@@ -1,0 +1,12 @@
+# Local verification against the isolated arkade-regtest stack (project apm-regtest):
+#   docker compose -f compose.yaml -f compose.regtest.yaml --env-file .env.regtest up -d --build
+services:
+  app:
+    networks: [default, regtest]
+  oracle:
+    networks: [default, regtest]
+
+networks:
+  regtest:
+    external: true
+    name: apm-regtest_default
