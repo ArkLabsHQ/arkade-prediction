@@ -41,6 +41,14 @@
     {
       "name": "denom",
       "type": "int"
+    },
+    {
+      "name": "noExitKey",
+      "type": "pubkey"
+    },
+    {
+      "name": "exit",
+      "type": "int"
     }
   ],
   "functions": [
@@ -362,12 +370,34 @@
           ]
         }
       ]
+    },
+    {
+      "name": "unilateral",
+      "leaves": [
+        {
+          "name": "unilateral",
+          "witness": [
+            {
+              "name": "noExitSig",
+              "type": "signature",
+              "encoding": "schnorr-64"
+            }
+          ],
+          "asm": [
+            "<exit>",
+            "OP_CHECKSEQUENCEVERIFY",
+            "OP_DROP",
+            "<noExitKey>",
+            "OP_CHECKSIG"
+          ]
+        }
+      ]
     }
   ],
   "source": {
     "entry": "resolved_vault.ark",
     "files": {
-      "resolved_vault.ark": "pragma arkade ^0.1.0;\n\n// Collateral of a resolved binary market. The payout vector (nYes, nNo) / denom is fixed by the\n// constructor, so every redemption against this vault pays by the same vector.\ncontract ResolvedVault(\n  bytes32 ctrlTxid, int ctrlGidx,\n  bytes32 yesTxid, int yesGidx,\n  bytes32 noTxid, int noGidx,\n  int unit,\n  int nYes, int nNo, int denom\n) {\n  // Burns claims and releases floor((yesBurn*nYes + noBurn*nNo) * unit / denom) sats.\n  function redeem(int yesBurn, int noBurn) {\n    require(yesBurn >= 0 && noBurn >= 0 && yesBurn + noBurn > 0, \"bad burn\");\n    require(tx.assetGroups.has(yesTxid, yesGidx) || yesBurn == 0, \"yes group\");\n    require(!tx.assetGroups.has(yesTxid, yesGidx) || tx.assetGroups.find(yesTxid, yesGidx).delta == 0 - yesBurn, \"yes delta\");\n    require(tx.assetGroups.has(noTxid, noGidx) || noBurn == 0, \"no group\");\n    require(!tx.assetGroups.has(noTxid, noGidx) || tx.assetGroups.find(noTxid, noGidx).delta == 0 - noBurn, \"no delta\");\n    int payout = (yesBurn * nYes + noBurn * nNo) * unit / denom;\n    require(tx.outputs[0].scriptPubKey == tx.input.current.scriptPubKey, \"vault moved\");\n    require(tx.outputs[0].witnessVersion == 1, \"vault version\");\n    require(tx.outputs[0].value == tx.input.current.value - payout, \"payout\");\n    require(tx.outputs[0].assets.lookup(ctrlTxid, ctrlGidx) == 1, \"ctrl\");\n    require(tx.outputs[0].assets.length == 1, \"vault assets\");\n  }\n\n  // Batch renewal: the paired intent output keeps script, value and assets.\n  function renew() {\n    require(tx.version == 2, \"intent only\");\n    require(!tx.assetGroups.has(yesTxid, yesGidx) || tx.assetGroups.find(yesTxid, yesGidx).delta == 0, \"yes minted\");\n    require(!tx.assetGroups.has(noTxid, noGidx) || tx.assetGroups.find(noTxid, noGidx).delta == 0, \"no minted\");\n    require(this.tunnel(this.activeInputIndex - 1), \"tunnel\");\n  }\n}\n"
+      "resolved_vault.ark": "pragma arkade ^0.1.0;\n\n// Collateral of a resolved binary market. The payout vector (nYes, nNo) / denom is fixed by the\n// constructor, so every redemption against this vault pays by the same vector.\ncontract ResolvedVault(\n  bytes32 ctrlTxid, int ctrlGidx,\n  bytes32 yesTxid, int yesGidx,\n  bytes32 noTxid, int noGidx,\n  int unit,\n  int nYes, int nNo, int denom,\n  // BIP341 NUMS point: arkd needs an exit leaf to admit the vault to batches; nobody can sign it.\n  pubkey noExitKey,\n  int exit\n) {\n  // Burns claims and releases floor((yesBurn*nYes + noBurn*nNo) * unit / denom) sats.\n  function redeem(int yesBurn, int noBurn) {\n    require(yesBurn >= 0 && noBurn >= 0 && yesBurn + noBurn > 0, \"bad burn\");\n    require(tx.assetGroups.has(yesTxid, yesGidx) || yesBurn == 0, \"yes group\");\n    require(!tx.assetGroups.has(yesTxid, yesGidx) || tx.assetGroups.find(yesTxid, yesGidx).delta == 0 - yesBurn, \"yes delta\");\n    require(tx.assetGroups.has(noTxid, noGidx) || noBurn == 0, \"no group\");\n    require(!tx.assetGroups.has(noTxid, noGidx) || tx.assetGroups.find(noTxid, noGidx).delta == 0 - noBurn, \"no delta\");\n    int payout = (yesBurn * nYes + noBurn * nNo) * unit / denom;\n    require(tx.outputs[0].scriptPubKey == tx.input.current.scriptPubKey, \"vault moved\");\n    require(tx.outputs[0].witnessVersion == 1, \"vault version\");\n    require(tx.outputs[0].value == tx.input.current.value - payout, \"payout\");\n    require(tx.outputs[0].assets.lookup(ctrlTxid, ctrlGidx) == 1, \"ctrl\");\n    require(tx.outputs[0].assets.length == 1, \"vault assets\");\n  }\n\n  // Batch renewal: the paired intent output keeps script, value and assets.\n  function renew() {\n    require(tx.version == 2, \"intent only\");\n    require(!tx.assetGroups.has(yesTxid, yesGidx) || tx.assetGroups.find(yesTxid, yesGidx).delta == 0, \"yes minted\");\n    require(!tx.assetGroups.has(noTxid, noGidx) || tx.assetGroups.find(noTxid, noGidx).delta == 0, \"no minted\");\n    require(this.tunnel(this.activeInputIndex - 1), \"tunnel\");\n  }\n\n  function unilateral(signature noExitSig) tapscript {\n    require(older(exit));\n    require(checkSig(noExitSig, noExitKey));\n  }\n}\n"
     }
   },
   "compiler": {
@@ -377,6 +407,6 @@
       "optimize": true
     }
   },
-  "updatedAt": "2026-10-07T16:54:09.707843900+00:00",
-  "fingerprint": "sha256:39974bdd6edc2416b42e4e4ea06ce616ad35d5265dad72b1e533502c0c9f7a89"
+  "updatedAt": "2026-10-07T17:04:39.055688100+00:00",
+  "fingerprint": "sha256:4d6bd19813a9981f2b9e4d7bde023330c298508481222d3698d71b1f94901882"
 }

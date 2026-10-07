@@ -1,4 +1,5 @@
 import { arkade, asset } from "@arkade-os/sdk";
+import { hex } from "@scure/base";
 import marketVaultArtifact from "../../contracts/artifacts/market_vault.json" with { type: "json" };
 import resolvedVaultArtifact from "../../contracts/artifacts/resolved_vault.json" with { type: "json" };
 import { assetScriptArgs } from "./assets.js";
@@ -15,6 +16,9 @@ export const TEMPLATE = {
     resolvedVault: resolvedVaultArtifact.fingerprint,
 };
 
+/** BIP341 NUMS point H: no known discrete log, so a leaf locked to it can never be signed. */
+export const NUMS_KEY = hex.decode("50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0");
+
 export interface MarketAssets {
     ctrl: string;
     yes: string;
@@ -29,6 +33,8 @@ export interface VaultTerms {
     binding: Uint8Array;
     closeAt: bigint;
     timeoutAt: bigint;
+    /** CSV (seconds, multiple of 512, >= the operator's unilateral exit delay) of the unspendable exit leaf. */
+    exitDelaySeconds: bigint;
 }
 
 export type ArkadeClient = Awaited<ReturnType<typeof arkade.Arkade.connect>>;
@@ -53,6 +59,8 @@ export function resolvedVault(ark: ArkadeClient, terms: VaultTerms, outcome: Bin
         nYes: v.numerators[0],
         nNo: v.numerators[1],
         denom: v.denominator,
+        noExitKey: NUMS_KEY,
+        exit: terms.exitDelaySeconds,
     });
 }
 
@@ -75,6 +83,8 @@ export function marketContracts(ark: ArkadeClient, terms: VaultTerms) {
         resolvedYes: resolved.yes.pkScript.slice(2),
         resolvedNo: resolved.no.pkScript.slice(2),
         resolvedInvalid: resolved.invalid.pkScript.slice(2),
+        noExitKey: NUMS_KEY,
+        exit: terms.exitDelaySeconds,
     });
     return { vault, resolved };
 }

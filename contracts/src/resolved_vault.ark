@@ -7,7 +7,10 @@ contract ResolvedVault(
   bytes32 yesTxid, int yesGidx,
   bytes32 noTxid, int noGidx,
   int unit,
-  int nYes, int nNo, int denom
+  int nYes, int nNo, int denom,
+  // BIP341 NUMS point: arkd needs an exit leaf to admit the vault to batches; nobody can sign it.
+  pubkey noExitKey,
+  int exit
 ) {
   // Burns claims and releases floor((yesBurn*nYes + noBurn*nNo) * unit / denom) sats.
   function redeem(int yesBurn, int noBurn) {
@@ -30,5 +33,10 @@ contract ResolvedVault(
     require(!tx.assetGroups.has(yesTxid, yesGidx) || tx.assetGroups.find(yesTxid, yesGidx).delta == 0, "yes minted");
     require(!tx.assetGroups.has(noTxid, noGidx) || tx.assetGroups.find(noTxid, noGidx).delta == 0, "no minted");
     require(this.tunnel(this.activeInputIndex - 1), "tunnel");
+  }
+
+  function unilateral(signature noExitSig) tapscript {
+    require(older(exit));
+    require(checkSig(noExitSig, noExitKey));
   }
 }

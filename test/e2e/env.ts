@@ -1,3 +1,4 @@
+import "../../src/node/eventsource.js";
 import { execFileSync, spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import {
@@ -15,6 +16,7 @@ import {
 import { hex } from "@scure/base";
 import type { ContractArtifact } from "../../src/core/programs.js";
 import { randomBytes } from "@noble/hashes/utils.js";
+import { schnorr } from "@noble/curves/secp256k1.js";
 
 export const ARK_URL = process.env.APM_ARK_URL ?? "http://localhost:37070";
 export const EMULATOR_URL = process.env.APM_EMULATOR_URL ?? "http://localhost:37073";
@@ -106,9 +108,9 @@ export function loadArtifact(name: string): ContractArtifact {
     return JSON.parse(readFileSync(path, "utf8")) as ContractArtifact;
 }
 
-/** Random P2TR output script (OP_1 <32 bytes>). */
+/** P2TR output script for a fresh key (random 32 bytes are a valid x-only point only ~half the time). */
 export function randomP2TR(): Uint8Array {
-    return Uint8Array.from([0x51, 0x20, ...randomBytes(32)]);
+    return Uint8Array.from([0x51, 0x20, ...schnorr.getPublicKey(randomBytes(32))]);
 }
 
 export async function spendableAt(script: Uint8Array) {

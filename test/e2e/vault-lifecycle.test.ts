@@ -50,7 +50,7 @@ describe("market vault lifecycle", () => {
             timing: { closeAt: nowS - 60n, timeoutAt: 0n },
         });
         const terms: VaultTerms = {
-            assets, unitSats: UNIT, capSats: BASE + 50n * UNIT, oracleKey, binding, closeAt: nowS - 60n, timeoutAt: 0n,
+            assets, unitSats: UNIT, capSats: BASE + 50n * UNIT, oracleKey, binding, closeAt: nowS - 60n, timeoutAt: 0n, exitDelaySeconds: 512n,
         };
         const { vault, resolved } = marketContracts(ark, terms);
         const creatorScript = await scriptOf(creator);

@@ -14,7 +14,10 @@ contract MarketVault(
   int timeoutAt,
   bytes32 resolvedYes,
   bytes32 resolvedNo,
-  bytes32 resolvedInvalid
+  bytes32 resolvedInvalid,
+  // BIP341 NUMS point: arkd needs an exit leaf to admit the vault to batches; nobody can sign it.
+  pubkey noExitKey,
+  int exit
 ) {
   private function sets(int yesDelta, int noDelta) {
     require(tx.assetGroups.has(yesTxid, yesGidx) || yesDelta == 0, "yes group");
@@ -92,5 +95,10 @@ contract MarketVault(
     require(tx.version == 2, "intent only");
     sets(0, 0);
     require(this.tunnel(this.activeInputIndex - 1), "tunnel");
+  }
+
+  function unilateral(signature noExitSig) tapscript {
+    require(older(exit));
+    require(checkSig(noExitSig, noExitKey));
   }
 }

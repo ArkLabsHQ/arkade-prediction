@@ -61,6 +61,14 @@
     {
       "name": "resolvedInvalid",
       "type": "bytes32"
+    },
+    {
+      "name": "noExitKey",
+      "type": "pubkey"
+    },
+    {
+      "name": "exit",
+      "type": "int"
     }
   ],
   "functions": [
@@ -1348,12 +1356,34 @@
           ]
         }
       ]
+    },
+    {
+      "name": "unilateral",
+      "leaves": [
+        {
+          "name": "unilateral",
+          "witness": [
+            {
+              "name": "noExitSig",
+              "type": "signature",
+              "encoding": "schnorr-64"
+            }
+          ],
+          "asm": [
+            "<exit>",
+            "OP_CHECKSEQUENCEVERIFY",
+            "OP_DROP",
+            "<noExitKey>",
+            "OP_CHECKSIG"
+          ]
+        }
+      ]
     }
   ],
   "source": {
     "entry": "market_vault.ark",
     "files": {
-      "market_vault.ark": "pragma arkade ^0.1.0;\n\n// Collateral of an open binary market. Holds the control asset (CTRL) that authorizes YES/NO\n// reissuance, so every path pins the YES/NO deltas: spending CTRL alone would allow minting.\ncontract MarketVault(\n  bytes32 ctrlTxid, int ctrlGidx,\n  bytes32 yesTxid, int yesGidx,\n  bytes32 noTxid, int noGidx,\n  int unit,\n  int capValue,\n  pubkey oracle,\n  bytes32 binding,\n  int closeAt,\n  int timeoutAt,\n  bytes32 resolvedYes,\n  bytes32 resolvedNo,\n  bytes32 resolvedInvalid\n) {\n  private function sets(int yesDelta, int noDelta) {\n    require(tx.assetGroups.has(yesTxid, yesGidx) || yesDelta == 0, \"yes group\");\n    require(!tx.assetGroups.has(yesTxid, yesGidx) || tx.assetGroups.find(yesTxid, yesGidx).delta == yesDelta, \"yes delta\");\n    require(tx.assetGroups.has(noTxid, noGidx) || noDelta == 0, \"no group\");\n    require(!tx.assetGroups.has(noTxid, noGidx) || tx.assetGroups.find(noTxid, noGidx).delta == noDelta, \"no delta\");\n  }\n\n  private function keepsCtrl() {\n    require(tx.outputs[0].witnessVersion == 1, \"vault version\");\n    require(tx.outputs[0].assets.lookup(ctrlTxid, ctrlGidx) == 1, \"ctrl\");\n    require(tx.outputs[0].assets.length == 1, \"vault assets\");\n  }\n\n  // Locks n * unit sats and mints n YES + n NO.\n  function mint(int n) {\n    require(n > 0, \"n\");\n    sets(n, n);\n    keepsCtrl();\n    require(tx.outputs[0].scriptPubKey == tx.input.current.scriptPubKey, \"vault moved\");\n    require(tx.outputs[0].value == tx.input.current.value + n * unit, \"collateral\");\n    require(tx.outputs[0].value <= capValue, \"cap\");\n  }\n\n  // Burns n YES + n NO and releases n * unit sats.\n  function merge(int n) {\n    require(n > 0, \"n\");\n    sets(0 - n, 0 - n);\n    keepsCtrl();\n    require(tx.outputs[0].scriptPubKey == tx.input.current.scriptPubKey, \"vault moved\");\n    require(tx.outputs[0].value == tx.input.current.value - n * unit, \"collateral\");\n  }\n\n  // One-shot transition to the ResolvedVault committed for the attested vector.\n  function resolveYes(bytes32 evidence, signature oracleSig) {\n    require(checkTime(closeAt), \"too early\");\n    bytes32 message = sha256(\"APM/attest/v1\" + binding + evidence + num2bin(1, 8) + num2bin(0, 8) + num2bin(1, 8));\n    require(checkSigFromStack(oracleSig, oracle, message), \"attestation\");\n    sets(0, 0);\n    keepsCtrl();\n    require(tx.outputs[0].scriptPubKey == resolvedYes, \"target\");\n    require(tx.outputs[0].value == tx.input.current.value, \"value\");\n  }\n\n  function resolveNo(bytes32 evidence, signature oracleSig) {\n    require(checkTime(closeAt), \"too early\");\n    bytes32 message = sha256(\"APM/attest/v1\" + binding + evidence + num2bin(0, 8) + num2bin(1, 8) + num2bin(1, 8));\n    require(checkSigFromStack(oracleSig, oracle, message), \"attestation\");\n    sets(0, 0);\n    keepsCtrl();\n    require(tx.outputs[0].scriptPubKey == resolvedNo, \"target\");\n    require(tx.outputs[0].value == tx.input.current.value, \"value\");\n  }\n\n  function resolveInvalid(bytes32 evidence, signature oracleSig) {\n    require(checkTime(closeAt), \"too early\");\n    bytes32 message = sha256(\"APM/attest/v1\" + binding + evidence + num2bin(1, 8) + num2bin(1, 8) + num2bin(2, 8));\n    require(checkSigFromStack(oracleSig, oracle, message), \"attestation\");\n    sets(0, 0);\n    keepsCtrl();\n    require(tx.outputs[0].scriptPubKey == resolvedInvalid, \"target\");\n    require(tx.outputs[0].value == tx.input.current.value, \"value\");\n  }\n\n  // Precommitted fallback when no attestation arrives: split collateral 50/50 per complete set.\n  function timeout() {\n    require(timeoutAt > 0 && checkTime(timeoutAt), \"not timed out\");\n    sets(0, 0);\n    keepsCtrl();\n    require(tx.outputs[0].scriptPubKey == resolvedInvalid, \"target\");\n    require(tx.outputs[0].value == tx.input.current.value, \"value\");\n  }\n\n  function renew() {\n    require(tx.version == 2, \"intent only\");\n    sets(0, 0);\n    require(this.tunnel(this.activeInputIndex - 1), \"tunnel\");\n  }\n}\n"
+      "market_vault.ark": "pragma arkade ^0.1.0;\n\n// Collateral of an open binary market. Holds the control asset (CTRL) that authorizes YES/NO\n// reissuance, so every path pins the YES/NO deltas: spending CTRL alone would allow minting.\ncontract MarketVault(\n  bytes32 ctrlTxid, int ctrlGidx,\n  bytes32 yesTxid, int yesGidx,\n  bytes32 noTxid, int noGidx,\n  int unit,\n  int capValue,\n  pubkey oracle,\n  bytes32 binding,\n  int closeAt,\n  int timeoutAt,\n  bytes32 resolvedYes,\n  bytes32 resolvedNo,\n  bytes32 resolvedInvalid,\n  // BIP341 NUMS point: arkd needs an exit leaf to admit the vault to batches; nobody can sign it.\n  pubkey noExitKey,\n  int exit\n) {\n  private function sets(int yesDelta, int noDelta) {\n    require(tx.assetGroups.has(yesTxid, yesGidx) || yesDelta == 0, \"yes group\");\n    require(!tx.assetGroups.has(yesTxid, yesGidx) || tx.assetGroups.find(yesTxid, yesGidx).delta == yesDelta, \"yes delta\");\n    require(tx.assetGroups.has(noTxid, noGidx) || noDelta == 0, \"no group\");\n    require(!tx.assetGroups.has(noTxid, noGidx) || tx.assetGroups.find(noTxid, noGidx).delta == noDelta, \"no delta\");\n  }\n\n  private function keepsCtrl() {\n    require(tx.outputs[0].witnessVersion == 1, \"vault version\");\n    require(tx.outputs[0].assets.lookup(ctrlTxid, ctrlGidx) == 1, \"ctrl\");\n    require(tx.outputs[0].assets.length == 1, \"vault assets\");\n  }\n\n  // Locks n * unit sats and mints n YES + n NO.\n  function mint(int n) {\n    require(n > 0, \"n\");\n    sets(n, n);\n    keepsCtrl();\n    require(tx.outputs[0].scriptPubKey == tx.input.current.scriptPubKey, \"vault moved\");\n    require(tx.outputs[0].value == tx.input.current.value + n * unit, \"collateral\");\n    require(tx.outputs[0].value <= capValue, \"cap\");\n  }\n\n  // Burns n YES + n NO and releases n * unit sats.\n  function merge(int n) {\n    require(n > 0, \"n\");\n    sets(0 - n, 0 - n);\n    keepsCtrl();\n    require(tx.outputs[0].scriptPubKey == tx.input.current.scriptPubKey, \"vault moved\");\n    require(tx.outputs[0].value == tx.input.current.value - n * unit, \"collateral\");\n  }\n\n  // One-shot transition to the ResolvedVault committed for the attested vector.\n  function resolveYes(bytes32 evidence, signature oracleSig) {\n    require(checkTime(closeAt), \"too early\");\n    bytes32 message = sha256(\"APM/attest/v1\" + binding + evidence + num2bin(1, 8) + num2bin(0, 8) + num2bin(1, 8));\n    require(checkSigFromStack(oracleSig, oracle, message), \"attestation\");\n    sets(0, 0);\n    keepsCtrl();\n    require(tx.outputs[0].scriptPubKey == resolvedYes, \"target\");\n    require(tx.outputs[0].value == tx.input.current.value, \"value\");\n  }\n\n  function resolveNo(bytes32 evidence, signature oracleSig) {\n    require(checkTime(closeAt), \"too early\");\n    bytes32 message = sha256(\"APM/attest/v1\" + binding + evidence + num2bin(0, 8) + num2bin(1, 8) + num2bin(1, 8));\n    require(checkSigFromStack(oracleSig, oracle, message), \"attestation\");\n    sets(0, 0);\n    keepsCtrl();\n    require(tx.outputs[0].scriptPubKey == resolvedNo, \"target\");\n    require(tx.outputs[0].value == tx.input.current.value, \"value\");\n  }\n\n  function resolveInvalid(bytes32 evidence, signature oracleSig) {\n    require(checkTime(closeAt), \"too early\");\n    bytes32 message = sha256(\"APM/attest/v1\" + binding + evidence + num2bin(1, 8) + num2bin(1, 8) + num2bin(2, 8));\n    require(checkSigFromStack(oracleSig, oracle, message), \"attestation\");\n    sets(0, 0);\n    keepsCtrl();\n    require(tx.outputs[0].scriptPubKey == resolvedInvalid, \"target\");\n    require(tx.outputs[0].value == tx.input.current.value, \"value\");\n  }\n\n  // Precommitted fallback when no attestation arrives: split collateral 50/50 per complete set.\n  function timeout() {\n    require(timeoutAt > 0 && checkTime(timeoutAt), \"not timed out\");\n    sets(0, 0);\n    keepsCtrl();\n    require(tx.outputs[0].scriptPubKey == resolvedInvalid, \"target\");\n    require(tx.outputs[0].value == tx.input.current.value, \"value\");\n  }\n\n  function renew() {\n    require(tx.version == 2, \"intent only\");\n    sets(0, 0);\n    require(this.tunnel(this.activeInputIndex - 1), \"tunnel\");\n  }\n\n  function unilateral(signature noExitSig) tapscript {\n    require(older(exit));\n    require(checkSig(noExitSig, noExitKey));\n  }\n}\n"
     }
   },
   "compiler": {
@@ -1363,6 +1393,6 @@
       "optimize": true
     }
   },
-  "updatedAt": "2026-10-07T16:54:09.689294700+00:00",
-  "fingerprint": "sha256:3008cb4d287ae388f3c7ed05cceee0f651041fd10f8f8bab1d0ae800eca90e35"
+  "updatedAt": "2026-10-07T17:04:39.031079600+00:00",
+  "fingerprint": "sha256:bb6bc1f831071cb81df690fee22f171d63ebc6eccabe2d6588daedf8617571cf"
 }

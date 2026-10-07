@@ -21,7 +21,8 @@
     "@noble/hashes": "2.0.1",
     "@scure/base": "2.0.0",
     "@scure/bip39": "2.0.1",
-    "@scure/btc-signer": "2.0.1"
+    "@scure/btc-signer": "2.0.1",
+    "eventsource": "^4.1.1"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
