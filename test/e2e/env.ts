@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import {
     EsploraProvider,
@@ -43,6 +43,24 @@ export function mine(blocks = 1): void {
 /** Pay `amount` sats offchain from the stack's funded ark CLI wallet. */
 export function faucet(address: string, amount: number): void {
     arkdCli("ark", "send", "--to", address, "--amount", String(amount), "--password", "secret");
+}
+
+/**
+ * The emulator answers every refusal with an opaque gRPC "internal error", so a bare rejection proves
+ * nothing. Require its log to show an Arkade script failure emitted while this call ran.
+ */
+export async function expectCovenantRejection(attempt: Promise<unknown>, label: string): Promise<string> {
+    const since = new Date(Date.now() - 1000).toISOString();
+    const outcome = await attempt.then(
+        () => undefined,
+        (err: unknown) => err,
+    );
+    if (outcome === undefined) throw new Error(`${label}: spend was accepted but must be refused`);
+    const r = spawnSync("docker", ["logs", `${PREFIX}emulator`, "--since", since], { encoding: "utf8" });
+    const logs = `${r.stdout}\n${r.stderr}`;
+    const line = logs.split("\n").reverse().find((l) => l.includes("failed to execute arkade script"));
+    if (!line) throw new Error(`${label}: refused, but not by the covenant: ${String(outcome)}`);
+    return line;
 }
 
 export async function waitFor<T>(
