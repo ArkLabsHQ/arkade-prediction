@@ -45,6 +45,13 @@ export async function reconcileSubmission(d: Deps, txid: string | null, inputs: 
     return "lost";
 }
 
+/** Regtest-only crash injection at workflow boundaries: APM_FAULT=<before-submit|after-submit>:<kind>. */
+function maybeCrash(cfg: { APM_NETWORK: string }, phase: "before-submit" | "after-submit", kind: string): void {
+    if (cfg.APM_NETWORK !== "regtest" || process.env.APM_FAULT !== `${phase}:${kind}`) return;
+    console.log(JSON.stringify({ level: "warn", msg: "injected crash", phase, kind }));
+    process.exit(137);
+}
+
 export class Keeper {
     private running = false;
 
@@ -163,6 +170,7 @@ export class Keeper {
                 wf = this.d.wf.transition(wf, "pending", { txid: null });
             }
             const txid = await this.handle(wf);
+            maybeCrash(this.d.cfg, "after-submit", wf.kind);
             const latest = this.d.wf.get(wf.id)!;
             this.finish(this.d.wf.transition(latest, "done", { txid: txid ?? latest.txid, error: null }));
         } catch (err) {
@@ -186,6 +194,7 @@ export class Keeper {
             ...this.d.net.ctx,
             beforeSubmit: ({ txid, inputs }) => {
                 current = this.d.wf.transition(this.d.wf.get(current.id)!, "submitting", { txid, payload: { inputs } });
+                maybeCrash(this.d.cfg, "before-submit", current.kind);
             },
         };
     }

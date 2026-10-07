@@ -61,7 +61,7 @@ export async function startServer(opts: { port: number; dataDir?: string; env?: 
     }
     const stop = (signal: NodeJS.Signals = "SIGTERM") =>
         new Promise<number | null>((resolve) => {
-            if (proc.exitCode !== null) return resolve(proc.exitCode);
+            if (proc.exitCode !== null || proc.signalCode !== null) return resolve(proc.exitCode);
             proc.once("exit", (code) => resolve(code));
             proc.kill(signal);
         });
