@@ -93,6 +93,8 @@ async function main() {
     const vaultLeft = (await contractCoin(ctx, marketContracts(ark, m.terms).resolved.yes))?.value;
     step(`resolved vault now holds ${vaultLeft} sats for the remaining winning claims plus its base`);
     console.log("\nDEMO OK");
+    // SDK wallets keep event streams and poll timers open.
+    process.exit(0);
 }
 
 main().catch((err) => {
