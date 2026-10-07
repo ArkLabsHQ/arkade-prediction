@@ -260,7 +260,8 @@ export async function reconcileVault(d: Deps, row: MarketRow): Promise<void> {
         [hex.encode(resolved.invalid.pkScript), "resolved", "invalid"],
     ];
     const { vtxos } = await d.net.indexer.getVtxos({ scripts: candidates.map((c) => c[0]), spendableOnly: true });
-    const live = vtxos.filter((v) => !v.isSpent);
+    // Stray coins paid to a vault script are ignored: the vault is the coin carrying CTRL.
+    const live = vtxos.filter((v) => !v.isSpent && v.assets?.some((a) => a.assetId === terms.assets.ctrl));
     if (live.length === 0) return;
     const coin = live.reduce((a, b) => (a.createdAt > b.createdAt ? a : b));
     const [, phase, outcome] = candidates.find((c) => c[0] === coin.script)!;

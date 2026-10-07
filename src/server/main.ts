@@ -91,6 +91,7 @@ async function main(): Promise<void> {
         };
     };
     const overview = async () => ({
+        process: { rssBytes: process.memoryUsage().rss, heapUsedBytes: process.memoryUsage().heapUsed, cpu: process.cpuUsage(), uptimeSeconds: Math.round(process.uptime()) },
         health: await health(),
         importLag: { lastRun: getMeta(db, "import.lastRun") ?? null, lastError: getMeta(db, "import.lastError") ?? null },
         oracleLag: all(db, "SELECT id, question, close_at FROM markets WHERE status IN ('closed','resolving') AND close_at < ? ORDER BY close_at LIMIT 50", Math.floor(Date.now() / 1000)),

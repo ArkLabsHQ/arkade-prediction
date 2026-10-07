@@ -32,7 +32,7 @@ const held = (c: Coin, id: string) => (c.assets ?? []).filter((a) => a.assetId =
 /** Permissionless: burns every claim in the box against the resolved vault and pays the owner. */
 export async function autoClaim(ctx: Ctx, terms: VaultTerms, outcome: BinaryOutcome, o: BoxOwner, box: Coin) {
     const vault = marketContracts(ctx.ark, terms).resolved[outcome];
-    const coin = await contractCoin(ctx, vault);
+    const coin = await contractCoin(ctx, vault, terms.assets.ctrl);
     if (!coin) throw new Error("resolved vault not found");
     const yesBurn = held(box, terms.assets.yes);
     const noBurn = held(box, terms.assets.no);

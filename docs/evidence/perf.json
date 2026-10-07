@@ -1,0 +1,102 @@
+{
+  "measuredAt": "2026-10-07T20:57:33.691Z",
+  "machine": {
+    "platform": "win32 10.0.26200",
+    "cpu": "AMD Ryzen AI 9 365 w/ Radeon 880M              ",
+    "cores": 20,
+    "memGiB": 63
+  },
+  "note": "Single Docker Desktop host shared with other regtest stacks; arkd, emulator, bitcoind and the app run locally.",
+  "sequentialMint": {
+    "latencyMs": {
+      "n": 15,
+      "p50": 562.8636000000006,
+      "p95": 833.3487000000005,
+      "p99": 833.3487000000005,
+      "max": 833.3487000000005
+    },
+    "throughputTxPerSec": 1.71
+  },
+  "concurrentTakes": {
+    "takers": 6,
+    "wallClockMs": 1241,
+    "errors": 0,
+    "latencyMs": {
+      "n": 6,
+      "p50": 1175.5815000000002,
+      "p95": 1240.2590999999993,
+      "p99": 1240.2590999999993,
+      "max": 1240.2590999999993
+    }
+  },
+  "phaseTimingsMs": {
+    "indexerGetVirtualTxs": {
+      "n": 21,
+      "p50": 21.182699999999386,
+      "p95": 594.0070999999989,
+      "p99": 746.8076000000001,
+      "max": 746.8076000000001
+    },
+    "emulatorSubmitTx": {
+      "n": 21,
+      "p50": 149.84679999999935,
+      "p95": 518.4088999999985,
+      "p99": 541.7699000000002,
+      "max": 541.7699000000002
+    },
+    "arkdSubmitTx": {
+      "n": 8,
+      "p50": 24.82600000000093,
+      "p95": 43.08629999999903,
+      "p99": 43.08629999999903,
+      "max": 43.08629999999903
+    }
+  },
+  "apiReads": [
+    {
+      "path": "/api/markets?limit=50",
+      "rps": 88,
+      "errors": 0,
+      "latencyMs": {
+        "n": 2000,
+        "p50": 154.97240000000602,
+        "p95": 340.14000000000306,
+        "p99": 573.1616999999969,
+        "max": 1123.4916000000012
+      }
+    },
+    {
+      "path": "/api/markets/a7619137121898e03b9349a7c445d01e",
+      "rps": 456,
+      "errors": 0,
+      "latencyMs": {
+        "n": 2000,
+        "p50": 31.13509999999951,
+        "p95": 73.91259999999602,
+        "p99": 108.5815999999977,
+        "max": 166.8498000000036
+      }
+    },
+    {
+      "path": "/api/markets/a7619137121898e03b9349a7c445d01e/offers",
+      "rps": 1038,
+      "errors": 0,
+      "latencyMs": {
+        "n": 2000,
+        "p50": 13.913399999997637,
+        "p95": 28.953600000000733,
+        "p99": 39.651200000000244,
+        "max": 59.30870000000141
+      }
+    }
+  ],
+  "serverProcess": {
+    "rssBytes": 161181696,
+    "heapUsedBytes": 38835504,
+    "cpu": {
+      "user": 46066234,
+      "system": 7342024
+    },
+    "uptimeSeconds": 261
+  }
+}

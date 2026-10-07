@@ -1,4 +1,4 @@
-import { ArkAddress, asset, type Identity, type IndexerProvider } from "@arkade-os/sdk";
+import { ArkAddress, asset, type Identity, type IndexerProvider, type TapLeafScript } from "@arkade-os/sdk";
 import { hex } from "@scure/base";
 import {
     buildArkadeTx,
@@ -34,38 +34,69 @@ export interface Party {
     /** Called with outpoints this party just spent, so selection skips them while the indexer catches up. */
     noteSpent?(outpoints: string[]): void;
 }
+export type WalletCoin = Extract<InputSpec, { kind: "wallet" }>["coin"];
 
-/** Adapts an SDK wallet. */
+/**
+ * Adapts an SDK wallet. Coins are read from the indexer for the wallet's own script, not from the wallet's
+ * cached snapshot, which can lag a just-created change output between back-to-back spends.
+ */
 export async function walletParty(
-    wallet: { getAddress(): Promise<string>; getVtxos(): Promise<(WalletCoin & { isSpent?: boolean })[]> },
+    wallet: {
+        offchainTapscript: { pkScript: Uint8Array; encode(): Uint8Array; forfeit(): TapLeafScript };
+        indexerProvider: Pick<IndexerProvider, "getVtxos">;
+    },
     identity: Identity,
 ): Promise<Party> {
     const pending = new Set<string>();
+    const ts = wallet.offchainTapscript;
+    const script = ts.pkScript;
+    const tapTree = ts.encode();
+    const forfeitTapLeafScript = ts.forfeit();
     return {
         identity,
-        script: ArkAddress.decode(await wallet.getAddress()).pkScript,
-        coins: async () => (await wallet.getVtxos()).filter((c) => !c.isSpent && !pending.has(`${c.txid}:${c.vout}`)),
+        script,
+        coins: async () => {
+            const { vtxos } = await wallet.indexerProvider.getVtxos({ scripts: [hex.encode(script)], spendableOnly: true });
+            return vtxos
+                .filter((v) => !v.isSpent && !pending.has(`${v.txid}:${v.vout}`) && !spentRecently.has(`${v.txid}:${v.vout}`))
+                .map((v) => ({ txid: v.txid, vout: v.vout, value: v.value, assets: v.assets, tapTree, forfeitTapLeafScript }));
+        },
         noteSpent: (outpoints) => outpoints.forEach((o) => pending.add(o)),
     };
 }
-export type WalletCoin = Extract<InputSpec, { kind: "wallet" }>["coin"];
 
 export function scriptOfAddress(address: string): Uint8Array {
     return ArkAddress.decode(address).pkScript;
 }
 
+/** Outpoints this process spent recently; the indexer may still list them as spendable for a moment. */
+const spentRecently = new Map<string, number>();
+function noteSpentGlobally(outpoints: string[]): void {
+    const now = Date.now();
+    for (const [o, at] of spentRecently) if (now - at > 300_000) spentRecently.delete(o);
+    for (const o of outpoints) spentRecently.set(o, now);
+}
+
 export async function spendableCoins(ctx: Ctx, script: Uint8Array): Promise<Coin[]> {
     const { vtxos } = await ctx.indexer.getVtxos({ scripts: [hex.encode(script)], spendableOnly: true });
     return vtxos
-        .filter((v) => !v.isSpent)
+        .filter((v) => !v.isSpent && !spentRecently.has(`${v.txid}:${v.vout}`))
         .map((v) => ({ txid: v.txid, vout: v.vout, value: v.value, assets: v.assets }));
 }
 
-/** The single live coin of a contract (vault). Fails loudly if the script holds several. */
-export async function contractCoin(ctx: Ctx, contract: Contract, txid?: string): Promise<Coin | undefined> {
-    const coins = (await spendableCoins(ctx, contract.pkScript)).filter((c) => !txid || c.txid === txid);
+/**
+ * The live vault coin: the one holding `ctrl` (anyone can pay stray coins to a vault script). Right after a spend
+ * the indexer can briefly list zero coins or both the spent and the new one, so retry until exactly one is visible.
+ */
+export async function contractCoin(ctx: Ctx, contract: Contract, ctrl?: string, attempts = 15): Promise<Coin | undefined> {
+    let coins: Coin[] = [];
+    for (let i = 0; i < attempts; i++) {
+        coins = (await spendableCoins(ctx, contract.pkScript)).filter((c) => !ctrl || c.assets?.some((a) => a.assetId === ctrl));
+        if (coins.length === 1) return coins[0];
+        await new Promise((r) => setTimeout(r, 300));
+    }
     if (coins.length > 1) throw new Error(`contract ${hex.encode(contract.pkScript)} has ${coins.length} live coins`);
-    return coins[0];
+    return undefined;
 }
 
 const amountOf = (assets: AssetAmount[] | undefined, id: string) =>
@@ -81,7 +112,19 @@ function holdings(inputs: InputSpec[]): Map<string, bigint> {
  * Pick wallet coins covering `sats` plus every asset amount in `need`. Coins carrying any asset are
  * included whole, so the change output must carry their leftovers.
  */
-export async function selectWalletInputs(party: Party, sats: bigint, need: AssetAmount[] = []): Promise<InputSpec[]> {
+export async function selectWalletInputs(party: Party, sats: bigint, need: AssetAmount[] = [], attempts = 10): Promise<InputSpec[]> {
+    for (let i = 1; ; i++) {
+        try {
+            return await selectOnce(party, sats, need);
+        } catch (err) {
+            // A change output from the previous spend can take a moment to reach the indexer.
+            if (i >= attempts) throw err;
+            await new Promise((r) => setTimeout(r, 500));
+        }
+    }
+}
+
+async function selectOnce(party: Party, sats: bigint, need: AssetAmount[]): Promise<InputSpec[]> {
     const coins = (await party.coins()).filter((c) => !(c as { isSpent?: boolean }).isSpent);
     const chosen: WalletCoin[] = [];
     const take = (c: WalletCoin) => !chosen.includes(c) && chosen.push(c);
@@ -127,6 +170,7 @@ export async function execute(ctx: Ctx, inputs: InputSpec[], outputs: OutputSpec
     }
     await ctx.beforeSubmit?.({ txid: built.arkTx.id, inputs: inputs.map((i) => `${i.coin.txid}:${i.coin.vout}`) });
     const result = await submitArkadeTx(ctx.net, built, signer ? (cp) => signer.identity.sign(cp, [0]) : undefined);
+    noteSpentGlobally(inputs.map((i) => `${i.coin.txid}:${i.coin.vout}`));
     signer?.noteSpent?.(inputs.filter((i) => i.kind === "wallet").map((i) => `${i.coin.txid}:${i.coin.vout}`));
     return result;
 }
@@ -180,7 +224,7 @@ export async function openVault(ctx: Ctx, creator: Party, terms: VaultTerms, see
 
 export async function mintSets(ctx: Ctx, party: Party, terms: VaultTerms, n: bigint) {
     const { vault } = marketContracts(ctx.ark, terms);
-    const coin = await contractCoin(ctx, vault);
+    const coin = await contractCoin(ctx, vault, terms.assets.ctrl);
     if (!coin) throw new Error("market vault not found (resolved or not yet open)");
     const cost = n * terms.unitSats;
     const inputs = await selectWalletInputs(party, cost + CARRIER_SATS);
@@ -194,7 +238,7 @@ export async function mintSets(ctx: Ctx, party: Party, terms: VaultTerms, n: big
 
 export async function mergeSets(ctx: Ctx, party: Party, terms: VaultTerms, n: bigint) {
     const { vault } = marketContracts(ctx.ark, terms);
-    const coin = await contractCoin(ctx, vault);
+    const coin = await contractCoin(ctx, vault, terms.assets.ctrl);
     if (!coin) throw new Error("market vault not found");
     const burned = [{ assetId: terms.assets.yes, amount: n }, { assetId: terms.assets.no, amount: n }];
     const inputs = await selectWalletInputs(party, 0n, burned);
@@ -209,7 +253,7 @@ export async function mergeSets(ctx: Ctx, party: Party, terms: VaultTerms, n: bi
 /** Moves the open vault to the ResolvedVault of `outcome`. Anyone holding a valid certificate may submit. */
 export async function resolveMarket(ctx: Ctx, terms: VaultTerms, outcome: BinaryOutcome, evidence: Uint8Array, oracleSig: Uint8Array) {
     const { vault, resolved } = marketContracts(ctx.ark, terms);
-    const coin = await contractCoin(ctx, vault);
+    const coin = await contractCoin(ctx, vault, terms.assets.ctrl);
     if (!coin) throw new Error("market vault not found");
     const fn = { yes: "resolveYes", no: "resolveNo", invalid: "resolveInvalid" }[outcome];
     return execute(ctx, [{ kind: "covenant", coin, contract: vault, fn, args: { evidence, oracleSig } }], [
@@ -219,7 +263,7 @@ export async function resolveMarket(ctx: Ctx, terms: VaultTerms, outcome: Binary
 
 export async function timeoutMarket(ctx: Ctx, terms: VaultTerms) {
     const { vault, resolved } = marketContracts(ctx.ark, terms);
-    const coin = await contractCoin(ctx, vault);
+    const coin = await contractCoin(ctx, vault, terms.assets.ctrl);
     if (!coin) throw new Error("market vault not found");
     return execute(ctx, [{ kind: "covenant", coin, contract: vault, fn: "timeout" }], [
         { script: resolved.invalid.pkScript, amount: BigInt(coin.value), assets: [{ assetId: terms.assets.ctrl, amount: 1n }] },
@@ -230,7 +274,7 @@ export async function timeoutMarket(ctx: Ctx, terms: VaultTerms) {
 export async function redeemAll(ctx: Ctx, party: Party, terms: VaultTerms, outcome: BinaryOutcome) {
     const { resolved } = marketContracts(ctx.ark, terms);
     const contract = resolved[outcome];
-    const coin = await contractCoin(ctx, contract);
+    const coin = await contractCoin(ctx, contract, terms.assets.ctrl);
     if (!coin) throw new Error("resolved vault not found");
     const coins = (await party.coins()).filter((c) => amountOf(c.assets, terms.assets.yes) + amountOf(c.assets, terms.assets.no) > 0n);
     const inputs: InputSpec[] = coins.map((c) => ({ kind: "wallet", coin: c }));
@@ -354,7 +398,7 @@ export async function takeOffers(
  */
 export async function mintMatch(ctx: Ctx, terms: VaultTerms, yesBid: LiveOffer, noBid: LiveOffer, qty: bigint, surplusScript: Uint8Array) {
     const { vault } = marketContracts(ctx.ark, terms);
-    const coin = await contractCoin(ctx, vault);
+    const coin = await contractCoin(ctx, vault, terms.assets.ctrl);
     if (!coin) throw new Error("market vault not found");
     if (yesBid.terms.side !== "buy" || noBid.terms.side !== "buy") throw new Error("mint match needs two bids");
     if (yesBid.terms.assetId !== terms.assets.yes || noBid.terms.assetId !== terms.assets.no) throw new Error("bids must be YES and NO");
