@@ -1,0 +1,345 @@
+{
+ "fetchedAt": "2026-10-07T17:13:19.905883Z",
+ "note": "Gamma status fields vs CTF state at the finalized block. Gamma page trimmed to key fields per market; RPC exchanges are raw.",
+ "gammaRequest": {
+  "fetchedAt": "2026-10-07T17:13:20.093611Z",
+  "url": "https://gamma-api.polymarket.com/markets/keyset?uma_resolution_status=proposed&closed=true&limit=100",
+  "httpStatus": 200,
+  "headers": {
+   "Age": "170",
+   "Cache-Control": "public, max-age=300",
+   "cf-cache-status": "HIT"
+  }
+ },
+ "gammaMarketsTrimmed": [
+  {
+   "id": "240587",
+   "question": "Will Luiz da Silva win 2022 Presidential Elections in Brazil?",
+   "version": "v1",
+   "negRisk": null,
+   "closed": true,
+   "closedTime": "2022-11-01 04:56:55+00",
+   "umaResolutionStatus": "proposed",
+   "umaResolutionStatuses": "[]",
+   "outcomePrices": "[\"0.9999968896917928995506665177043932\", \"0.000003110308207100449333482295606841077\"]",
+   "resolvedBy": "0xCB1822859cEF82Cd2Eb4E6276C7916e692995130",
+   "conditionId": "0x29f4461e6973c5cdf0a01b6e13484a5f5d1926e2994401200001784a0f4c36ec",
+   "questionID": "0x8db0896b81f90f1a78a359b72f76363351c85773779dc336f9cf7bfd98ae6755",
+   "createdAt": "2022-01-11T23:04:47.539Z"
+  },
+  {
+   "id": "242125",
+   "question": "NCAA March Madness: Who will win Wright State vs. Bryant, scheduled for March 16 (6.40 PM ET)?",
+   "version": "v1",
+   "negRisk": null,
+   "closed": true,
+   "closedTime": "2022-03-21 05:58:59+00",
+   "umaResolutionStatus": "proposed",
+   "umaResolutionStatuses": "[]",
+   "outcomePrices": "[\"0.9999992221315073501137770586555506\", \"0.0000007778684926498862229413444493784817\"]",
+   "resolvedBy": "0xCB1822859cEF82Cd2Eb4E6276C7916e692995130",
+   "conditionId": "0x539379df9919ed1953fd23fd857548661ef1e08df860e5a5678bd7d79ca1f9a7",
+   "questionID": "0x97d6173fef900825b5a09983f8d5fe0b205ed85dac11225bbfbb76b11593d092",
+   "createdAt": "2022-03-16T11:08:32.092Z"
+  },
+  {
+   "id": "242255",
+   "question": "NHL: Who will win Islanders vs. Stars, scheduled for March 19, 2:00 PM ET?",
+   "version": "v1",
+   "negRisk": null,
+   "closed": true,
+   "closedTime": "2022-03-20 21:23:31+00",
+   "umaResolutionStatus": "proposed",
+   "umaResolutionStatuses": "[]",
+   "outcomePrices": "[\"0.9999988884671531487412512337758934\", \"0.000001111532846851258748766224106571959\"]",
+   "resolvedBy": "0xCB1822859cEF82Cd2Eb4E6276C7916e692995130",
+   "conditionId": "0x829c01fe441a0ad57385035aa390781cb3eb0c18cf7f23384688aa52aabcf173",
+   "questionID": "0x47e68f1d157775600b18c0522d3b2ffb304fcb02857ab8a83717033998746470",
+   "createdAt": "2022-03-19T09:00:22.488Z"
+  },
+  {
+   "id": "242257",
+   "question": "NHL: Who will win Oilers vs. Devils, scheduled for March 19, 3:00 PM ET?",
+   "version": "v1",
+   "negRisk": null,
+   "closed": true,
+   "closedTime": "2022-03-20 21:26:07+00",
+   "umaResolutionStatus": "proposed",
+   "umaResolutionStatuses": "[]",
+   "outcomePrices": "[\"0.9999986706545825692294912275875029\", \"0.000001329345417430770508772412497142043\"]",
+   "resolvedBy": "0xCB1822859cEF82Cd2Eb4E6276C7916e692995130",
+   "conditionId": "0xf9ea401ccc410670142e5c1ff6b3a8ff6a2efea2db0d0568bb9a04925e19a772",
+   "questionID": "0x5a1a62f4b6fcdb1201b5f212dc0163cd142cd5b90863938095ea54ee3cc99124",
+   "createdAt": "2022-03-19T09:00:53.948Z"
+  },
+  {
+   "id": "242258",
+   "question": "NHL: Who will win Blues vs. Jackets, scheduled for March 19, 5:00 PM ET?",
+   "version": "v1",
+   "negRisk": null,
+   "closed": true,
+   "closedTime": "2022-03-20 21:21:13+00",
+   "umaResolutionStatus": "proposed",
+   "umaResolutionStatuses": "[]",
+   "outcomePrices": "[\"0.0000000129595422419782866883778549704737\", \"0.999999987040457758021713311622145\"]",
+   "resolvedBy": "0xCB1822859cEF82Cd2Eb4E6276C7916e692995130",
+   "conditionId": "0x02d39aae2f43385ce19f51d1dbbe0b1c1a96faac137d11a0a0993666000c0f06",
+   "questionID": "0xc95dd051696549ea8273096630ce7d0bd0e4772b48999ee75797e5d77484033c",
+   "createdAt": "2022-03-19T09:01:15.31Z"
+  },
+  {
+   "id": "242266",
+   "question": "NHL: Will the Islanders beat the Stars by more than 1.5 goals in their March 19, 2:00 PM ET matchup?",
+   "version": "v1",
+   "negRisk": null,
+   "closed": true,
+   "closedTime": "2022-03-20 21:29:25+00",
+   "umaResolutionStatus": "proposed",
+   "umaResolutionStatuses": "[]",
+   "outcomePrices": "[\"0.9999983815782406348046011460307902\", \"0.000001618421759365195398853969209776934\"]",
+   "resolvedBy": "0xCB1822859cEF82Cd2Eb4E6276C7916e692995130",
+   "conditionId": "0x4d9234f43fc837d753faccc245baa8aa4284f7558e3a2950f546106e8362838f",
+   "questionID": "0xba558da17b4ead5e5ec8b8e4c19b3aab2e22adb1625f6de5369ecee58e3f63ce",
+   "createdAt": "2022-03-19T09:03:26.218Z"
+  },
+  {
+   "id": "242267",
+   "question": "NHL: Will the Oilers beat the Devils by more than 1.5 goals in their March 19, 3:00 PM ET matchup?",
+   "version": "v1",
+   "negRisk": null,
+   "closed": true,
+   "closedTime": "2022-03-20 21:30:27+00",
+   "umaResolutionStatus": "proposed",
+   "umaResolutionStatuses": "[]",
+   "outcomePrices": "[\"0.9999999863125630225455434070451003\", \"0.00000001368743697745445659295489966867038\"]",
+   "resolvedBy": "0xCB1822859cEF82Cd2Eb4E6276C7916e692995130",
+   "conditionId": "0x27b4da6a963694134a064eff8ef3f9199011f7b99baed2acc7e56c767cd63dee",
+   "questionID": "0x75d4393ccbcba5ae33fb0afe4dede1d641bc92846a8abc6ddc4b12c5ebafcc06",
+   "createdAt": "2022-03-19T09:03:45.112Z"
+  },
+  {
+   "id": "242269",
+   "question": "NHL: Will the Blues beat the Jackets by more than 1.5 goals in their March 19, 5:00 PM ET matchup?",
+   "version": "v1",
+   "negRisk": null,
+   "closed": true,
+   "closedTime": "2022-03-20 21:27:33+00",
+   "umaResolutionStatus": "proposed",
+   "umaResolutionStatuses": "[]",
+   "outcomePrices": "[\"0.00000001370615954262652914065943440139739\", \"0.9999999862938404573734708593405656\"]",
+   "resolvedBy": "0xCB1822859cEF82Cd2Eb4E6276C7916e692995130",
+   "conditionId": "0x6fff7b51e8801604f641e3e4d2ce1642f9dd3f00eef008fde04a57b3f5aab9f0",
+   "questionID": "0xe103d7b70082ad764bc55c24952a7c5bd7b8d11900ade1b539dcb6d2b92b21cd",
+   "createdAt": "2022-03-19T09:04:17.203Z"
+  }
+ ],
+ "ctfPayoutDenominatorAtFinalized": [
+  {
+   "fetchedAt": "2026-10-07T17:13:20.487579Z",
+   "url": "https://polygon-bor-rpc.publicnode.com",
+   "request": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "eth_call",
+    "params": [
+     {
+      "to": "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045",
+      "data": "0xdd34de6729f4461e6973c5cdf0a01b6e13484a5f5d1926e2994401200001784a0f4c36ec"
+     },
+     "finalized"
+    ]
+   },
+   "httpStatus": 200,
+   "headers": {
+    "cf-cache-status": "DYNAMIC"
+   },
+   "response": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": "0x0000000000000000000000000000000000000000000000000000000000000001"
+   }
+  },
+  {
+   "fetchedAt": "2026-10-07T17:13:20.650003Z",
+   "url": "https://polygon-bor-rpc.publicnode.com",
+   "request": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "eth_call",
+    "params": [
+     {
+      "to": "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045",
+      "data": "0xdd34de67539379df9919ed1953fd23fd857548661ef1e08df860e5a5678bd7d79ca1f9a7"
+     },
+     "finalized"
+    ]
+   },
+   "httpStatus": 200,
+   "headers": {
+    "cf-cache-status": "DYNAMIC"
+   },
+   "response": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": "0x0000000000000000000000000000000000000000000000000000000000000001"
+   }
+  },
+  {
+   "fetchedAt": "2026-10-07T17:13:20.913071Z",
+   "url": "https://polygon-bor-rpc.publicnode.com",
+   "request": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "eth_call",
+    "params": [
+     {
+      "to": "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045",
+      "data": "0xdd34de67829c01fe441a0ad57385035aa390781cb3eb0c18cf7f23384688aa52aabcf173"
+     },
+     "finalized"
+    ]
+   },
+   "httpStatus": 200,
+   "headers": {
+    "cf-cache-status": "DYNAMIC"
+   },
+   "response": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": "0x0000000000000000000000000000000000000000000000000000000000000001"
+   }
+  },
+  {
+   "fetchedAt": "2026-10-07T17:13:21.060684Z",
+   "url": "https://polygon-bor-rpc.publicnode.com",
+   "request": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "eth_call",
+    "params": [
+     {
+      "to": "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045",
+      "data": "0xdd34de67f9ea401ccc410670142e5c1ff6b3a8ff6a2efea2db0d0568bb9a04925e19a772"
+     },
+     "finalized"
+    ]
+   },
+   "httpStatus": 200,
+   "headers": {
+    "cf-cache-status": "DYNAMIC"
+   },
+   "response": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": "0x0000000000000000000000000000000000000000000000000000000000000001"
+   }
+  },
+  {
+   "fetchedAt": "2026-10-07T17:13:21.444047Z",
+   "url": "https://polygon-bor-rpc.publicnode.com",
+   "request": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "eth_call",
+    "params": [
+     {
+      "to": "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045",
+      "data": "0xdd34de6702d39aae2f43385ce19f51d1dbbe0b1c1a96faac137d11a0a0993666000c0f06"
+     },
+     "finalized"
+    ]
+   },
+   "httpStatus": 200,
+   "headers": {
+    "cf-cache-status": "DYNAMIC"
+   },
+   "response": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": "0x0000000000000000000000000000000000000000000000000000000000000001"
+   }
+  },
+  {
+   "fetchedAt": "2026-10-07T17:13:21.670172Z",
+   "url": "https://polygon-bor-rpc.publicnode.com",
+   "request": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "eth_call",
+    "params": [
+     {
+      "to": "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045",
+      "data": "0xdd34de674d9234f43fc837d753faccc245baa8aa4284f7558e3a2950f546106e8362838f"
+     },
+     "finalized"
+    ]
+   },
+   "httpStatus": 200,
+   "headers": {
+    "cf-cache-status": "DYNAMIC"
+   },
+   "response": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": "0x0000000000000000000000000000000000000000000000000000000000000001"
+   }
+  },
+  {
+   "fetchedAt": "2026-10-07T17:13:21.923596Z",
+   "url": "https://polygon-bor-rpc.publicnode.com",
+   "request": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "eth_call",
+    "params": [
+     {
+      "to": "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045",
+      "data": "0xdd34de6727b4da6a963694134a064eff8ef3f9199011f7b99baed2acc7e56c767cd63dee"
+     },
+     "finalized"
+    ]
+   },
+   "httpStatus": 200,
+   "headers": {
+    "cf-cache-status": "DYNAMIC"
+   },
+   "response": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": "0x0000000000000000000000000000000000000000000000000000000000000001"
+   }
+  },
+  {
+   "fetchedAt": "2026-10-07T17:13:24.007137Z",
+   "url": "https://polygon-bor-rpc.publicnode.com",
+   "request": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "eth_call",
+    "params": [
+     {
+      "to": "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045",
+      "data": "0xdd34de676fff7b51e8801604f641e3e4d2ce1642f9dd3f00eef008fde04a57b3f5aab9f0"
+     },
+     "finalized"
+    ]
+   },
+   "httpStatus": 200,
+   "headers": {
+    "cf-cache-status": "DYNAMIC"
+   },
+   "response": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": "0x0000000000000000000000000000000000000000000000000000000000000001"
+   }
+  }
+ ],
+ "conditionIdDerivation": {
+  "marketId": "240587",
+  "oracle": "0xCB1822859cEF82Cd2Eb4E6276C7916e692995130",
+  "questionID": "0x8db0896b81f90f1a78a359b72f76363351c85773779dc336f9cf7bfd98ae6755",
+  "gammaConditionId": "0x29f4461e6973c5cdf0a01b6e13484a5f5d1926e2994401200001784a0f4c36ec",
+  "derived": "0x29f4461e6973c5cdf0a01b6e13484a5f5d1926e2994401200001784a0f4c36ec"
+ }
+}

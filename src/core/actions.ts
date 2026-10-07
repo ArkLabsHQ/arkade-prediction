@@ -21,6 +21,8 @@ export interface Ctx {
     ark: ArkadeClient;
     net: Network;
     indexer: Pick<IndexerProvider, "getVtxos" | "getVirtualTxs">;
+    /** Write-ahead hook: runs with the final txid and spent outpoints after signing, before submission. */
+    beforeSubmit?: (pending: { txid: string; inputs: string[] }) => void | Promise<void>;
 }
 
 /** A key-holding party: browser wallet, CLI user, LP or operator. */
@@ -93,7 +95,9 @@ export async function selectWalletInputs(party: Party, sats: bigint, need: Asset
         if (got < n.amount) throw new Error(`insufficient ${n.assetId.slice(0, 8)}…: have ${got}, need ${n.amount}`);
     }
     let value = chosen.reduce((s, c) => s + BigInt(c.value), 0n);
-    for (const c of coins.filter((c) => !c.assets?.length).sort((a, b) => b.value - a.value)) {
+    // Asset-free coins first; asset-carrying coins can still fund sats because change keeps their assets.
+    const bySats = [...coins].sort((a, b) => Number(!!a.assets?.length) - Number(!!b.assets?.length) || b.value - a.value);
+    for (const c of bySats) {
         if (value >= sats) break;
         take(c);
         value += BigInt(c.value);
@@ -121,6 +125,7 @@ export async function execute(ctx: Ctx, inputs: InputSpec[], outputs: OutputSpec
         if (!signer) throw new Error("transaction has inputs that need a signature");
         await signInputs(built, signer.identity, built.signerInputs);
     }
+    await ctx.beforeSubmit?.({ txid: built.arkTx.id, inputs: inputs.map((i) => `${i.coin.txid}:${i.coin.vout}`) });
     const result = await submitArkadeTx(ctx.net, built, signer ? (cp) => signer.identity.sign(cp, [0]) : undefined);
     signer?.noteSpent?.(inputs.filter((i) => i.kind === "wallet").map((i) => `${i.coin.txid}:${i.coin.vout}`));
     return result;
@@ -143,6 +148,7 @@ export async function issueMarketAssets(ctx: Ctx, creator: Party, marketId: stri
         packet: genesisPacket(marketId, 0, seedSets),
     });
     await signInputs(built, creator.identity, built.signerInputs);
+    await ctx.beforeSubmit?.({ txid: built.arkTx.id, inputs: inputs.map((i) => `${i.coin.txid}:${i.coin.vout}`) });
     const { txid } = await submitArkadeTx(ctx.net, built, (cp) => creator.identity.sign(cp, [0]));
     creator.noteSpent?.(inputs.map((i) => `${i.coin.txid}:${i.coin.vout}`));
     return { genesisTxid: txid, assets: { ctrl: assetIdOf(txid, 0), yes: assetIdOf(txid, 1), no: assetIdOf(txid, 2) } };

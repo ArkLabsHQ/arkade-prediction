@@ -1,0 +1,87 @@
+/** Source-market adapter contract. Implementations must never infer settlement from titles or prices. */
+
+export interface SourceProtocol {
+    /** Source-reported position-system version, e.g. Polymarket "v1" (legacy CTF) or "v2". */
+    version: string;
+    chainId: number;
+    negRisk: boolean;
+    /** Resolver/oracle contract that will report the payout (lowercase 0x address), if known. */
+    resolver: string | null;
+    conditionId: string;
+    questionId: string;
+    /** Settlement contract read for the final payout (CTF for v1). */
+    settlementContract: string;
+}
+
+export interface SourceMarket {
+    provider: "polymarket";
+    sourceId: string;
+    slug: string;
+    url: string;
+    question: string;
+    /** Full resolution rules as published by the source. */
+    description: string;
+    resolutionSource: string;
+    /** Outcome labels in source order; index i maps to payout numerator i. */
+    outcomes: string[];
+    endDate: string | null;
+    tags: string[];
+    active: boolean;
+    closed: boolean;
+    archived: boolean;
+    sourceStatus: string | null;
+    protocol: SourceProtocol;
+    /** Source prices as decimal strings in [0,1]. Reference only: never executable here. */
+    referencePrices: { outcome: string; price: string }[] | null;
+    /** sha256 of the canonical normalized snapshot; changes when any field above changes. */
+    versionHash: string;
+    fetchedAt: string;
+}
+
+export interface EligibilityPolicy {
+    profiles: string[];
+    tags: string[];
+    maxHorizonSeconds: number;
+    minHorizonSeconds: number;
+}
+
+export type Eligibility =
+    | { eligible: true; profile: string }
+    | { eligible: false; code: string; reason: string };
+
+export type ResolutionStatus =
+    | "unresolved"
+    | "proposed"
+    | "disputed"
+    | "too-early"
+    | "final"
+    | "unsupported"
+    | "inconsistent";
+
+export interface ResolutionEvidence {
+    status: ResolutionStatus;
+    detail: string;
+    /** Present only when status is "final". */
+    vector?: { numerators: bigint[]; denominator: bigint };
+    /** Consistent finalized read used for the decision. */
+    chain?: { chainId: number; blockNumber: string; blockHash: string; providers: string[] };
+    /** Raw reads and identities bound into the attestation evidence digest. */
+    reads?: Record<string, unknown>;
+    observedAt: string;
+}
+
+export interface Page {
+    markets: SourceMarket[];
+    next: string | null;
+}
+
+export interface MarketSourceProvider {
+    readonly name: "polymarket";
+    discoverMarkets(cursor: string | null, limit: number): Promise<Page>;
+    fetchMarketDefinition(sourceId: string): Promise<SourceMarket>;
+    evaluateEligibility(market: SourceMarket, policy: EligibilityPolicy, now: Date): Eligibility;
+    /** Reads authoritative settlement state at one finalized block across >= 2 providers. */
+    fetchResolutionEvidence(market: SourceMarket): Promise<ResolutionEvidence>;
+    /** Re-checks evidence against the pinned profile (identity, resolver allowlist, vector shape). */
+    verifyFinalResolution(market: SourceMarket, evidence: ResolutionEvidence, profile: string): { ok: true } | { ok: false; reason: string };
+}

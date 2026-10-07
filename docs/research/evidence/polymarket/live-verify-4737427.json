@@ -1,0 +1,237 @@
+{
+  "fetchedAt": "2026-10-07T17:45:01.501Z",
+  "profile": "polymarket-ctf-v1-binary",
+  "expectedVector": {
+    "numerators": [
+      "1",
+      "1"
+    ],
+    "denominator": "2"
+  },
+  "matchesExpected": true,
+  "verification": {
+    "ok": true
+  },
+  "market": {
+    "provider": "polymarket",
+    "sourceId": "4737427",
+    "slug": "itf-galus1-jindac1-2026-09-20-match-total-23pt5",
+    "url": "https://polymarket.com/market/itf-galus1-jindac1-2026-09-20-match-total-23pt5",
+    "question": "Galus vs. Jindacek: Match O/U 23.5",
+    "description": "This market refers to the tennis match between Piotr Galus and Jiri Jindacek in the M25 Pardubice, originally scheduled for September 20, 2026 at 4:30AM ET.\nThis market will resolve to \"Over\" if the total number of games completed equals or exceeds 24. Otherwise, it will resolve to \"Under.\" All tiebreaks, including any Champions/Super tiebreak, count as one (1) game.\nIf the match is postponed or suspended, this market will remain open until the match has been completed. A postponement alone will not trigger a 50-50 resolution.\nIf the match is permanently abandoned before completion, or if the match has not been completed by October 4, 2026, 11:59 PM ET, this market will resolve 50-50, unless the outcome has already been unconditionally determined based on completed play. An outcome is considered unconditionally determined if it would have been guaranteed under every possible completion of the match played according to the match format published by the tournament organizer for that round, including whether a final set is played as a full set or as a match tiebreak. For example, for a line of 21.5, if play stops at 6-3, 5-6, completing the match would have required at least 2 additional games, resulting in at least 22 games played, so \"Over\" would resolve as the winning outcome. Likewise, if the published format replaces the final set with a match tiebreak, that tiebreak counts as one (1) game, so for a line of 22.5, if play stops at 6-2, 3-3, the match could have reached at most 22 games and \"Under\" would resolve as the winning outcome.\nThe primary resolution source for this market will be official ITF statistics; however, a consensus of credible reporting may also be used.",
+    "resolutionSource": "https://www.itftennis.com/en/tournament-calendar/",
+    "outcomes": [
+      "Over",
+      "Under"
+    ],
+    "endDate": "2026-09-27T08:30:00.000Z",
+    "tags": [
+      "games",
+      "sports",
+      "tennis"
+    ],
+    "active": true,
+    "closed": true,
+    "archived": false,
+    "sourceStatus": "resolved",
+    "protocol": {
+      "version": "v1",
+      "chainId": 137,
+      "negRisk": false,
+      "resolver": "0x65070be91477460d8a7aeeb94ef92fe056c2f2a7",
+      "conditionId": "0x5aad5e06b8246a4c1a17d6794712bbaa855e8d70c70344a860f9c98fde2fb9a6",
+      "questionId": "0xc412b81fa1f5db32874c6d685ed4d098d8890aded4fd653213b62d6af38cb25b",
+      "settlementContract": "0x4d97dcd97ec945f40cf65f87097ace5ea0476045"
+    },
+    "referencePrices": [
+      {
+        "outcome": "Over",
+        "price": "0.5"
+      },
+      {
+        "outcome": "Under",
+        "price": "0.5"
+      }
+    ],
+    "versionHash": "bf8024e186defd0472e4f9f4b87b7f4ceb4cc7a8714ae0833b3410fe608660b6",
+    "fetchedAt": "2026-10-07T17:45:00.825Z"
+  },
+  "evidence": {
+    "status": "final",
+    "detail": "payout [1,1]/2 (50-50) at finalized block 95126600 (0x715a8f3e9be968ef93d1dfe98a756292fb54f984500cd84ae1250d06c1a399b7) on 2 providers",
+    "chain": {
+      "chainId": 137,
+      "blockNumber": "95126600",
+      "blockHash": "0x715a8f3e9be968ef93d1dfe98a756292fb54f984500cd84ae1250d06c1a399b7",
+      "providers": [
+        "https://polygon-bor-rpc.publicnode.com",
+        "https://polygon.drpc.org"
+      ]
+    },
+    "reads": {
+      "profile": "polymarket-ctf-v1-binary",
+      "ctf": "0x4d97dcd97ec945f40cf65f87097ace5ea0476045",
+      "conditionId": "0x5aad5e06b8246a4c1a17d6794712bbaa855e8d70c70344a860f9c98fde2fb9a6",
+      "questionId": "0xc412b81fa1f5db32874c6d685ed4d098d8890aded4fd653213b62d6af38cb25b",
+      "resolver": "0x65070be91477460d8a7aeeb94ef92fe056c2f2a7",
+      "gammaStatus": "resolved",
+      "payout": {
+        "numerators": [
+          "1",
+          "1"
+        ],
+        "denominator": "2"
+      },
+      "calls": [
+        {
+          "provider": "https://polygon-bor-rpc.publicnode.com",
+          "method": "eth_chainId",
+          "params": [],
+          "result": "0x89"
+        },
+        {
+          "provider": "https://polygon-bor-rpc.publicnode.com",
+          "method": "eth_getBlockByNumber",
+          "params": [
+            "finalized",
+            false
+          ],
+          "result": {
+            "number": "0x5ab844a",
+            "hash": "0x81c001c6d127e95ef9138db2d76b3242808a8bc61d32c372bea76ec287a7622c",
+            "parentHash": "0x2ba4235466a88789881f8d66b77741c625454e2718c9208443d6c19a963abe12",
+            "timestamp": "0x6ac68516"
+          }
+        },
+        {
+          "provider": "https://polygon-bor-rpc.publicnode.com",
+          "method": "eth_getBlockByNumber",
+          "params": [
+            "0x5ab8448",
+            false
+          ],
+          "result": {
+            "number": "0x5ab8448",
+            "hash": "0x715a8f3e9be968ef93d1dfe98a756292fb54f984500cd84ae1250d06c1a399b7",
+            "parentHash": "0x6acca2009abe3f001af014f6d6b830df43992c10f1e1cddc9df386b7051ee7a2",
+            "timestamp": "0x6ac68513"
+          }
+        },
+        {
+          "provider": "https://polygon-bor-rpc.publicnode.com",
+          "method": "eth_call",
+          "params": [
+            {
+              "to": "0x4d97dcd97ec945f40cf65f87097ace5ea0476045",
+              "data": "0xdd34de675aad5e06b8246a4c1a17d6794712bbaa855e8d70c70344a860f9c98fde2fb9a6"
+            },
+            "0x5ab8448"
+          ],
+          "result": "0x0000000000000000000000000000000000000000000000000000000000000002"
+        },
+        {
+          "provider": "https://polygon-bor-rpc.publicnode.com",
+          "method": "eth_call",
+          "params": [
+            {
+              "to": "0x4d97dcd97ec945f40cf65f87097ace5ea0476045",
+              "data": "0x0504c8145aad5e06b8246a4c1a17d6794712bbaa855e8d70c70344a860f9c98fde2fb9a60000000000000000000000000000000000000000000000000000000000000000"
+            },
+            "0x5ab8448"
+          ],
+          "result": "0x0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        {
+          "provider": "https://polygon-bor-rpc.publicnode.com",
+          "method": "eth_call",
+          "params": [
+            {
+              "to": "0x4d97dcd97ec945f40cf65f87097ace5ea0476045",
+              "data": "0x0504c8145aad5e06b8246a4c1a17d6794712bbaa855e8d70c70344a860f9c98fde2fb9a60000000000000000000000000000000000000000000000000000000000000001"
+            },
+            "0x5ab8448"
+          ],
+          "result": "0x0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        {
+          "provider": "https://polygon.drpc.org",
+          "method": "eth_chainId",
+          "params": [],
+          "result": "0x89"
+        },
+        {
+          "provider": "https://polygon.drpc.org",
+          "method": "eth_getBlockByNumber",
+          "params": [
+            "finalized",
+            false
+          ],
+          "result": {
+            "number": "0x5ab8448",
+            "hash": "0x715a8f3e9be968ef93d1dfe98a756292fb54f984500cd84ae1250d06c1a399b7",
+            "parentHash": "0x6acca2009abe3f001af014f6d6b830df43992c10f1e1cddc9df386b7051ee7a2",
+            "timestamp": "0x6ac68513"
+          }
+        },
+        {
+          "provider": "https://polygon.drpc.org",
+          "method": "eth_getBlockByNumber",
+          "params": [
+            "0x5ab8448",
+            false
+          ],
+          "result": {
+            "number": "0x5ab8448",
+            "hash": "0x715a8f3e9be968ef93d1dfe98a756292fb54f984500cd84ae1250d06c1a399b7",
+            "parentHash": "0x6acca2009abe3f001af014f6d6b830df43992c10f1e1cddc9df386b7051ee7a2",
+            "timestamp": "0x6ac68513"
+          }
+        },
+        {
+          "provider": "https://polygon.drpc.org",
+          "method": "eth_call",
+          "params": [
+            {
+              "to": "0x4d97dcd97ec945f40cf65f87097ace5ea0476045",
+              "data": "0xdd34de675aad5e06b8246a4c1a17d6794712bbaa855e8d70c70344a860f9c98fde2fb9a6"
+            },
+            "0x5ab8448"
+          ],
+          "result": "0x0000000000000000000000000000000000000000000000000000000000000002"
+        },
+        {
+          "provider": "https://polygon.drpc.org",
+          "method": "eth_call",
+          "params": [
+            {
+              "to": "0x4d97dcd97ec945f40cf65f87097ace5ea0476045",
+              "data": "0x0504c8145aad5e06b8246a4c1a17d6794712bbaa855e8d70c70344a860f9c98fde2fb9a60000000000000000000000000000000000000000000000000000000000000000"
+            },
+            "0x5ab8448"
+          ],
+          "result": "0x0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        {
+          "provider": "https://polygon.drpc.org",
+          "method": "eth_call",
+          "params": [
+            {
+              "to": "0x4d97dcd97ec945f40cf65f87097ace5ea0476045",
+              "data": "0x0504c8145aad5e06b8246a4c1a17d6794712bbaa855e8d70c70344a860f9c98fde2fb9a60000000000000000000000000000000000000000000000000000000000000001"
+            },
+            "0x5ab8448"
+          ],
+          "result": "0x0000000000000000000000000000000000000000000000000000000000000001"
+        }
+      ]
+    },
+    "observedAt": "2026-10-07T17:45:00.828Z",
+    "vector": {
+      "numerators": [
+        "1",
+        "1"
+      ],
+      "denominator": "2"
+    }
+  }
+}

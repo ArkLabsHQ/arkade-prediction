@@ -1,0 +1,475 @@
+{
+  "source": "Gamma responses trimmed to the fields the normalizer reads. keyset, 559651, 5379000: live capture 2026-10-07T17:38:52.737Z (include_tag=true). 2758339/3409541/4737427: gammaMarket.response of docs/research/evidence/polymarket/live-proof-*.json (fetched without include_tag, so no tags).",
+  "keyset": {
+    "fetchedAt": "2026-10-07T17:38:39.445Z",
+    "url": "https://gamma-api.polymarket.com/markets/keyset?closed=false&include_tag=true&limit=5",
+    "response": {
+      "markets": [
+        {
+          "id": "559651",
+          "slug": "xi-jinping-out-before-2027",
+          "question": "Xi Jinping out before 2027?",
+          "description": "This market will resolve to \"Yes\" if China's General Secretary of the Communist Party, Xi Jinping, is removed from power for any length of time between July 3, 2025, and December 31, 2026, 11:59 PM ET. Otherwise, this market will resolve to \"No\".\n\nCCP General Secretary Xi Jinping will be considered removed from power if he announces his resignation from his role as General Secretary, or is otherwise dismissed, detained, disqualified, or otherwise loses his position or is prevented from fulfilling his duties as General Secretary within this market's timeframe.\n\nThe primary resolution source for this market will be a consensus of credible reporting.",
+          "resolutionSource": "",
+          "outcomes": "[\"Yes\", \"No\"]",
+          "outcomePrices": "[\"0.0265\", \"0.9735\"]",
+          "endDate": "2027-01-01T04:59:00Z",
+          "tags": [
+            {
+              "id": "103715",
+              "label": "HFC",
+              "slug": "hfc"
+            },
+            {
+              "id": "366",
+              "label": "world affairs",
+              "slug": "world-affairs"
+            },
+            {
+              "id": "100265",
+              "label": "Geopolitics",
+              "slug": "geopolitics"
+            },
+            {
+              "id": "101970",
+              "label": "World",
+              "slug": "world"
+            },
+            {
+              "id": "102458",
+              "label": "Earn 3.25%",
+              "slug": "earn-4"
+            },
+            {
+              "id": "101253",
+              "label": "Macro Geopolitics",
+              "slug": "macro-geopolitics"
+            }
+          ],
+          "active": true,
+          "closed": false,
+          "archived": false,
+          "version": "v1",
+          "negRisk": false,
+          "negRiskOther": false,
+          "resolvedBy": "0x157Ce2d672854c848c9b79C49a8Cc6cc89176a49",
+          "conditionId": "0xa467b14d51f01b957109d9cbb1d6c124fab2a089d52ed8f471d23c2812e743b7",
+          "questionID": "0x1d925c6933062c2e38031293612d8680ffa097c5d3ba2f87a8ecc565bd47183e"
+        },
+        {
+          "id": "559652",
+          "slug": "will-gavin-newsom-win-the-2028-democratic-presidential-nomination-568",
+          "question": "Will Gavin Newsom win the 2028 Democratic presidential nomination?",
+          "description": "This market will resolve to “Yes” if the named individual wins and accepts the 2028 nomination of the Democratic Party for U.S. president. Otherwise, this market will resolve to “No”.\n\nThe resolution source for this market will be a consensus of official Democratic Party sources.\n\nAny replacement of the democratic nominee before election day will not change the resolution of the market.",
+          "resolutionSource": "",
+          "outcomes": "[\"Yes\", \"No\"]",
+          "outcomePrices": "[\"0.1675\", \"0.8325\"]",
+          "endDate": "2028-11-08T04:59:00Z",
+          "tags": [
+            {
+              "id": "264",
+              "label": "Primaries",
+              "slug": "primaries"
+            },
+            {
+              "id": "165",
+              "label": "United States",
+              "slug": "united-states"
+            },
+            {
+              "id": "2",
+              "label": "Politics",
+              "slug": "politics"
+            },
+            {
+              "id": "144",
+              "label": "Elections",
+              "slug": "elections"
+            },
+            {
+              "id": "1101",
+              "label": "US Election",
+              "slug": "us-presidential-election"
+            },
+            {
+              "id": "101206",
+              "label": "World Elections",
+              "slug": "world-elections"
+            },
+            {
+              "id": "102458",
+              "label": "Earn 3.25%",
+              "slug": "earn-4"
+            }
+          ],
+          "active": true,
+          "closed": false,
+          "archived": false,
+          "version": "v1",
+          "negRisk": true,
+          "negRiskOther": false,
+          "resolvedBy": "0x2F5e3684cb1F318ec51b00Edba38d79Ac2c0aA9d",
+          "conditionId": "0x0f49db97f71c68b1e42a6d16e3de93d85dbf7d4148e3f018eb79e88554be9f75",
+          "questionID": "0x2c3d7e0eee6f058be3006baabf0d54a07da254ba47fe6e3e095e7990c7814700"
+        },
+        {
+          "id": "559653",
+          "slug": "will-alexandria-ocasio-cortez-win-the-2028-democratic-presidential-nomination-653",
+          "question": "Will Alexandria Ocasio-Cortez win the 2028 Democratic presidential nomination?",
+          "description": "This market will resolve to “Yes” if the named individual wins and accepts the 2028 nomination of the Democratic Party for U.S. president. Otherwise, this market will resolve to “No”.\n\nThe resolution source for this market will be a consensus of official Democratic Party sources.\n\nAny replacement of the democratic nominee before election day will not change the resolution of the market.",
+          "resolutionSource": "",
+          "outcomes": "[\"Yes\", \"No\"]",
+          "outcomePrices": "[\"0.1795\", \"0.8205\"]",
+          "endDate": "2028-11-08T04:59:00Z",
+          "tags": [
+            {
+              "id": "264",
+              "label": "Primaries",
+              "slug": "primaries"
+            },
+            {
+              "id": "165",
+              "label": "United States",
+              "slug": "united-states"
+            },
+            {
+              "id": "2",
+              "label": "Politics",
+              "slug": "politics"
+            },
+            {
+              "id": "144",
+              "label": "Elections",
+              "slug": "elections"
+            },
+            {
+              "id": "1101",
+              "label": "US Election",
+              "slug": "us-presidential-election"
+            },
+            {
+              "id": "101206",
+              "label": "World Elections",
+              "slug": "world-elections"
+            },
+            {
+              "id": "102458",
+              "label": "Earn 3.25%",
+              "slug": "earn-4"
+            }
+          ],
+          "active": true,
+          "closed": false,
+          "archived": false,
+          "version": "v1",
+          "negRisk": true,
+          "negRiskOther": false,
+          "resolvedBy": "0x2F5e3684cb1F318ec51b00Edba38d79Ac2c0aA9d",
+          "conditionId": "0xe6bcc2f1dd025ce5e1833190f7c60a71171c94f805df55b9ab0ded695ec93565",
+          "questionID": "0x2c3d7e0eee6f058be3006baabf0d54a07da254ba47fe6e3e095e7990c7814701"
+        },
+        {
+          "id": "559654",
+          "slug": "will-pete-buttigieg-win-the-2028-democratic-presidential-nomination-687",
+          "question": "Will Pete Buttigieg win the 2028 Democratic presidential nomination?",
+          "description": "This market will resolve to “Yes” if the named individual wins and accepts the 2028 nomination of the Democratic Party for U.S. president. Otherwise, this market will resolve to “No”.\n\nThe resolution source for this market will be a consensus of official Democratic Party sources.\n\nAny replacement of the democratic nominee before election day will not change the resolution of the market.",
+          "resolutionSource": "",
+          "outcomes": "[\"Yes\", \"No\"]",
+          "outcomePrices": "[\"0.0505\", \"0.9495\"]",
+          "endDate": "2028-11-08T04:59:00Z",
+          "tags": [
+            {
+              "id": "264",
+              "label": "Primaries",
+              "slug": "primaries"
+            },
+            {
+              "id": "165",
+              "label": "United States",
+              "slug": "united-states"
+            },
+            {
+              "id": "2",
+              "label": "Politics",
+              "slug": "politics"
+            },
+            {
+              "id": "144",
+              "label": "Elections",
+              "slug": "elections"
+            },
+            {
+              "id": "1101",
+              "label": "US Election",
+              "slug": "us-presidential-election"
+            },
+            {
+              "id": "101206",
+              "label": "World Elections",
+              "slug": "world-elections"
+            },
+            {
+              "id": "102458",
+              "label": "Earn 3.25%",
+              "slug": "earn-4"
+            }
+          ],
+          "active": true,
+          "closed": false,
+          "archived": false,
+          "version": "v1",
+          "negRisk": true,
+          "negRiskOther": false,
+          "resolvedBy": "0x2F5e3684cb1F318ec51b00Edba38d79Ac2c0aA9d",
+          "conditionId": "0x4c325469d9b516ef4e6b8f73a81a12607dec075e3c2fd454f91765aaeafc4760",
+          "questionID": "0x2c3d7e0eee6f058be3006baabf0d54a07da254ba47fe6e3e095e7990c7814702"
+        },
+        {
+          "id": "559655",
+          "slug": "will-josh-shapiro-win-the-2028-democratic-presidential-nomination-977",
+          "question": "Will Josh Shapiro win the 2028 Democratic presidential nomination?",
+          "description": "This market will resolve to “Yes” if the named individual wins and accepts the 2028 nomination of the Democratic Party for U.S. president. Otherwise, this market will resolve to “No”.\n\nThe resolution source for this market will be a consensus of official Democratic Party sources.\n\nAny replacement of the democratic nominee before election day will not change the resolution of the market.",
+          "resolutionSource": "",
+          "outcomes": "[\"Yes\", \"No\"]",
+          "outcomePrices": "[\"0.063\", \"0.937\"]",
+          "endDate": "2028-11-08T04:59:00Z",
+          "tags": [
+            {
+              "id": "264",
+              "label": "Primaries",
+              "slug": "primaries"
+            },
+            {
+              "id": "165",
+              "label": "United States",
+              "slug": "united-states"
+            },
+            {
+              "id": "2",
+              "label": "Politics",
+              "slug": "politics"
+            },
+            {
+              "id": "144",
+              "label": "Elections",
+              "slug": "elections"
+            },
+            {
+              "id": "1101",
+              "label": "US Election",
+              "slug": "us-presidential-election"
+            },
+            {
+              "id": "101206",
+              "label": "World Elections",
+              "slug": "world-elections"
+            },
+            {
+              "id": "102458",
+              "label": "Earn 3.25%",
+              "slug": "earn-4"
+            }
+          ],
+          "active": true,
+          "closed": false,
+          "archived": false,
+          "version": "v1",
+          "negRisk": true,
+          "negRiskOther": false,
+          "resolvedBy": "0x2F5e3684cb1F318ec51b00Edba38d79Ac2c0aA9d",
+          "conditionId": "0xd65891729ce093cc12236856837eba1a0872fc7998fd4294c21346f7db68079c",
+          "questionID": "0x2c3d7e0eee6f058be3006baabf0d54a07da254ba47fe6e3e095e7990c7814703"
+        }
+      ],
+      "next_cursor": "u10WlgEebOrSNrL5gWfv0SI6R_pB7WxLq62ffNRQ-dx7InYiOjEsImsiOiJtYXJrZXRzIiwib2giOiI0ZjUzY2RhMThjMmJhYTBjMDM1NGJiNWY5YTNlY2JlNWVkMTJhYjRkOGUxMWJhODczYzJmMTExNjEyMDJiOTQ1Iiwia2V5cyI6W3sidCI6InN0cmluZyIsInYiOiI1NTk2NTUifV19"
+    }
+  },
+  "markets": {
+    "559651": {
+      "fetchedAt": "2026-10-07T17:38:39.523Z",
+      "url": "https://gamma-api.polymarket.com/markets/559651?include_tag=true",
+      "response": {
+        "id": "559651",
+        "slug": "xi-jinping-out-before-2027",
+        "question": "Xi Jinping out before 2027?",
+        "description": "This market will resolve to \"Yes\" if China's General Secretary of the Communist Party, Xi Jinping, is removed from power for any length of time between July 3, 2025, and December 31, 2026, 11:59 PM ET. Otherwise, this market will resolve to \"No\".\n\nCCP General Secretary Xi Jinping will be considered removed from power if he announces his resignation from his role as General Secretary, or is otherwise dismissed, detained, disqualified, or otherwise loses his position or is prevented from fulfilling his duties as General Secretary within this market's timeframe.\n\nThe primary resolution source for this market will be a consensus of credible reporting.",
+        "resolutionSource": "",
+        "outcomes": "[\"Yes\", \"No\"]",
+        "outcomePrices": "[\"0.0265\", \"0.9735\"]",
+        "endDate": "2027-01-01T04:59:00Z",
+        "tags": [
+          {
+            "id": "103715",
+            "label": "HFC",
+            "slug": "hfc"
+          },
+          {
+            "id": "366",
+            "label": "world affairs",
+            "slug": "world-affairs"
+          },
+          {
+            "id": "100265",
+            "label": "Geopolitics",
+            "slug": "geopolitics"
+          },
+          {
+            "id": "101970",
+            "label": "World",
+            "slug": "world"
+          },
+          {
+            "id": "102458",
+            "label": "Earn 3.25%",
+            "slug": "earn-4"
+          },
+          {
+            "id": "101253",
+            "label": "Macro Geopolitics",
+            "slug": "macro-geopolitics"
+          }
+        ],
+        "active": true,
+        "closed": false,
+        "archived": false,
+        "version": "v1",
+        "negRisk": false,
+        "negRiskOther": false,
+        "resolvedBy": "0x157Ce2d672854c848c9b79C49a8Cc6cc89176a49",
+        "conditionId": "0xa467b14d51f01b957109d9cbb1d6c124fab2a089d52ed8f471d23c2812e743b7",
+        "questionID": "0x1d925c6933062c2e38031293612d8680ffa097c5d3ba2f87a8ecc565bd47183e"
+      }
+    },
+    "2758339": {
+      "fetchedAt": "2026-10-07T16:49:57.663956Z",
+      "url": "https://gamma-api.polymarket.com/markets/2758339",
+      "response": {
+        "id": "2758339",
+        "slug": "will-bitcoin-reach-67pt5k-in-july-2026",
+        "question": "Will Bitcoin reach $67,500 in July?",
+        "description": "This market will immediately resolve to \"Yes\" if any Binance 1 minute candle for BTC/USDT during the month specified in the title (from 00:00 AM ET on the first day to 11:59 PM ET on the last), has a final High price equal to or greater than the price specified in the title. Otherwise, this market will resolve to \"No.\"\n\nThe resolution source for this market is Binance, specifically the BTC/USDT High prices available at https://www.binance.com/en/trade/BTC_USDT, with the chart settings on \"1m\" for one-minute candles selected on the top bar.\n\nPlease note that the outcome of this market depends solely on the price data from the Binance BTC/USDT trading pair. Prices from other exchanges, different trading pairs, or spot markets will not be considered for the resolution of this market.",
+        "outcomes": "[\"Yes\", \"No\"]",
+        "outcomePrices": "[\"0\", \"1\"]",
+        "endDate": "2026-08-01T04:00:00Z",
+        "active": true,
+        "closed": true,
+        "archived": false,
+        "umaResolutionStatus": "resolved",
+        "version": "v1",
+        "negRisk": false,
+        "negRiskOther": false,
+        "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+        "conditionId": "0xbe20fcfd54937c2a48a7b8521ca349e6a2c4373566328ebb950a8c35ab1be3d9",
+        "questionID": "0x8fa725f0bd0b1f3fc6a2d07be5145fdd80d4a738feda70177dfdaddab49c61fd"
+      }
+    },
+    "3409541": {
+      "fetchedAt": "2026-10-07T16:51:05.208049Z",
+      "url": "https://gamma-api.polymarket.com/markets/3409541",
+      "response": {
+        "id": "3409541",
+        "slug": "will-kai-and-speed-beat-the-minecraft-challenge-by-august-17-20260807213124706",
+        "question": "Will Kai and Speed beat the Minecraft challenge by August 17?",
+        "description": "Kai Cenat and IShowSpeed are scheduled to stream a hardcore Minecraft marathon on August 7, 2026, at 5:00 PM ET. They will attempt a challenge to defeat the Ender Dragon, the Wither, the Warden, and the Elder Guardian in a hardcore Minecraft world on Java Edition, on the same seed, without either player dying in-game. \n\nThis market will resolve to \"Yes\" if Kai and Speed complete the aforementioned challenge live on stream between market creation and the specified date, 11:59 PM ET. Otherwise, this market will resolve to \"No\".\n\nAll four objectives must be completed on the same seed and in the same world. Progress across multiple seeds will not be combined.\n\nAny successful attempt within the specified timeframe will qualify; however, no challenge progress may be carried over following an in-game death and the beginning of a new attempt. \n\nPractice or casual worlds not set to Hardcore will not count. No event will count if it occurs while the player in question is in Creative or Spectator mode, or if it results from the use of commands, cheats, or any external tool to spawn entities, alter the world, or deal damage.\n\nOnly completion of the challenge as defined above will qualify. If Kai and Speed modify the rules of the challenge at any point, including by removing an objective, adding a player, or playing outside of Hardcore mode, any completion achieved under the modified rules will not count toward resolution.\n\nOnly events occurring while at least one of the two players is broadcasting the challenge live will count. Footage of off-stream or previously recorded attempts will not qualify.\n\nIf the challenge is cancelled by, abandoned before completion by, or delayed to a point after the specified date, this market will resolve to \"No\".\n\nThe resolution source for this market will be footage from the official broadcasts of the challenge on Kai Cenat's and IShowSpeed's official broadcasts on YouTube and Twitch.",
+        "resolutionSource": "https://www.youtube.com/watch?v=Sm9Af2DPsqs",
+        "outcomes": "[\"Yes\", \"No\"]",
+        "outcomePrices": "[\"1\", \"0\"]",
+        "endDate": "2026-08-17T23:59:00Z",
+        "active": true,
+        "closed": true,
+        "archived": false,
+        "umaResolutionStatus": "resolved",
+        "version": "v1",
+        "negRisk": false,
+        "negRiskOther": false,
+        "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+        "conditionId": "0x60613b262912ce2e3138ec5610a31a2f932b6300843c094053cb33aaff9f2238",
+        "questionID": "0x24f034d2102744218ac250623ed0f6ac279bb6d63ecc0bc0599798a65a3e56c9"
+      }
+    },
+    "4737427": {
+      "fetchedAt": "2026-10-07T16:58:52.809116Z",
+      "url": "https://gamma-api.polymarket.com/markets/4737427",
+      "response": {
+        "id": "4737427",
+        "slug": "itf-galus1-jindac1-2026-09-20-match-total-23pt5",
+        "question": "Galus vs. Jindacek: Match O/U 23.5",
+        "description": "This market refers to the tennis match between Piotr Galus and Jiri Jindacek in the M25 Pardubice, originally scheduled for September 20, 2026 at 4:30AM ET.\nThis market will resolve to \"Over\" if the total number of games completed equals or exceeds 24. Otherwise, it will resolve to \"Under.\" All tiebreaks, including any Champions/Super tiebreak, count as one (1) game.\nIf the match is postponed or suspended, this market will remain open until the match has been completed. A postponement alone will not trigger a 50-50 resolution.\nIf the match is permanently abandoned before completion, or if the match has not been completed by October 4, 2026, 11:59 PM ET, this market will resolve 50-50, unless the outcome has already been unconditionally determined based on completed play. An outcome is considered unconditionally determined if it would have been guaranteed under every possible completion of the match played according to the match format published by the tournament organizer for that round, including whether a final set is played as a full set or as a match tiebreak. For example, for a line of 21.5, if play stops at 6-3, 5-6, completing the match would have required at least 2 additional games, resulting in at least 22 games played, so \"Over\" would resolve as the winning outcome. Likewise, if the published format replaces the final set with a match tiebreak, that tiebreak counts as one (1) game, so for a line of 22.5, if play stops at 6-2, 3-3, the match could have reached at most 22 games and \"Under\" would resolve as the winning outcome.\nThe primary resolution source for this market will be official ITF statistics; however, a consensus of credible reporting may also be used.",
+        "resolutionSource": "https://www.itftennis.com/en/tournament-calendar/",
+        "outcomes": "[\"Over\", \"Under\"]",
+        "outcomePrices": "[\"0.5\", \"0.5\"]",
+        "endDate": "2026-09-27T08:30:00Z",
+        "active": true,
+        "closed": true,
+        "archived": false,
+        "umaResolutionStatus": "resolved",
+        "version": "v1",
+        "negRisk": false,
+        "negRiskOther": false,
+        "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+        "conditionId": "0x5aad5e06b8246a4c1a17d6794712bbaa855e8d70c70344a860f9c98fde2fb9a6",
+        "questionID": "0xc412b81fa1f5db32874c6d685ed4d098d8890aded4fd653213b62d6af38cb25b"
+      }
+    },
+    "5379000": {
+      "fetchedAt": "2026-10-07T17:38:39.618Z",
+      "url": "https://gamma-api.polymarket.com/markets/5379000?include_tag=true",
+      "response": {
+        "id": "5379000",
+        "slug": "btc-updown-15m-1791389700",
+        "question": "Bitcoin Up or Down - October 7, 12:15PM-12:30PM ET",
+        "description": "This market will resolve to \"Up\" if the time-weighted average price (TWAP) of Bitcoin, generated by Chainlink, of the time range specified in the title is greater than or equal to the price at the beginning of that range. Otherwise, it will resolve to \"Down\".\nThe resolution source for this market is information from Chainlink, specifically the BTC/USD TWAP data stream available at https://data.chain.link/streams/btc-usd-twap-60s-streams.\nPlease note that this market is about the price according to the TWAP Chainlink data stream for the asset pair BTC/USD, not according to any other sources or spot markets.",
+        "resolutionSource": "https://data.chain.link/streams/btc-usd-twap-60s-streams",
+        "outcomes": "[\"Up\", \"Down\"]",
+        "outcomePrices": "[\"1\", \"0\"]",
+        "endDate": "2026-10-07T16:30:00Z",
+        "tags": [
+          {
+            "id": "102127",
+            "label": "Up or Down",
+            "slug": "up-or-down"
+          },
+          {
+            "id": "1312",
+            "label": "Crypto Prices",
+            "slug": "crypto-prices"
+          },
+          {
+            "id": "102169",
+            "label": "Hide From New",
+            "slug": "hide-from-new"
+          },
+          {
+            "id": "101757",
+            "label": "Recurring",
+            "slug": "recurring"
+          },
+          {
+            "id": "21",
+            "label": "Crypto",
+            "slug": "crypto"
+          },
+          {
+            "id": "235",
+            "label": "Bitcoin",
+            "slug": "bitcoin"
+          },
+          {
+            "id": "102467",
+            "label": "15M",
+            "slug": "15M"
+          }
+        ],
+        "active": true,
+        "closed": true,
+        "archived": false,
+        "umaResolutionStatus": "resolved",
+        "version": "v1",
+        "negRisk": false,
+        "negRiskOther": false,
+        "conditionId": "0x6c5a396866753a89cd238907d59944f3e21b3ee2759beccbe1654ec906aaf27b",
+        "questionID": "0xf6ac224c544d6e020d133d0a255747304de1b1b573bdb6e6b8f4584ca7ce5504"
+      }
+    }
+  }
+}

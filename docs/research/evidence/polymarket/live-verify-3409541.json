@@ -1,0 +1,241 @@
+{
+  "fetchedAt": "2026-10-07T17:45:00.676Z",
+  "profile": "polymarket-ctf-v1-binary",
+  "expectedVector": {
+    "numerators": [
+      "1",
+      "0"
+    ],
+    "denominator": "1"
+  },
+  "matchesExpected": true,
+  "verification": {
+    "ok": true
+  },
+  "market": {
+    "provider": "polymarket",
+    "sourceId": "3409541",
+    "slug": "will-kai-and-speed-beat-the-minecraft-challenge-by-august-17-20260807213124706",
+    "url": "https://polymarket.com/market/will-kai-and-speed-beat-the-minecraft-challenge-by-august-17-20260807213124706",
+    "question": "Will Kai and Speed beat the Minecraft challenge by August 17?",
+    "description": "Kai Cenat and IShowSpeed are scheduled to stream a hardcore Minecraft marathon on August 7, 2026, at 5:00 PM ET. They will attempt a challenge to defeat the Ender Dragon, the Wither, the Warden, and the Elder Guardian in a hardcore Minecraft world on Java Edition, on the same seed, without either player dying in-game. \n\nThis market will resolve to \"Yes\" if Kai and Speed complete the aforementioned challenge live on stream between market creation and the specified date, 11:59 PM ET. Otherwise, this market will resolve to \"No\".\n\nAll four objectives must be completed on the same seed and in the same world. Progress across multiple seeds will not be combined.\n\nAny successful attempt within the specified timeframe will qualify; however, no challenge progress may be carried over following an in-game death and the beginning of a new attempt. \n\nPractice or casual worlds not set to Hardcore will not count. No event will count if it occurs while the player in question is in Creative or Spectator mode, or if it results from the use of commands, cheats, or any external tool to spawn entities, alter the world, or deal damage.\n\nOnly completion of the challenge as defined above will qualify. If Kai and Speed modify the rules of the challenge at any point, including by removing an objective, adding a player, or playing outside of Hardcore mode, any completion achieved under the modified rules will not count toward resolution.\n\nOnly events occurring while at least one of the two players is broadcasting the challenge live will count. Footage of off-stream or previously recorded attempts will not qualify.\n\nIf the challenge is cancelled by, abandoned before completion by, or delayed to a point after the specified date, this market will resolve to \"No\".\n\nThe resolution source for this market will be footage from the official broadcasts of the challenge on Kai Cenat's and IShowSpeed's official broadcasts on YouTube and Twitch.",
+    "resolutionSource": "https://www.youtube.com/watch?v=Sm9Af2DPsqs",
+    "outcomes": [
+      "Yes",
+      "No"
+    ],
+    "endDate": "2026-08-17T23:59:00.000Z",
+    "tags": [
+      "gaming",
+      "ishowspeed",
+      "live-streams",
+      "minecraft",
+      "pop-culture",
+      "speed-kai",
+      "streamer"
+    ],
+    "active": true,
+    "closed": true,
+    "archived": false,
+    "sourceStatus": "resolved",
+    "protocol": {
+      "version": "v1",
+      "chainId": 137,
+      "negRisk": false,
+      "resolver": "0x65070be91477460d8a7aeeb94ef92fe056c2f2a7",
+      "conditionId": "0x60613b262912ce2e3138ec5610a31a2f932b6300843c094053cb33aaff9f2238",
+      "questionId": "0x24f034d2102744218ac250623ed0f6ac279bb6d63ecc0bc0599798a65a3e56c9",
+      "settlementContract": "0x4d97dcd97ec945f40cf65f87097ace5ea0476045"
+    },
+    "referencePrices": [
+      {
+        "outcome": "Yes",
+        "price": "1"
+      },
+      {
+        "outcome": "No",
+        "price": "0"
+      }
+    ],
+    "versionHash": "dffc7c13e6a579c43a149ccf07d884b5bf8bb707c8e1ca6f1448988f2f678d2c",
+    "fetchedAt": "2026-10-07T17:44:42.605Z"
+  },
+  "evidence": {
+    "status": "final",
+    "detail": "payout [1,0]/1 (Yes) at finalized block 95126589 (0xa3545bf007e8c6d29d36677e3ce043fee9efe9ed6c0baa3d73d4fb29a3c98000) on 2 providers",
+    "chain": {
+      "chainId": 137,
+      "blockNumber": "95126589",
+      "blockHash": "0xa3545bf007e8c6d29d36677e3ce043fee9efe9ed6c0baa3d73d4fb29a3c98000",
+      "providers": [
+        "https://polygon-bor-rpc.publicnode.com",
+        "https://polygon.drpc.org"
+      ]
+    },
+    "reads": {
+      "profile": "polymarket-ctf-v1-binary",
+      "ctf": "0x4d97dcd97ec945f40cf65f87097ace5ea0476045",
+      "conditionId": "0x60613b262912ce2e3138ec5610a31a2f932b6300843c094053cb33aaff9f2238",
+      "questionId": "0x24f034d2102744218ac250623ed0f6ac279bb6d63ecc0bc0599798a65a3e56c9",
+      "resolver": "0x65070be91477460d8a7aeeb94ef92fe056c2f2a7",
+      "gammaStatus": "resolved",
+      "payout": {
+        "numerators": [
+          "1",
+          "0"
+        ],
+        "denominator": "1"
+      },
+      "calls": [
+        {
+          "provider": "https://polygon-bor-rpc.publicnode.com",
+          "method": "eth_chainId",
+          "params": [],
+          "result": "0x89"
+        },
+        {
+          "provider": "https://polygon-bor-rpc.publicnode.com",
+          "method": "eth_getBlockByNumber",
+          "params": [
+            "finalized",
+            false
+          ],
+          "result": {
+            "number": "0x5ab8440",
+            "hash": "0x73193318854e4ef39bc914e0d83d322771fc42f0ba9f860b67d7ca896824e465",
+            "parentHash": "0x1f44db09f25f83107bbcde87c484b0a361bcf383cf0a096273c32f7a0a8ed0f9",
+            "timestamp": "0x6ac68507"
+          }
+        },
+        {
+          "provider": "https://polygon-bor-rpc.publicnode.com",
+          "method": "eth_getBlockByNumber",
+          "params": [
+            "0x5ab843d",
+            false
+          ],
+          "result": {
+            "number": "0x5ab843d",
+            "hash": "0xa3545bf007e8c6d29d36677e3ce043fee9efe9ed6c0baa3d73d4fb29a3c98000",
+            "parentHash": "0x707c488fe0b46f2bc4c7fad8738fb90a4223a44f5afc6c33a19a38cea09005e1",
+            "timestamp": "0x6ac68502"
+          }
+        },
+        {
+          "provider": "https://polygon-bor-rpc.publicnode.com",
+          "method": "eth_call",
+          "params": [
+            {
+              "to": "0x4d97dcd97ec945f40cf65f87097ace5ea0476045",
+              "data": "0xdd34de6760613b262912ce2e3138ec5610a31a2f932b6300843c094053cb33aaff9f2238"
+            },
+            "0x5ab843d"
+          ],
+          "result": "0x0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        {
+          "provider": "https://polygon-bor-rpc.publicnode.com",
+          "method": "eth_call",
+          "params": [
+            {
+              "to": "0x4d97dcd97ec945f40cf65f87097ace5ea0476045",
+              "data": "0x0504c81460613b262912ce2e3138ec5610a31a2f932b6300843c094053cb33aaff9f22380000000000000000000000000000000000000000000000000000000000000000"
+            },
+            "0x5ab843d"
+          ],
+          "result": "0x0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        {
+          "provider": "https://polygon-bor-rpc.publicnode.com",
+          "method": "eth_call",
+          "params": [
+            {
+              "to": "0x4d97dcd97ec945f40cf65f87097ace5ea0476045",
+              "data": "0x0504c81460613b262912ce2e3138ec5610a31a2f932b6300843c094053cb33aaff9f22380000000000000000000000000000000000000000000000000000000000000001"
+            },
+            "0x5ab843d"
+          ],
+          "result": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "provider": "https://polygon.drpc.org",
+          "method": "eth_chainId",
+          "params": [],
+          "result": "0x89"
+        },
+        {
+          "provider": "https://polygon.drpc.org",
+          "method": "eth_getBlockByNumber",
+          "params": [
+            "finalized",
+            false
+          ],
+          "result": {
+            "number": "0x5ab843d",
+            "hash": "0xa3545bf007e8c6d29d36677e3ce043fee9efe9ed6c0baa3d73d4fb29a3c98000",
+            "parentHash": "0x707c488fe0b46f2bc4c7fad8738fb90a4223a44f5afc6c33a19a38cea09005e1",
+            "timestamp": "0x6ac68502"
+          }
+        },
+        {
+          "provider": "https://polygon.drpc.org",
+          "method": "eth_getBlockByNumber",
+          "params": [
+            "0x5ab843d",
+            false
+          ],
+          "result": {
+            "number": "0x5ab843d",
+            "hash": "0xa3545bf007e8c6d29d36677e3ce043fee9efe9ed6c0baa3d73d4fb29a3c98000",
+            "parentHash": "0x707c488fe0b46f2bc4c7fad8738fb90a4223a44f5afc6c33a19a38cea09005e1",
+            "timestamp": "0x6ac68502"
+          }
+        },
+        {
+          "provider": "https://polygon.drpc.org",
+          "method": "eth_call",
+          "params": [
+            {
+              "to": "0x4d97dcd97ec945f40cf65f87097ace5ea0476045",
+              "data": "0xdd34de6760613b262912ce2e3138ec5610a31a2f932b6300843c094053cb33aaff9f2238"
+            },
+            "0x5ab843d"
+          ],
+          "result": "0x0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        {
+          "provider": "https://polygon.drpc.org",
+          "method": "eth_call",
+          "params": [
+            {
+              "to": "0x4d97dcd97ec945f40cf65f87097ace5ea0476045",
+              "data": "0x0504c81460613b262912ce2e3138ec5610a31a2f932b6300843c094053cb33aaff9f22380000000000000000000000000000000000000000000000000000000000000000"
+            },
+            "0x5ab843d"
+          ],
+          "result": "0x0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        {
+          "provider": "https://polygon.drpc.org",
+          "method": "eth_call",
+          "params": [
+            {
+              "to": "0x4d97dcd97ec945f40cf65f87097ace5ea0476045",
+              "data": "0x0504c81460613b262912ce2e3138ec5610a31a2f932b6300843c094053cb33aaff9f22380000000000000000000000000000000000000000000000000000000000000001"
+            },
+            "0x5ab843d"
+          ],
+          "result": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      ]
+    },
+    "observedAt": "2026-10-07T17:44:42.608Z",
+    "vector": {
+      "numerators": [
+        "1",
+        "0"
+      ],
+      "denominator": "1"
+    }
+  }
+}

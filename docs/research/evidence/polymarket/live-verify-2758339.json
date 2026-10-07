@@ -1,0 +1,240 @@
+{
+  "fetchedAt": "2026-10-07T17:44:42.490Z",
+  "profile": "polymarket-ctf-v1-binary",
+  "expectedVector": {
+    "numerators": [
+      "0",
+      "1"
+    ],
+    "denominator": "1"
+  },
+  "matchesExpected": true,
+  "verification": {
+    "ok": true
+  },
+  "market": {
+    "provider": "polymarket",
+    "sourceId": "2758339",
+    "slug": "will-bitcoin-reach-67pt5k-in-july-2026",
+    "url": "https://polymarket.com/market/will-bitcoin-reach-67pt5k-in-july-2026",
+    "question": "Will Bitcoin reach $67,500 in July?",
+    "description": "This market will immediately resolve to \"Yes\" if any Binance 1 minute candle for BTC/USDT during the month specified in the title (from 00:00 AM ET on the first day to 11:59 PM ET on the last), has a final High price equal to or greater than the price specified in the title. Otherwise, this market will resolve to \"No.\"\n\nThe resolution source for this market is Binance, specifically the BTC/USDT High prices available at https://www.binance.com/en/trade/BTC_USDT, with the chart settings on \"1m\" for one-minute candles selected on the top bar.\n\nPlease note that the outcome of this market depends solely on the price data from the Binance BTC/USDT trading pair. Prices from other exchanges, different trading pairs, or spot markets will not be considered for the resolution of this market.",
+    "resolutionSource": "",
+    "outcomes": [
+      "Yes",
+      "No"
+    ],
+    "endDate": "2026-08-01T04:00:00.000Z",
+    "tags": [
+      "bitcoin",
+      "crypto",
+      "crypto-prices",
+      "hit-price",
+      "monthly",
+      "recurring"
+    ],
+    "active": true,
+    "closed": true,
+    "archived": false,
+    "sourceStatus": "resolved",
+    "protocol": {
+      "version": "v1",
+      "chainId": 137,
+      "negRisk": false,
+      "resolver": "0x65070be91477460d8a7aeeb94ef92fe056c2f2a7",
+      "conditionId": "0xbe20fcfd54937c2a48a7b8521ca349e6a2c4373566328ebb950a8c35ab1be3d9",
+      "questionId": "0x8fa725f0bd0b1f3fc6a2d07be5145fdd80d4a738feda70177dfdaddab49c61fd",
+      "settlementContract": "0x4d97dcd97ec945f40cf65f87097ace5ea0476045"
+    },
+    "referencePrices": [
+      {
+        "outcome": "Yes",
+        "price": "0"
+      },
+      {
+        "outcome": "No",
+        "price": "1"
+      }
+    ],
+    "versionHash": "d9c625ca6cab4c80480ccb088f1f3a1b8ef4f20923740854d9096058d6ea31a2",
+    "fetchedAt": "2026-10-07T17:44:16.215Z"
+  },
+  "evidence": {
+    "status": "final",
+    "detail": "payout [0,1]/1 (No) at finalized block 95126571 (0xcde2e4907f01575a82dcd7e9b755041c8c3be45c706963a1403b8f6263c5d109) on 2 providers",
+    "chain": {
+      "chainId": 137,
+      "blockNumber": "95126571",
+      "blockHash": "0xcde2e4907f01575a82dcd7e9b755041c8c3be45c706963a1403b8f6263c5d109",
+      "providers": [
+        "https://polygon-bor-rpc.publicnode.com",
+        "https://polygon.drpc.org"
+      ]
+    },
+    "reads": {
+      "profile": "polymarket-ctf-v1-binary",
+      "ctf": "0x4d97dcd97ec945f40cf65f87097ace5ea0476045",
+      "conditionId": "0xbe20fcfd54937c2a48a7b8521ca349e6a2c4373566328ebb950a8c35ab1be3d9",
+      "questionId": "0x8fa725f0bd0b1f3fc6a2d07be5145fdd80d4a738feda70177dfdaddab49c61fd",
+      "resolver": "0x65070be91477460d8a7aeeb94ef92fe056c2f2a7",
+      "gammaStatus": "resolved",
+      "payout": {
+        "numerators": [
+          "0",
+          "1"
+        ],
+        "denominator": "1"
+      },
+      "calls": [
+        {
+          "provider": "https://polygon-bor-rpc.publicnode.com",
+          "method": "eth_chainId",
+          "params": [],
+          "result": "0x89"
+        },
+        {
+          "provider": "https://polygon-bor-rpc.publicnode.com",
+          "method": "eth_getBlockByNumber",
+          "params": [
+            "finalized",
+            false
+          ],
+          "result": {
+            "number": "0x5ab8432",
+            "hash": "0xdf80b98f1c04558ef921c61aaae756b7f68310656b35872803b9e534398856d9",
+            "parentHash": "0xec24cdd87c858ecba808ec44070a59c6e37800f97743b9826239b42f49b6c75c",
+            "timestamp": "0x6ac684f2"
+          }
+        },
+        {
+          "provider": "https://polygon-bor-rpc.publicnode.com",
+          "method": "eth_getBlockByNumber",
+          "params": [
+            "0x5ab842b",
+            false
+          ],
+          "result": {
+            "number": "0x5ab842b",
+            "hash": "0xcde2e4907f01575a82dcd7e9b755041c8c3be45c706963a1403b8f6263c5d109",
+            "parentHash": "0x7fd2873fa2baa883f15ece061afec8dcef862cae7e9036e1929d9f19f88e200d",
+            "timestamp": "0x6ac684e7"
+          }
+        },
+        {
+          "provider": "https://polygon-bor-rpc.publicnode.com",
+          "method": "eth_call",
+          "params": [
+            {
+              "to": "0x4d97dcd97ec945f40cf65f87097ace5ea0476045",
+              "data": "0xdd34de67be20fcfd54937c2a48a7b8521ca349e6a2c4373566328ebb950a8c35ab1be3d9"
+            },
+            "0x5ab842b"
+          ],
+          "result": "0x0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        {
+          "provider": "https://polygon-bor-rpc.publicnode.com",
+          "method": "eth_call",
+          "params": [
+            {
+              "to": "0x4d97dcd97ec945f40cf65f87097ace5ea0476045",
+              "data": "0x0504c814be20fcfd54937c2a48a7b8521ca349e6a2c4373566328ebb950a8c35ab1be3d90000000000000000000000000000000000000000000000000000000000000000"
+            },
+            "0x5ab842b"
+          ],
+          "result": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "provider": "https://polygon-bor-rpc.publicnode.com",
+          "method": "eth_call",
+          "params": [
+            {
+              "to": "0x4d97dcd97ec945f40cf65f87097ace5ea0476045",
+              "data": "0x0504c814be20fcfd54937c2a48a7b8521ca349e6a2c4373566328ebb950a8c35ab1be3d90000000000000000000000000000000000000000000000000000000000000001"
+            },
+            "0x5ab842b"
+          ],
+          "result": "0x0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        {
+          "provider": "https://polygon.drpc.org",
+          "method": "eth_chainId",
+          "params": [],
+          "result": "0x89"
+        },
+        {
+          "provider": "https://polygon.drpc.org",
+          "method": "eth_getBlockByNumber",
+          "params": [
+            "finalized",
+            false
+          ],
+          "result": {
+            "number": "0x5ab842b",
+            "hash": "0xcde2e4907f01575a82dcd7e9b755041c8c3be45c706963a1403b8f6263c5d109",
+            "parentHash": "0x7fd2873fa2baa883f15ece061afec8dcef862cae7e9036e1929d9f19f88e200d",
+            "timestamp": "0x6ac684e7"
+          }
+        },
+        {
+          "provider": "https://polygon.drpc.org",
+          "method": "eth_getBlockByNumber",
+          "params": [
+            "0x5ab842b",
+            false
+          ],
+          "result": {
+            "number": "0x5ab842b",
+            "hash": "0xcde2e4907f01575a82dcd7e9b755041c8c3be45c706963a1403b8f6263c5d109",
+            "parentHash": "0x7fd2873fa2baa883f15ece061afec8dcef862cae7e9036e1929d9f19f88e200d",
+            "timestamp": "0x6ac684e7"
+          }
+        },
+        {
+          "provider": "https://polygon.drpc.org",
+          "method": "eth_call",
+          "params": [
+            {
+              "to": "0x4d97dcd97ec945f40cf65f87097ace5ea0476045",
+              "data": "0xdd34de67be20fcfd54937c2a48a7b8521ca349e6a2c4373566328ebb950a8c35ab1be3d9"
+            },
+            "0x5ab842b"
+          ],
+          "result": "0x0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        {
+          "provider": "https://polygon.drpc.org",
+          "method": "eth_call",
+          "params": [
+            {
+              "to": "0x4d97dcd97ec945f40cf65f87097ace5ea0476045",
+              "data": "0x0504c814be20fcfd54937c2a48a7b8521ca349e6a2c4373566328ebb950a8c35ab1be3d90000000000000000000000000000000000000000000000000000000000000000"
+            },
+            "0x5ab842b"
+          ],
+          "result": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "provider": "https://polygon.drpc.org",
+          "method": "eth_call",
+          "params": [
+            {
+              "to": "0x4d97dcd97ec945f40cf65f87097ace5ea0476045",
+              "data": "0x0504c814be20fcfd54937c2a48a7b8521ca349e6a2c4373566328ebb950a8c35ab1be3d90000000000000000000000000000000000000000000000000000000000000001"
+            },
+            "0x5ab842b"
+          ],
+          "result": "0x0000000000000000000000000000000000000000000000000000000000000001"
+        }
+      ]
+    },
+    "observedAt": "2026-10-07T17:44:16.216Z",
+    "vector": {
+      "numerators": [
+        "0",
+        "1"
+      ],
+      "denominator": "1"
+    }
+  }
+}

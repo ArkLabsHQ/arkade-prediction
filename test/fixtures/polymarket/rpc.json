@@ -1,0 +1,692 @@
+{
+  "source": "JSON-RPC exchanges replayed by the unit tests; block results trimmed to number/hash/parentHash/timestamp.",
+  "chainId": [
+    {
+      "fetchedAt": "2026-10-07T17:38:39.709Z",
+      "rpcUrl": "https://polygon.drpc.org",
+      "method": "eth_chainId",
+      "params": [],
+      "result": "0x89"
+    },
+    {
+      "fetchedAt": "2026-10-07T17:38:39.721Z",
+      "rpcUrl": "https://polygon-bor-rpc.publicnode.com",
+      "method": "eth_chainId",
+      "params": [],
+      "result": "0x89"
+    },
+    {
+      "fetchedAt": "2026-10-07T17:38:52.736Z",
+      "rpcUrl": "https://polygon.gateway.tenderly.co",
+      "method": "eth_chainId",
+      "params": [],
+      "result": "0x89"
+    }
+  ],
+  "scenarios": {
+    "559651": {
+      "source": "live capture 2026-10-07T17:38:52.737Z by the provider (open market, unresolved)",
+      "providers": [
+        "https://polygon-bor-rpc.publicnode.com",
+        "https://polygon.drpc.org"
+      ],
+      "exchanges": [
+        {
+          "fetchedAt": "2026-10-07T17:38:39.754Z",
+          "rpcUrl": "https://polygon.drpc.org",
+          "method": "eth_getBlockByNumber",
+          "params": [
+            "finalized",
+            false
+          ],
+          "result": {
+            "number": "0x5ab834b",
+            "hash": "0x43173c5d19fe185255f63cabbdb936b06d523b70ec135a3d3a18b0f039ac2201",
+            "parentHash": "0xc516070c47695aa0bfc8d3c60e8115ac34c70d0986173279b85f6e9d4fe8a725",
+            "timestamp": "0x6ac68397"
+          }
+        },
+        {
+          "fetchedAt": "2026-10-07T17:38:43.964Z",
+          "rpcUrl": "https://polygon-bor-rpc.publicnode.com",
+          "method": "eth_getBlockByNumber",
+          "params": [
+            "finalized",
+            false
+          ],
+          "result": {
+            "number": "0x5ab834f",
+            "hash": "0x09065feee6617284d6e7426e71e1838ef999a4c087991235a4d8f73cfe202d5d",
+            "parentHash": "0xd520a0d9ba458cfa04572787ee0fcdeb18041f2dbb0dba49c51a91862186192a",
+            "timestamp": "0x6ac6839d"
+          }
+        },
+        {
+          "fetchedAt": "2026-10-07T17:38:44.015Z",
+          "rpcUrl": "https://polygon-bor-rpc.publicnode.com",
+          "method": "eth_getBlockByNumber",
+          "params": [
+            "0x5ab834b",
+            false
+          ],
+          "result": {
+            "number": "0x5ab834b",
+            "hash": "0x43173c5d19fe185255f63cabbdb936b06d523b70ec135a3d3a18b0f039ac2201",
+            "parentHash": "0xc516070c47695aa0bfc8d3c60e8115ac34c70d0986173279b85f6e9d4fe8a725",
+            "timestamp": "0x6ac68397"
+          }
+        },
+        {
+          "fetchedAt": "2026-10-07T17:38:44.058Z",
+          "rpcUrl": "https://polygon.drpc.org",
+          "method": "eth_getBlockByNumber",
+          "params": [
+            "0x5ab834b",
+            false
+          ],
+          "result": {
+            "number": "0x5ab834b",
+            "hash": "0x43173c5d19fe185255f63cabbdb936b06d523b70ec135a3d3a18b0f039ac2201",
+            "parentHash": "0xc516070c47695aa0bfc8d3c60e8115ac34c70d0986173279b85f6e9d4fe8a725",
+            "timestamp": "0x6ac68397"
+          }
+        },
+        {
+          "fetchedAt": "2026-10-07T17:38:44.116Z",
+          "rpcUrl": "https://polygon.drpc.org",
+          "method": "eth_call",
+          "params": [
+            {
+              "to": "0x4d97dcd97ec945f40cf65f87097ace5ea0476045",
+              "data": "0xdd34de67a467b14d51f01b957109d9cbb1d6c124fab2a089d52ed8f471d23c2812e743b7"
+            },
+            "0x5ab834b"
+          ],
+          "result": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "fetchedAt": "2026-10-07T17:38:44.164Z",
+          "rpcUrl": "https://polygon.drpc.org",
+          "method": "eth_call",
+          "params": [
+            {
+              "to": "0x4d97dcd97ec945f40cf65f87097ace5ea0476045",
+              "data": "0x0504c814a467b14d51f01b957109d9cbb1d6c124fab2a089d52ed8f471d23c2812e743b70000000000000000000000000000000000000000000000000000000000000000"
+            },
+            "0x5ab834b"
+          ],
+          "result": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "fetchedAt": "2026-10-07T17:38:44.211Z",
+          "rpcUrl": "https://polygon.drpc.org",
+          "method": "eth_call",
+          "params": [
+            {
+              "to": "0x4d97dcd97ec945f40cf65f87097ace5ea0476045",
+              "data": "0x0504c814a467b14d51f01b957109d9cbb1d6c124fab2a089d52ed8f471d23c2812e743b70000000000000000000000000000000000000000000000000000000000000001"
+            },
+            "0x5ab834b"
+          ],
+          "result": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "fetchedAt": "2026-10-07T17:38:52.355Z",
+          "rpcUrl": "https://polygon-bor-rpc.publicnode.com",
+          "method": "eth_call",
+          "params": [
+            {
+              "to": "0x4d97dcd97ec945f40cf65f87097ace5ea0476045",
+              "data": "0xdd34de67a467b14d51f01b957109d9cbb1d6c124fab2a089d52ed8f471d23c2812e743b7"
+            },
+            "0x5ab834b"
+          ],
+          "result": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "fetchedAt": "2026-10-07T17:38:52.494Z",
+          "rpcUrl": "https://polygon-bor-rpc.publicnode.com",
+          "method": "eth_call",
+          "params": [
+            {
+              "to": "0x4d97dcd97ec945f40cf65f87097ace5ea0476045",
+              "data": "0x0504c814a467b14d51f01b957109d9cbb1d6c124fab2a089d52ed8f471d23c2812e743b70000000000000000000000000000000000000000000000000000000000000000"
+            },
+            "0x5ab834b"
+          ],
+          "result": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "fetchedAt": "2026-10-07T17:38:52.628Z",
+          "rpcUrl": "https://polygon-bor-rpc.publicnode.com",
+          "method": "eth_call",
+          "params": [
+            {
+              "to": "0x4d97dcd97ec945f40cf65f87097ace5ea0476045",
+              "data": "0x0504c814a467b14d51f01b957109d9cbb1d6c124fab2a089d52ed8f471d23c2812e743b70000000000000000000000000000000000000000000000000000000000000001"
+            },
+            "0x5ab834b"
+          ],
+          "result": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      ]
+    },
+    "2758339": {
+      "source": "docs/research/evidence/polymarket/live-proof-2758339-btc-67500-july.json rpcExchanges",
+      "providers": [
+        "https://polygon-bor-rpc.publicnode.com",
+        "https://polygon.drpc.org",
+        "https://polygon.gateway.tenderly.co"
+      ],
+      "pinnedBlock": "0x5ab7bb7",
+      "exchanges": [
+        {
+          "fetchedAt": "2026-10-07T16:50:07.294528Z",
+          "rpcUrl": "https://polygon-bor-rpc.publicnode.com",
+          "method": "eth_getBlockByNumber",
+          "params": [
+            "finalized",
+            false
+          ],
+          "result": {
+            "number": "0x5ab7bb7",
+            "hash": "0xe362f8fdf41ac94813ea01969524c1ac64789b81ac58511a9237b3b9b5732d01",
+            "parentHash": "0x30897a286ef735cdcd8ce4160b02821f24d5787b9743eff0ab246ff07a703816",
+            "timestamp": "0x6ac67839"
+          }
+        },
+        {
+          "fetchedAt": "2026-10-07T16:50:07.294528Z",
+          "rpcUrl": "https://polygon-bor-rpc.publicnode.com",
+          "method": "eth_getBlockByNumber",
+          "params": [
+            "0x5ab7bb7",
+            false
+          ],
+          "result": {
+            "number": "0x5ab7bb7",
+            "hash": "0xe362f8fdf41ac94813ea01969524c1ac64789b81ac58511a9237b3b9b5732d01",
+            "parentHash": "0x30897a286ef735cdcd8ce4160b02821f24d5787b9743eff0ab246ff07a703816",
+            "timestamp": "0x6ac67839"
+          },
+          "derivedFrom": "this provider's 'finalized' answer (same block)"
+        },
+        {
+          "fetchedAt": "2026-10-07T16:50:07.457228Z",
+          "rpcUrl": "https://polygon.drpc.org",
+          "method": "eth_getBlockByNumber",
+          "params": [
+            "0x5ab7bb7",
+            false
+          ],
+          "result": {
+            "number": "0x5ab7bb7",
+            "hash": "0xe362f8fdf41ac94813ea01969524c1ac64789b81ac58511a9237b3b9b5732d01",
+            "parentHash": "0x30897a286ef735cdcd8ce4160b02821f24d5787b9743eff0ab246ff07a703816",
+            "timestamp": "0x6ac67839"
+          }
+        },
+        {
+          "fetchedAt": "2026-10-07T16:50:07.528162Z",
+          "rpcUrl": "https://polygon.drpc.org",
+          "method": "eth_getBlockByNumber",
+          "params": [
+            "finalized",
+            false
+          ],
+          "result": {
+            "number": "0x5ab7bb7",
+            "hash": "0xe362f8fdf41ac94813ea01969524c1ac64789b81ac58511a9237b3b9b5732d01",
+            "parentHash": "0x30897a286ef735cdcd8ce4160b02821f24d5787b9743eff0ab246ff07a703816",
+            "timestamp": "0x6ac67839"
+          }
+        },
+        {
+          "fetchedAt": "2026-10-07T16:50:07.646938Z",
+          "rpcUrl": "https://polygon.gateway.tenderly.co",
+          "method": "eth_getBlockByNumber",
+          "params": [
+            "0x5ab7bb7",
+            false
+          ],
+          "result": {
+            "number": "0x5ab7bb7",
+            "hash": "0xe362f8fdf41ac94813ea01969524c1ac64789b81ac58511a9237b3b9b5732d01",
+            "parentHash": "0x30897a286ef735cdcd8ce4160b02821f24d5787b9743eff0ab246ff07a703816",
+            "timestamp": "0x6ac67839"
+          }
+        },
+        {
+          "fetchedAt": "2026-10-07T16:50:07.728206Z",
+          "rpcUrl": "https://polygon.gateway.tenderly.co",
+          "method": "eth_getBlockByNumber",
+          "params": [
+            "finalized",
+            false
+          ],
+          "result": {
+            "number": "0x5ab7bb8",
+            "hash": "0xdf8c11662e59f7437558f91509add8e3d3727c77f20f8b5d6a22a12947767e87",
+            "parentHash": "0xe362f8fdf41ac94813ea01969524c1ac64789b81ac58511a9237b3b9b5732d01",
+            "timestamp": "0x6ac6783a"
+          }
+        },
+        {
+          "fetchedAt": "2026-10-07T16:50:22.454402Z",
+          "rpcUrl": "https://polygon-bor-rpc.publicnode.com",
+          "method": "eth_call",
+          "params": [
+            {
+              "to": "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045",
+              "data": "0xdd34de67be20fcfd54937c2a48a7b8521ca349e6a2c4373566328ebb950a8c35ab1be3d9"
+            },
+            "0x5ab7bb7"
+          ],
+          "result": "0x0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        {
+          "fetchedAt": "2026-10-07T16:50:30.529888Z",
+          "rpcUrl": "https://polygon-bor-rpc.publicnode.com",
+          "method": "eth_call",
+          "params": [
+            {
+              "to": "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045",
+              "data": "0x0504c814be20fcfd54937c2a48a7b8521ca349e6a2c4373566328ebb950a8c35ab1be3d90000000000000000000000000000000000000000000000000000000000000000"
+            },
+            "0x5ab7bb7"
+          ],
+          "result": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "fetchedAt": "2026-10-07T16:50:31.630716Z",
+          "rpcUrl": "https://polygon-bor-rpc.publicnode.com",
+          "method": "eth_call",
+          "params": [
+            {
+              "to": "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045",
+              "data": "0x0504c814be20fcfd54937c2a48a7b8521ca349e6a2c4373566328ebb950a8c35ab1be3d90000000000000000000000000000000000000000000000000000000000000001"
+            },
+            "0x5ab7bb7"
+          ],
+          "result": "0x0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        {
+          "fetchedAt": "2026-10-07T16:50:31.830408Z",
+          "rpcUrl": "https://polygon.drpc.org",
+          "method": "eth_call",
+          "params": [
+            {
+              "to": "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045",
+              "data": "0xdd34de67be20fcfd54937c2a48a7b8521ca349e6a2c4373566328ebb950a8c35ab1be3d9"
+            },
+            "0x5ab7bb7"
+          ],
+          "result": "0x0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        {
+          "fetchedAt": "2026-10-07T16:50:31.919033Z",
+          "rpcUrl": "https://polygon.drpc.org",
+          "method": "eth_call",
+          "params": [
+            {
+              "to": "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045",
+              "data": "0x0504c814be20fcfd54937c2a48a7b8521ca349e6a2c4373566328ebb950a8c35ab1be3d90000000000000000000000000000000000000000000000000000000000000000"
+            },
+            "0x5ab7bb7"
+          ],
+          "result": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "fetchedAt": "2026-10-07T16:50:32.059544Z",
+          "rpcUrl": "https://polygon.drpc.org",
+          "method": "eth_call",
+          "params": [
+            {
+              "to": "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045",
+              "data": "0x0504c814be20fcfd54937c2a48a7b8521ca349e6a2c4373566328ebb950a8c35ab1be3d90000000000000000000000000000000000000000000000000000000000000001"
+            },
+            "0x5ab7bb7"
+          ],
+          "result": "0x0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        {
+          "fetchedAt": "2026-10-07T16:50:32.246929Z",
+          "rpcUrl": "https://polygon.gateway.tenderly.co",
+          "method": "eth_call",
+          "params": [
+            {
+              "to": "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045",
+              "data": "0xdd34de67be20fcfd54937c2a48a7b8521ca349e6a2c4373566328ebb950a8c35ab1be3d9"
+            },
+            "0x5ab7bb7"
+          ],
+          "result": "0x0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        {
+          "fetchedAt": "2026-10-07T16:50:32.331773Z",
+          "rpcUrl": "https://polygon.gateway.tenderly.co",
+          "method": "eth_call",
+          "params": [
+            {
+              "to": "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045",
+              "data": "0x0504c814be20fcfd54937c2a48a7b8521ca349e6a2c4373566328ebb950a8c35ab1be3d90000000000000000000000000000000000000000000000000000000000000000"
+            },
+            "0x5ab7bb7"
+          ],
+          "result": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "fetchedAt": "2026-10-07T16:50:32.412098Z",
+          "rpcUrl": "https://polygon.gateway.tenderly.co",
+          "method": "eth_call",
+          "params": [
+            {
+              "to": "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045",
+              "data": "0x0504c814be20fcfd54937c2a48a7b8521ca349e6a2c4373566328ebb950a8c35ab1be3d90000000000000000000000000000000000000000000000000000000000000001"
+            },
+            "0x5ab7bb7"
+          ],
+          "result": "0x0000000000000000000000000000000000000000000000000000000000000001"
+        }
+      ]
+    },
+    "3409541": {
+      "source": "docs/research/evidence/polymarket/live-proof-3409541-yes-example.json rpcExchanges",
+      "providers": [
+        "https://polygon-bor-rpc.publicnode.com",
+        "https://polygon.gateway.tenderly.co"
+      ],
+      "pinnedBlock": "0x5ab7bde",
+      "exchanges": [
+        {
+          "fetchedAt": "2026-10-07T16:51:05.754150Z",
+          "rpcUrl": "https://polygon-bor-rpc.publicnode.com",
+          "method": "eth_getBlockByNumber",
+          "params": [
+            "finalized",
+            false
+          ],
+          "result": {
+            "number": "0x5ab7bde",
+            "hash": "0x26985c455b7c39c0d2cb2ee5df060dff9e9744b2c53a7783cc6d0a04229f8f19",
+            "parentHash": "0xfc908efc253c208d0da9baf44b6bbe739362722934bad9e212b7cc155b5c9bab",
+            "timestamp": "0x6ac67873"
+          }
+        },
+        {
+          "fetchedAt": "2026-10-07T16:51:05.754150Z",
+          "rpcUrl": "https://polygon-bor-rpc.publicnode.com",
+          "method": "eth_getBlockByNumber",
+          "params": [
+            "0x5ab7bde",
+            false
+          ],
+          "result": {
+            "number": "0x5ab7bde",
+            "hash": "0x26985c455b7c39c0d2cb2ee5df060dff9e9744b2c53a7783cc6d0a04229f8f19",
+            "parentHash": "0xfc908efc253c208d0da9baf44b6bbe739362722934bad9e212b7cc155b5c9bab",
+            "timestamp": "0x6ac67873"
+          },
+          "derivedFrom": "this provider's 'finalized' answer (same block)"
+        },
+        {
+          "fetchedAt": "2026-10-07T16:51:06.062257Z",
+          "rpcUrl": "https://polygon.gateway.tenderly.co",
+          "method": "eth_getBlockByNumber",
+          "params": [
+            "0x5ab7bde",
+            false
+          ],
+          "result": {
+            "number": "0x5ab7bde",
+            "hash": "0x26985c455b7c39c0d2cb2ee5df060dff9e9744b2c53a7783cc6d0a04229f8f19",
+            "parentHash": "0xfc908efc253c208d0da9baf44b6bbe739362722934bad9e212b7cc155b5c9bab",
+            "timestamp": "0x6ac67873"
+          }
+        },
+        {
+          "fetchedAt": "2026-10-07T16:51:06.143419Z",
+          "rpcUrl": "https://polygon.gateway.tenderly.co",
+          "method": "eth_getBlockByNumber",
+          "params": [
+            "finalized",
+            false
+          ],
+          "result": {
+            "number": "0x5ab7bde",
+            "hash": "0x26985c455b7c39c0d2cb2ee5df060dff9e9744b2c53a7783cc6d0a04229f8f19",
+            "parentHash": "0xfc908efc253c208d0da9baf44b6bbe739362722934bad9e212b7cc155b5c9bab",
+            "timestamp": "0x6ac67873"
+          }
+        },
+        {
+          "fetchedAt": "2026-10-07T16:51:21.101256Z",
+          "rpcUrl": "https://polygon-bor-rpc.publicnode.com",
+          "method": "eth_call",
+          "params": [
+            {
+              "to": "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045",
+              "data": "0xdd34de6760613b262912ce2e3138ec5610a31a2f932b6300843c094053cb33aaff9f2238"
+            },
+            "0x5ab7bde"
+          ],
+          "result": "0x0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        {
+          "fetchedAt": "2026-10-07T16:51:21.311505Z",
+          "rpcUrl": "https://polygon-bor-rpc.publicnode.com",
+          "method": "eth_call",
+          "params": [
+            {
+              "to": "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045",
+              "data": "0x0504c81460613b262912ce2e3138ec5610a31a2f932b6300843c094053cb33aaff9f22380000000000000000000000000000000000000000000000000000000000000000"
+            },
+            "0x5ab7bde"
+          ],
+          "result": "0x0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        {
+          "fetchedAt": "2026-10-07T16:51:21.661618Z",
+          "rpcUrl": "https://polygon-bor-rpc.publicnode.com",
+          "method": "eth_call",
+          "params": [
+            {
+              "to": "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045",
+              "data": "0x0504c81460613b262912ce2e3138ec5610a31a2f932b6300843c094053cb33aaff9f22380000000000000000000000000000000000000000000000000000000000000001"
+            },
+            "0x5ab7bde"
+          ],
+          "result": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "fetchedAt": "2026-10-07T16:51:22.239150Z",
+          "rpcUrl": "https://polygon.gateway.tenderly.co",
+          "method": "eth_call",
+          "params": [
+            {
+              "to": "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045",
+              "data": "0xdd34de6760613b262912ce2e3138ec5610a31a2f932b6300843c094053cb33aaff9f2238"
+            },
+            "0x5ab7bde"
+          ],
+          "result": "0x0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        {
+          "fetchedAt": "2026-10-07T16:51:22.322507Z",
+          "rpcUrl": "https://polygon.gateway.tenderly.co",
+          "method": "eth_call",
+          "params": [
+            {
+              "to": "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045",
+              "data": "0x0504c81460613b262912ce2e3138ec5610a31a2f932b6300843c094053cb33aaff9f22380000000000000000000000000000000000000000000000000000000000000000"
+            },
+            "0x5ab7bde"
+          ],
+          "result": "0x0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        {
+          "fetchedAt": "2026-10-07T16:51:22.408598Z",
+          "rpcUrl": "https://polygon.gateway.tenderly.co",
+          "method": "eth_call",
+          "params": [
+            {
+              "to": "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045",
+              "data": "0x0504c81460613b262912ce2e3138ec5610a31a2f932b6300843c094053cb33aaff9f22380000000000000000000000000000000000000000000000000000000000000001"
+            },
+            "0x5ab7bde"
+          ],
+          "result": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      ]
+    },
+    "4737427": {
+      "source": "docs/research/evidence/polymarket/live-proof-4737427-fifty-fifty.json rpcExchanges",
+      "providers": [
+        "https://polygon-bor-rpc.publicnode.com",
+        "https://polygon.drpc.org"
+      ],
+      "pinnedBlock": "0x5ab7d10",
+      "exchanges": [
+        {
+          "fetchedAt": "2026-10-07T16:59:01.971093Z",
+          "rpcUrl": "https://polygon-bor-rpc.publicnode.com",
+          "method": "eth_getBlockByNumber",
+          "params": [
+            "finalized",
+            false
+          ],
+          "result": {
+            "number": "0x5ab7d10",
+            "hash": "0x182d9404fb6dd6305154b6d00d46e23d12c3ee9dadf974b385a12c33ba48dcbb",
+            "parentHash": "0xac96ce72328896862890674a29ded542cbc3bb814f14eafdb45d0204f2dace50",
+            "timestamp": "0x6ac67a3e"
+          }
+        },
+        {
+          "fetchedAt": "2026-10-07T16:59:01.971093Z",
+          "rpcUrl": "https://polygon-bor-rpc.publicnode.com",
+          "method": "eth_getBlockByNumber",
+          "params": [
+            "0x5ab7d10",
+            false
+          ],
+          "result": {
+            "number": "0x5ab7d10",
+            "hash": "0x182d9404fb6dd6305154b6d00d46e23d12c3ee9dadf974b385a12c33ba48dcbb",
+            "parentHash": "0xac96ce72328896862890674a29ded542cbc3bb814f14eafdb45d0204f2dace50",
+            "timestamp": "0x6ac67a3e"
+          },
+          "derivedFrom": "this provider's 'finalized' answer (same block)"
+        },
+        {
+          "fetchedAt": "2026-10-07T16:59:02.115211Z",
+          "rpcUrl": "https://polygon.drpc.org",
+          "method": "eth_getBlockByNumber",
+          "params": [
+            "0x5ab7d10",
+            false
+          ],
+          "result": {
+            "number": "0x5ab7d10",
+            "hash": "0x182d9404fb6dd6305154b6d00d46e23d12c3ee9dadf974b385a12c33ba48dcbb",
+            "parentHash": "0xac96ce72328896862890674a29ded542cbc3bb814f14eafdb45d0204f2dace50",
+            "timestamp": "0x6ac67a3e"
+          }
+        },
+        {
+          "fetchedAt": "2026-10-07T16:59:02.210195Z",
+          "rpcUrl": "https://polygon.drpc.org",
+          "method": "eth_getBlockByNumber",
+          "params": [
+            "finalized",
+            false
+          ],
+          "result": {
+            "number": "0x5ab7d1b",
+            "hash": "0xd31bad0729a55d76ba51805bcc32b9611028b49d8e2cd65a688d8174a964972e",
+            "parentHash": "0x2cf40c780e94f38e2460b95b287847ffe27e77f4ced02318aa162c35a8d33b13",
+            "timestamp": "0x6ac67a4f"
+          }
+        },
+        {
+          "fetchedAt": "2026-10-07T16:59:03.890908Z",
+          "rpcUrl": "https://polygon-bor-rpc.publicnode.com",
+          "method": "eth_call",
+          "params": [
+            {
+              "to": "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045",
+              "data": "0xdd34de675aad5e06b8246a4c1a17d6794712bbaa855e8d70c70344a860f9c98fde2fb9a6"
+            },
+            "0x5ab7d10"
+          ],
+          "result": "0x0000000000000000000000000000000000000000000000000000000000000002"
+        },
+        {
+          "fetchedAt": "2026-10-07T16:59:04.077514Z",
+          "rpcUrl": "https://polygon-bor-rpc.publicnode.com",
+          "method": "eth_call",
+          "params": [
+            {
+              "to": "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045",
+              "data": "0x0504c8145aad5e06b8246a4c1a17d6794712bbaa855e8d70c70344a860f9c98fde2fb9a60000000000000000000000000000000000000000000000000000000000000000"
+            },
+            "0x5ab7d10"
+          ],
+          "result": "0x0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        {
+          "fetchedAt": "2026-10-07T16:59:04.372160Z",
+          "rpcUrl": "https://polygon-bor-rpc.publicnode.com",
+          "method": "eth_call",
+          "params": [
+            {
+              "to": "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045",
+              "data": "0x0504c8145aad5e06b8246a4c1a17d6794712bbaa855e8d70c70344a860f9c98fde2fb9a60000000000000000000000000000000000000000000000000000000000000001"
+            },
+            "0x5ab7d10"
+          ],
+          "result": "0x0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        {
+          "fetchedAt": "2026-10-07T16:59:05.100291Z",
+          "rpcUrl": "https://polygon.drpc.org",
+          "method": "eth_call",
+          "params": [
+            {
+              "to": "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045",
+              "data": "0xdd34de675aad5e06b8246a4c1a17d6794712bbaa855e8d70c70344a860f9c98fde2fb9a6"
+            },
+            "0x5ab7d10"
+          ],
+          "result": "0x0000000000000000000000000000000000000000000000000000000000000002"
+        },
+        {
+          "fetchedAt": "2026-10-07T16:59:05.383846Z",
+          "rpcUrl": "https://polygon.drpc.org",
+          "method": "eth_call",
+          "params": [
+            {
+              "to": "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045",
+              "data": "0x0504c8145aad5e06b8246a4c1a17d6794712bbaa855e8d70c70344a860f9c98fde2fb9a60000000000000000000000000000000000000000000000000000000000000000"
+            },
+            "0x5ab7d10"
+          ],
+          "result": "0x0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        {
+          "fetchedAt": "2026-10-07T16:59:05.732746Z",
+          "rpcUrl": "https://polygon.drpc.org",
+          "method": "eth_call",
+          "params": [
+            {
+              "to": "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045",
+              "data": "0x0504c8145aad5e06b8246a4c1a17d6794712bbaa855e8d70c70344a860f9c98fde2fb9a60000000000000000000000000000000000000000000000000000000000000001"
+            },
+            "0x5ab7d10"
+          ],
+          "result": "0x0000000000000000000000000000000000000000000000000000000000000001"
+        }
+      ]
+    }
+  }
+}

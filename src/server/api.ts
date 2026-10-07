@@ -1,0 +1,210 @@
+import { timingSafeEqual } from "node:crypto";
+import { Hono, type Context } from "hono";
+import { streamSSE } from "hono/streaming";
+import { hex } from "@scure/base";
+import { attestationMessage, signAttestation, verifyAttestation, evidenceDigest } from "../core/attestation.js";
+import { BINARY_VECTORS, type BinaryOutcome } from "../core/payout.js";
+import type { CertificateJson, ConfigJson, CreateMarketRequest, PostOfferRequest } from "../shared/api.js";
+import { now, one, run } from "./db.js";
+import type { Keeper } from "./keeper.js";
+import { HttpError, getMarket, listMarkets, marketJson, marketTerms, registerCustomMarket, type Deps } from "./markets.js";
+import { listOffers, offerJson, offersByMaker, refreshOffer, registerOffer, trades } from "./offers.js";
+
+export interface ApiDeps extends Deps {
+    keeper?: Keeper;
+    health: () => Promise<Record<string, { ok: boolean; detail?: string }>>;
+    importNow?: () => Promise<unknown>;
+    overview: () => Promise<unknown>;
+    faucet?: (address: string, amount: number) => Promise<string>;
+}
+
+const MAX_BODY = 64 * 1024;
+
+async function body<T>(c: Context): Promise<T> {
+    const len = Number(c.req.header("content-length") ?? 0);
+    if (len > MAX_BODY) throw new HttpError(413, "too-large", "request body too large");
+    try {
+        return (await c.req.json()) as T;
+    } catch {
+        throw new HttpError(400, "json", "body must be JSON");
+    }
+}
+
+function adminOk(c: Context, token: string | undefined): boolean {
+    const got = c.req.header("authorization")?.replace(/^Bearer /, "") ?? "";
+    if (!token || got.length !== token.length) return false;
+    return timingSafeEqual(Buffer.from(got), Buffer.from(token));
+}
+
+export function createApi(d: ApiDeps): Hono {
+    const app = new Hono();
+    const faucetSeen = new Map<string, number>();
+
+    app.onError((err, c) => {
+        if (err instanceof HttpError) return c.json({ error: err.message, code: err.code }, err.status as 400);
+        console.error(JSON.stringify({ level: "error", msg: "api error", path: c.req.path, error: String(err) }));
+        return c.json({ error: "internal error", code: "internal" }, 500);
+    });
+
+    app.get("/api/health/live", (c) => c.json({ ok: true }));
+    app.get("/api/health/ready", async (c) => {
+        const components = await d.health();
+        const ok = components.db?.ok && components.arkd?.ok;
+        return c.json({ ok: !!ok, components }, ok ? 200 : 503);
+    });
+
+    app.get("/api/config", (c) => {
+        const cfg: ConfigJson = {
+            network: d.cfg.APM_NETWORK,
+            deploymentId: d.cfg.APM_DEPLOYMENT_ID,
+            arkServerUrl: d.cfg.ARK_SERVER_URL,
+            emulatorUrl: d.cfg.EMULATOR_URL,
+            esploraUrl: d.cfg.ESPLORA_URL,
+            arkSignerPubkey: d.net.info.signerPubkey,
+            emulatorPubkey: d.net.emulatorPubkey,
+            explorerUrl: d.cfg.EXPLORER_URL ?? null,
+            unitSats: String(d.cfg.MARKET_UNIT_SATS),
+            exitDelaySeconds: d.net.exitDelaySeconds.toString(),
+            devFaucet: d.cfg.DEV_ENDPOINTS && !!d.faucet,
+            testNetwork: true,
+        };
+        return c.json(cfg);
+    });
+
+    app.get("/api/markets", (c) => {
+        const limit = Math.min(Number(c.req.query("limit") ?? 50) || 50, 200);
+        const rows = listMarkets(d.db, {
+            status: c.req.query("status") || undefined, kind: c.req.query("kind") || undefined,
+            q: c.req.query("q")?.slice(0, 100) || undefined, limit, cursor: c.req.query("cursor") || undefined,
+        });
+        return c.json({ markets: rows.map((r) => marketJson(d.db, r)), next: rows.length === limit ? rows[rows.length - 1]!.created_at : null });
+    });
+
+    app.get("/api/markets/:id", (c) => {
+        const row = getMarket(d.db, c.req.param("id"));
+        if (!row || row.status === "hidden") throw new HttpError(404, "market", "unknown market");
+        return c.json(marketJson(d.db, row));
+    });
+
+    app.get("/api/markets/:id/offers", (c) => c.json({ offers: listOffers(d.db, c.req.param("id"), c.req.query("status") || undefined).map(offerJson) }));
+    app.get("/api/markets/:id/trades", (c) => c.json({ trades: trades(d.db, { marketId: c.req.param("id"), limit: Math.min(Number(c.req.query("limit") ?? 100) || 100, 500) }) }));
+
+    app.post("/api/markets", async (c) => {
+        const row = await registerCustomMarket(d, await body<CreateMarketRequest>(c));
+        return c.json(marketJson(d.db, row), 201);
+    });
+
+    app.post("/api/markets/:id/certificates", async (c) => {
+        const row = getMarket(d.db, c.req.param("id"));
+        const terms = row && marketTerms(row);
+        if (!row || !terms) throw new HttpError(404, "market", "unknown market");
+        const cert = await body<CertificateJson>(c);
+        if (!["yes", "no", "invalid"].includes(cert.outcome)) throw new HttpError(400, "outcome", "outcome must be yes, no or invalid");
+        const vector = BINARY_VECTORS[cert.outcome as BinaryOutcome];
+        if (cert.denominator !== vector.denominator.toString() || cert.numerators.join(",") !== vector.numerators.join(",")) {
+            throw new HttpError(400, "vector", "payout vector does not match the outcome");
+        }
+        if (!/^[0-9a-f]{64}$/.test(cert.evidenceDigest) || !/^[0-9a-f]{128}$/.test(cert.signature)) throw new HttpError(400, "encoding", "bad digest or signature encoding");
+        if (cert.signer !== hex.encode(terms.oracleKey)) throw new HttpError(400, "signer", "signer is not this market's oracle key");
+        const msg = attestationMessage(terms.binding, hex.decode(cert.evidenceDigest), vector);
+        if (!verifyAttestation(hex.decode(cert.signature), terms.oracleKey, msg)) throw new HttpError(400, "signature", "certificate signature does not verify");
+        run(d.db, "INSERT OR IGNORE INTO certificates(market_id, outcome, numerators, denominator, evidence_digest, signature, signer, source_block, issued_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            row.id, cert.outcome, JSON.stringify(cert.numerators), cert.denominator, cert.evidenceDigest, cert.signature, cert.signer,
+            cert.sourceBlock ? JSON.stringify(cert.sourceBlock) : null, now());
+        const conflicting = one<{ n: number }>(d.db, "SELECT COUNT(DISTINCT outcome) n FROM certificates WHERE market_id = ?", row.id)!.n > 1;
+        run(d.db, "UPDATE markets SET resolution_status = ?, resolution_detail = ?, updated_at = ? WHERE id = ? AND resolution_status != 'resolved'",
+            conflicting ? "conflicting-certificates" : "certified", conflicting ? "oracle signed more than one outcome; the first submitted resolution wins on-contract" : `certified ${cert.outcome}`, now(), row.id);
+        d.bus.publish("resolution", row.id, { outcome: cert.outcome, conflicting });
+        return c.json({ accepted: true });
+    });
+
+    app.post("/api/offers", async (c) => c.json(await registerOffer(d, await body<PostOfferRequest>(c)), 201));
+    app.post("/api/offers/:id/refresh", async (c) => c.json(await refreshOffer(d, c.req.param("id"))));
+
+    app.get("/api/portfolio", (c) => {
+        const script = c.req.query("script") ?? "";
+        if (!/^5120[0-9a-f]{64}$/.test(script)) throw new HttpError(400, "script", "script must be a P2TR pkScript hex");
+        const offers = offersByMaker(d.db, script).map(offerJson);
+        return c.json({ offers, trades: offers.length ? trades(d.db, { offerIds: offers.map((o) => o.id), limit: 500 }) : [] });
+    });
+
+    app.get("/api/events", (c) =>
+        streamSSE(c, async (stream) => {
+            let last = Number(c.req.header("last-event-id") ?? c.req.query("since") ?? 0) || 0;
+            const send = async (e: { id: number; type: string }) => {
+                if (e.id <= last) return;
+                last = e.id;
+                await stream.writeSSE({ id: String(e.id), event: e.type, data: JSON.stringify(e) });
+            };
+            for (const e of d.bus.since(last)) await send(e);
+            const queue: { id: number; type: string }[] = [];
+            const unsubscribe = d.bus.subscribe((e) => queue.push(e));
+            stream.onAbort(unsubscribe);
+            while (!stream.aborted) {
+                while (queue.length) await send(queue.shift()!);
+                await stream.sleep(1000);
+                if (queue.length === 0) await stream.writeSSE({ event: "ping", data: "{}" });
+            }
+            unsubscribe();
+        }),
+    );
+
+    const admin = new Hono();
+    admin.use("*", async (c, next) => {
+        if (!adminOk(c, d.cfg.ADMIN_TOKEN)) return c.json({ error: "unauthorized", code: "auth" }, 401);
+        await next();
+    });
+    admin.get("/overview", async (c) => c.json(await d.overview()));
+    admin.post("/import/run", async (c) => {
+        if (!d.importNow) throw new HttpError(409, "disabled", "source import is disabled");
+        return c.json(await d.importNow());
+    });
+    admin.post("/markets/:id/activate", (c) => {
+        const row = getMarket(d.db, c.req.param("id"));
+        if (!row || row.status !== "activating") throw new HttpError(409, "state", "market is not awaiting activation");
+        return c.json(d.keeper!.deps.wf.enqueue(`activate:${row.id}`, "activate", row.id, {}));
+    });
+    admin.post("/markets/:id/hide", (c) => {
+        run(d.db, "UPDATE markets SET status = 'hidden', updated_at = ? WHERE id = ?", now(), c.req.param("id"));
+        d.bus.publish("market", c.req.param("id"), { status: "hidden" });
+        return c.json({ ok: true });
+    });
+    admin.post("/markets/:id/liquidity", async (c) => {
+        const row = getMarket(d.db, c.req.param("id"));
+        if (!row?.terms) throw new HttpError(404, "market", "market not active");
+        const b = await body<{ sets: string; yesAsk: string; noAsk: string }>(c);
+        const sets = BigInt(b.sets);
+        if (sets <= 0n || sets > 10_000n) throw new HttpError(400, "sets", "sets must be 1..10000");
+        return c.json(d.keeper!.deps.wf.enqueue(`lp:${row.id}:${Date.now()}`, "lp-liquidity", row.id, { sets: b.sets, yesAsk: b.yesAsk, noAsk: b.noAsk }));
+    });
+    admin.post("/markets/:id/dev-resolve", async (c) => {
+        const row = getMarket(d.db, c.req.param("id"));
+        const terms = row && marketTerms(row);
+        if (!row || !terms || row.oracle_policy !== "dev-oracle" || !d.cfg.DEV_ORACLE_SECRET) throw new HttpError(409, "dev-oracle", "not a dev-oracle market on regtest");
+        const { outcome } = await body<{ outcome: BinaryOutcome }>(c);
+        if (!(outcome in BINARY_VECTORS)) throw new HttpError(400, "outcome", "bad outcome");
+        const evidence = evidenceDigest({ policy: "dev-oracle", market: row.id, outcome, at: now() });
+        const sig = signAttestation(hex.decode(d.cfg.DEV_ORACLE_SECRET), attestationMessage(terms.binding, evidence, BINARY_VECTORS[outcome]));
+        run(d.db, "INSERT OR IGNORE INTO certificates(market_id, outcome, numerators, denominator, evidence_digest, signature, signer, issued_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            row.id, outcome, JSON.stringify(BINARY_VECTORS[outcome].numerators.map(String)), BINARY_VECTORS[outcome].denominator.toString(),
+            hex.encode(evidence), hex.encode(sig), hex.encode(terms.oracleKey), now());
+        run(d.db, "UPDATE markets SET resolution_status = 'certified', resolution_detail = ?, updated_at = ? WHERE id = ?", `dev oracle certified ${outcome}`, now(), row.id);
+        d.bus.publish("resolution", row.id, { outcome, dev: true });
+        return c.json({ ok: true });
+    });
+    app.route("/api/admin", admin);
+
+    if (d.cfg.DEV_ENDPOINTS && d.faucet) {
+        app.post("/api/dev/faucet", async (c) => {
+            const { address, amountSats } = await body<{ address: string; amountSats: string | number }>(c);
+            const amount = Number(amountSats ?? 100_000);
+            if (typeof address !== "string" || !/^tark1[0-9a-z]{20,200}$/.test(address)) throw new HttpError(400, "address", "expected a regtest Arkade address");
+            if (!Number.isSafeInteger(amount) || amount < 1000 || amount > 1_000_000) throw new HttpError(400, "amount", "amount must be 1000..1000000 sats");
+            const last = faucetSeen.get(address) ?? 0;
+            if (Date.now() - last < 10_000) throw new HttpError(429, "rate", "wait 10 s between faucet requests");
+            faucetSeen.set(address, Date.now());
+            return c.json({ txid: await d.faucet!(address, amount) });
+        });
+    }
+    return app;
+}
