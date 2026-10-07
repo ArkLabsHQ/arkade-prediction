@@ -19,7 +19,11 @@
     "build:server": "esbuild src/server/main.ts src/oracle/main.ts --bundle --platform=node --format=esm --target=node22 --packages=external --outdir=dist --outbase=src",
     "build": "pnpm run web:build && pnpm run build:server",
     "start": "node dist/server/main.js",
-    "start:oracle": "node dist/oracle/main.js"
+    "start:oracle": "node dist/oracle/main.js",
+    "regtest:up": "node scripts/regtest.mjs up",
+    "regtest:down": "node scripts/regtest.mjs down",
+    "demo": "node scripts/regtest.mjs demo",
+    "test:all": "node scripts/regtest.mjs test"
   },
   "dependencies": {
     "@arkade-os/sdk": "0.4.78",
