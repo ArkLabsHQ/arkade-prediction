@@ -6,7 +6,8 @@ outcomes come from an attestor whose signature is checked inside the covenant. M
 Polymarket (CTF v1 binary) or created by users.
 
 **State:** regtest proof of concept complete and tested; on Mutinynet, imported markets activated and received
-LP liquidity from funded test wallets; no hosted deployment yet. Test funds only.
+LP liquidity, and a custom market traded, resolved and redeemed, all with funded test wallets; no hosted
+deployment yet. Test funds only.
 
 ## Quick start (regtest)
 
@@ -59,7 +60,7 @@ the full-suite log is `docs/evidence/e2e-regtest.txt`.
 | 17 | Mutinynet readiness (read-only) | PASS | `docs/evidence/mutinynet-preflight.txt` | `node --env-file=.env.mutinynet.example --import tsx scripts/preflight.ts` |
 | 17a | Early source resolution detected (batched finalized reads) and trading halted | PASS | `docs/evidence/early-resolution-screen.txt` (live), `test/e2e/halted-market.test.ts`, `test/unit/server/resolver.test.ts` | `node --import tsx scripts/live/early-resolution-check.ts` |
 | 17b | Independent reviews: collateral, oracle, orders, durability | DONE | `docs/reviews.md` (3 high, 11 medium, 9 low: each fixed or documented) | — |
-| 18 | Mutinynet transactions: import, activation, LP liquidity | PASS | `docs/evidence/mutinynet-funded.txt` (trading, resolution and redemption not yet run there) | `docs/operations.md` |
+| 18 | Mutinynet transactions: import, activation, LP liquidity, trade, resolve, redeem | PASS | `docs/evidence/mutinynet-funded.txt` | `node --env-file=<env> --import tsx scripts/mutinynet-flow.ts` (app running) |
 | 19 | Hosted Dokploy deployment | NOT RUN | image and compose tested locally (#12) | `docs/operations.md` |
 | 20 | Threshold oracle: 2-of-3 attestors enforced in the vault | PASS | `test/e2e/threshold-oracle.test.ts`, `docs/evidence/polymarket-live.txt` (3 attestor processes) | `threshold-oracle.test.ts` |
 | 21 | Categorical markets, nonzero-fee renewal | NOT RUN (not implemented) | `PLAN.md` D4 | — |

@@ -17,3 +17,16 @@ next import pass: eligible 2, activated [] (IMPORT_MAX_ACTIVE=2 reached)
 ## Polygon RPC
 With 2 providers, polygon-bor-rpc.publicnode.com timed out (10 s) and the early-resolution screen failed: 1/2 providers answered.
 With 3 providers (drpc, 1rpc, publicnode) on the same data dir: no screen failure over ~5 min; health ready, oracle 1 of 1.
+
+## Trade, resolve, redeem (scripts/mutinynet-flow.ts, same app and data dir)
+2026-10-08T20:49:50.323Z - trader funded 15000 sats from the operator wallet
+2026-10-08T20:49:59.456Z - took 1 YES @550 on imported market 31f4357efbd3935ba5d8eff0b7250d03
+2026-10-08T20:50:00.703Z - server recorded fill qty=1
+2026-10-08T20:50:13.197Z - custom market 878cac848d00a4ba473a3284acf63370 registered (closes in 240 s)
+2026-10-08T20:50:23.557Z - minted 2 sets
+2026-10-08T20:54:05.067Z - certificate YES accepted
+2026-10-08T20:54:32.174Z - keeper resolved the vault on-chain
+2026-10-08T20:54:37.422Z - redeemed: yesBurn=3 payout=3000
+MUTINYNET FLOW OK
+flow EXIT=0
+# yesBurn=3: 1 seed set from openVault + 2 minted; payout 3 x 1000 sats.
