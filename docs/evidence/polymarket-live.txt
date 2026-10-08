@@ -1,17 +1,17 @@
-# LIVE_POLYMARKET=1 pnpm exec vitest run --config vitest.e2e.config.ts test/e2e/polymarket-live.test.ts  (2026-10-08T06:26Z)
+# LIVE_POLYMARKET=1 pnpm exec vitest run --config vitest.e2e.config.ts test/e2e/polymarket-live.test.ts  (2026-10-08T07:33Z)
  RUN  v3.2.7 C:/Git/arkade-prediction
-{"ts":"2026-10-08T06:18:03.168Z","service":"attestor","msg":"listening","port":37411,"pubkey":"2d283599ec20e09a61aab11d8d8482417561e9543561056459e62d127bbaa470","epoch":1}
+{"ts":"2026-10-08T07:25:36.475Z","service":"attestor","msg":"listening","port":37411,"pubkey":"a67a7e597d9cf4d0b5713930a3a53a3decce53438a5d44674d92c804c8bce9d6","epoch":1}
 stdout | test/e2e/polymarket-live.test.ts > polymarket import and attested settlement (LIVE network) > imports a live market and settles a historical replay from finalized Polygon state
-import pass {"pages":3,"seen":300,"eligible":5,"activated":["4243d5153765a4f5b79a112a5cd394d1"],"ineligibleByCode":{"horizon":19,"neg-risk":276}}
+import pass {"pages":3,"seen":300,"eligible":5,"activated":["bf786539437a97c1947d9935e7a5b500"],"ineligibleByCode":{"horizon":19,"neg-risk":276}}
 stdout | test/e2e/polymarket-live.test.ts > polymarket import and attested settlement (LIVE network) > imports a live market and settles a historical replay from finalized Polygon state
 imported live market 593972: Will Bernie endorse James Talarico for TX-Sen by Nov 2 2026 ET? [Yes / No]
-{"ts":"2026-10-08T06:21:45.805Z","service":"attestor","msg":"attested","market":"2cb5d3d62bc5f90b1095f90bcf5060cd","outcome":"no","block":{"number":"95156847","hash":"0x2fb27070c36c778ce725b3b4009c9c4e9d311ffbec0717949ac78f2d1ddf0bf5"}}
+{"ts":"2026-10-08T07:27:57.038Z","service":"attestor","msg":"attested","market":"7312de7e276c77e1d0b003ce99c7c6e9","outcome":"no","block":{"number":"95159508","hash":"0x1433f635af2fd914d094dc5efd9422ba1ae2ae82db055b9218ce774069a511de"}}
 stdout | test/e2e/polymarket-live.test.ts > polymarket import and attested settlement (LIVE network) > imports a live market and settles a historical replay from finalized Polygon state
-replay resolved NO at Polygon block 95156847 0x2fb27070c36c778ce725b3b4009c9c4e9d311ffbec0717949ac78f2d1ddf0bf5
- ✓ test/e2e/polymarket-live.test.ts (1 test) 237010ms
-   ✓ polymarket import and attested settlement (LIVE network) > imports a live market and settles a historical replay from finalized Polygon state  236950ms
+replay resolved NO at Polygon block 95159508 0x1433f635af2fd914d094dc5efd9422ba1ae2ae82db055b9218ce774069a511de
+ ✓ test/e2e/polymarket-live.test.ts (1 test) 153862ms
+   ✓ polymarket import and attested settlement (LIVE network) > imports a live market and settles a historical replay from finalized Polygon state  153761ms
  Test Files  1 passed (1)
       Tests  1 passed (1)
-   Start at  08:17:31
-   Duration  259.84s (transform 1.46s, setup 0ms, collect 1.60s, tests 237.01s, environment 0ms, prepare 884ms)
+   Start at  09:25:23
+   Duration  160.25s (transform 688ms, setup 0ms, collect 1.73s, tests 153.86s, environment 0ms, prepare 191ms)
 EXIT=0

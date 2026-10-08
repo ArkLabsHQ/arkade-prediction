@@ -64,3 +64,7 @@ not re-plan.
 
 Found while closing the gaps: the keeper planned resolutions before the close (the covenant refuses them, so
 attempts and backoff were wasted); resolutions are now planned only after the close (`keeper.test.ts`).
+Reconciliation treated any transaction arkd had recorded as landed. arkd v0.9.16 also records submissions it
+fails, and `GetVirtualTxs` lists them regardless of stage, so a failed submission would have been taken as done.
+It is now classified from its inputs (unspent: rebuild) and outputs (spent by us but no outputs yet: wait)
+(`keeper.test.ts`; arkd `offchain_tx_repo.go`, `query.sql` `SelectTxs`).

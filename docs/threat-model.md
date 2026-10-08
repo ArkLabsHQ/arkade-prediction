@@ -96,8 +96,10 @@ Bitcoin-enforced (median time past).
    coin lineage) but stays unspendable by the covenants.
 5. A halt after early source resolution is enforced by the app only; other clients can still fill resting offers
    until their makers cancel them.
-6. If arkd accepts an Arkade transaction and later fails it without finalizing, reconciliation can report the
-   submission as landed although its outputs never appear (not observed; would need an output check).
+6. An Arkade transaction arkd accepted but nobody finalizes leaves its inputs spent and its outputs missing.
+   The keeper finalizes its own wallet-funded transactions from stored checkpoints; for covenant transactions
+   the emulator finalizes, and if it never does the workflow waits in `submitting` (visible in the overview)
+   because nothing on our side can complete it.
 7. Swept offer coins are marked `gone`; recovering them through the keeper's renewal path is not implemented.
 8. The browser audit assumes the indexer keeps a market's genesis and vault transactions for the market's
    lifetime; if it prunes them, money actions on old markets are blocked rather than allowed.

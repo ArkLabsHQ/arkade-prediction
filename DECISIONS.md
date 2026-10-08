@@ -86,6 +86,8 @@ Each entry: decision, reason, rejected alternatives. Newest last.
     creates outputs on finalize, and refuses a duplicate submission; finalization is keyed by txid and repeatable.
     The keeper stores signed checkpoints before finalizing and repeats finalization on recovery
     (finalize-recovery.test.ts crashes between accept and finalize and observes exactly this).
+    Reconciliation decides from the inputs and outputs, never from the transaction's presence alone: arkd also
+    lists submissions it recorded and then failed.
 28. **Clients audit markets themselves.** `src/core/audit.ts` (shared by server and browser) checks genesis and
     vault from indexer data; the browser also recomputes the binding from the text it displays and checks every
     offer leg's asset and script. This protects users of an independently served UI; a compromised server that
