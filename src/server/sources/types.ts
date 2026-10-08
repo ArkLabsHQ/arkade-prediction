@@ -5,6 +5,8 @@ export interface SourceProtocol {
     version: string;
     chainId: number;
     negRisk: boolean;
+    /** Neg-risk market whose condition the NegRiskAdapter reports (not an "Other" placeholder). */
+    negRiskAdapter?: true;
     /** Resolver/oracle contract that will report the payout (lowercase 0x address), if known. */
     resolver: string | null;
     conditionId: string;

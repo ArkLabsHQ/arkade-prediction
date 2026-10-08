@@ -70,6 +70,9 @@ operator and emulator being honest and available. This is reported as a limitati
   agree on block hash and values, rejects unknown resolvers/versions/neg-risk/outcome-order changes, and signs a
   message bound to deployment, template, market, claims, outcome order, vector and evidence digest.
 - Not a light client: the attestor trusts its RPC providers' view of Polygon finality.
+- Neg-risk markets add Polymarket's NegRiskAdapter and its operator to the trusted path: their CTF payout is
+  whatever the adapter reports. The attestor still reads only the finalized CTF payout; it does not check how the
+  adapter's operator reached it.
 - Quarantine: identity changes (resolver, condition, outcome labels or order, question text, protocol version)
   make the attestor refuse (`409 identity`) and the server shows the status; activation of new markets stops for
   unknown profiles. Quarantine is a veto: such a market can only settle INVALID at its timeout.

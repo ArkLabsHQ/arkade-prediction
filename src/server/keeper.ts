@@ -438,8 +438,10 @@ export class Keeper {
             JSON.stringify(termsToJson(terms)), String(baseSats), p.genesisTxid!, p.vaultTxid!, JSON.stringify(oracleKeys.map((k) => hex.encode(k))), oracleThreshold, this.d.cfg.ORACLE_EPOCH, now(), market.id);
         this.d.bus.publish("market", market.id, { status: "open" });
         if (this.d.cfg.LP_BOOTSTRAP_SETS > 0 && this.d.lp) {
+            const ref = market.source_snapshot ? JSON.parse(market.source_snapshot).referencePrices : null;
+            const asks = lpAsks(ref, JSON.parse(market.outcomes) as string[], unit, { yes: BigInt(this.d.cfg.LP_ASK_YES_SATS), no: BigInt(this.d.cfg.LP_ASK_NO_SATS) });
             this.d.wf.enqueue(`lp:${market.id}:bootstrap`, "lp-liquidity", market.id, {
-                sets: String(this.d.cfg.LP_BOOTSTRAP_SETS), yesAsk: String(this.d.cfg.LP_ASK_YES_SATS), noAsk: String(this.d.cfg.LP_ASK_NO_SATS),
+                sets: String(this.d.cfg.LP_BOOTSTRAP_SETS), yesAsk: String(asks.yes), noAsk: String(asks.no),
             });
         }
         return p.vaultTxid;
@@ -522,4 +524,21 @@ async function waitForCoin(k: Keeper, script: Uint8Array, txid: string, timeoutM
         await new Promise((r) => setTimeout(r, 500));
     }
     throw new Error("offer coin not visible");
+}
+
+// ponytail: fixed spread around the source price at activation; reprice from live source quotes if the LP needs it.
+const LP_HALF_SPREAD_BPS = 200n;
+
+/** Opening LP asks: the source's reference price plus a half-spread per side, else the configured fixed asks. */
+export function lpAsks(ref: { outcome: string; price: string }[] | null | undefined, outcomes: string[], unit: bigint, fallback: { yes: bigint; no: bigint }) {
+    const prices = outcomes.map((o) => ref?.find((r) => r.outcome === o)?.price);
+    if (prices.length !== 2 || prices.some((x) => x === undefined || !Number.isFinite(Number(x)))) return fallback;
+    const ask = (x: string) => {
+        const v = BigInt(Math.round(Number(x) * Number(unit))) + (unit * LP_HALF_SPREAD_BPS) / 10_000n;
+        return v < 1n ? 1n : v >= unit ? unit - 1n : v;
+    };
+    const yes = ask(prices[0]!);
+    const no = ask(prices[1]!);
+    // Asks summing to the unit or less would let anyone buy both legs and merge them for a profit.
+    return yes + no > unit ? { yes, no } : fallback;
 }

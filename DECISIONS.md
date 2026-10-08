@@ -123,3 +123,10 @@ Each entry: decision, reason, rejected alternatives. Newest last.
     `ADMIN_PORT`, which the deployer protects at the edge; the public port returns 404 for them. Browser requests
     that `Sec-Fetch-Site` marks cross-site are refused, so edge credentials cannot be ridden by another page.
     No `Host` allowlist: the edge routes by host, and the container port is not published.
+36. **Mirror Polymarket broadly.** Neg-risk outcomes (most of Polymarket's catalogue) are binary CTF conditions whose
+    oracle is the NegRiskAdapter (`conditionId = keccak(adapter, questionID, 2)`, checked on live markets), so they
+    settle through the same `payoutNumerators` read. They are admitted only when the adapter is in
+    `POLYMARKET_RESOLVERS`; "Other" placeholders and markets with missing flags stay refused, because their meaning
+    can change. A `negRiskAdapter` key is added to the hashed protocol only for those markets, so no existing
+    `versionHash` moves. Discovery is ordered by 24-hour volume, and the LP's opening asks are the source's
+    reference price plus 2% per side (fixed asks remain the fallback, and both legs must sum above the unit).

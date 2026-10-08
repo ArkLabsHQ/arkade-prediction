@@ -28,6 +28,8 @@ export function evidenceRecord(market: SourceMarket, evidence: ResolutionEvidenc
     };
 }
 export const POLYGON_CHAIN_ID = 137;
+/** Polymarket's NegRiskAdapter: the CTF oracle of every neg-risk condition (conditionId = keccak(adapter, questionID, 2)). */
+export const NEG_RISK_ADAPTER = "0xd91e80cf2e7be2e162c6513ced06f1dd0da35296";
 const DEFAULT_GAMMA_URL = "https://gamma-api.polymarket.com";
 const SEL_PAYOUT_DENOMINATOR = "dd34de67";
 const SEL_PAYOUT_NUMERATORS = "0504c814";
@@ -134,6 +136,8 @@ function normalize(raw: unknown, fetchedAt: string): SourceMarket {
             chainId: POLYGON_CHAIN_ID,
             // A missing flag (2022 markets) is unknown, not false.
             negRisk: !(raw.negRisk === false && raw.negRiskOther !== true),
+            // Only set when true, so the versionHash of every non-neg-risk market stays what it was.
+            ...(raw.negRisk === true && raw.negRiskOther === false ? { negRiskAdapter: true as const } : {}),
             resolver: hexOf(raw.resolvedBy, ADDRESS),
             conditionId: hexOf(raw.conditionId, BYTES32) ?? "",
             questionId: hexOf(raw.questionID, BYTES32) ?? "",
@@ -152,16 +156,19 @@ function identityProblem(m: SourceMarket, allow: ReadonlySet<string>): Problem |
     if (p.version !== "v1" || p.chainId !== POLYGON_CHAIN_ID || p.settlementContract !== CTF_ADDRESS) {
         return { code: "unsupported-version", reason: `version "${p.version}" on chain ${p.chainId} is not legacy CTF v1 on Polygon` };
     }
-    if (p.negRisk) return { code: "neg-risk", reason: "negRisk/negRiskOther set or missing" };
+    // "Other" placeholders change meaning as named outcomes are added, and missing flags are unknown: both refused.
+    if (p.negRisk && !p.negRiskAdapter) return { code: "neg-risk", reason: "negRiskOther set or neg-risk flags missing" };
+    if (p.negRisk && !allow.has(NEG_RISK_ADAPTER)) return { code: "neg-risk", reason: `NegRiskAdapter ${NEG_RISK_ADAPTER} is not allowlisted` };
     const [a, b] = m.outcomes;
     if (m.outcomes.length !== 2 || !a || !b || a === b) {
         return { code: "not-binary", reason: `outcomes ${JSON.stringify(m.outcomes).slice(0, 200)}` };
     }
-    if (!p.resolver || !allow.has(p.resolver)) {
+    if (!p.negRisk && (!p.resolver || !allow.has(p.resolver))) {
         return { code: "unknown-resolver", reason: `resolver ${p.resolver ?? "missing"} is not allowlisted` };
     }
-    if (!BYTES32.test(p.questionId) || deriveConditionId(p.resolver, p.questionId) !== p.conditionId) {
-        return { code: "condition-mismatch", reason: "conditionId != keccak256(resolver, questionId, 2)" };
+    const oracle = p.negRisk ? NEG_RISK_ADAPTER : p.resolver!;
+    if (!BYTES32.test(p.questionId) || deriveConditionId(oracle, p.questionId) !== p.conditionId) {
+        return { code: "condition-mismatch", reason: `conditionId != keccak256(${p.negRisk ? "NegRiskAdapter" : "resolver"}, questionId, 2)` };
     }
     return null;
 }
@@ -259,7 +266,7 @@ export function createPolymarketProvider(opts: PolymarketProviderOptions): Marke
         name: "polymarket",
 
         async discoverMarkets(cursor, limit) {
-            const q = new URLSearchParams({ closed: "false", include_tag: "true", limit: String(Math.min(100, Math.max(1, Math.trunc(limit) || 1))) });
+            const q = new URLSearchParams({ closed: "false", include_tag: "true", order: "volume24hr", ascending: "false", limit: String(Math.min(100, Math.max(1, Math.trunc(limit) || 1))) });
             if (cursor) q.set("after_cursor", cursor);
             const body = await withRetry(() => getJson(`${gammaUrl}/markets/keyset?${q}`));
             if (!isRec(body) || !Array.isArray(body.markets)) throw new Error("unexpected /markets/keyset response");

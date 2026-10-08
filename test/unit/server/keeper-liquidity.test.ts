@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { hex } from "@scure/base";
-import { lpExpiry } from "../../../src/server/keeper.js";
+import { lpAsks, lpExpiry } from "../../../src/server/keeper.js";
 import { ASSETS, harness, insertMarket, P2TR } from "./harness.js";
 import type { OfferTermsJson } from "../../../src/shared/api.js";
 
@@ -134,5 +134,21 @@ describe("LP offer expiry", () => {
                 expect(e).toBeGreaterThan(2_000_000n);
             }
         }
+    });
+});
+
+describe("LP opening asks", () => {
+    const fixed = { yes: 550n, no: 550n };
+    const ref = (yes: string, no: string) => [{ outcome: "Yes", price: yes }, { outcome: "No", price: no }];
+
+    it("quotes the source price plus the half-spread on each side", () => {
+        expect(lpAsks(ref("0.012", "0.988"), ["Yes", "No"], 1000n, fixed)).toEqual({ yes: 32n, no: 999n });
+        expect(lpAsks(ref("0.6", "0.4"), ["Yes", "No"], 1000n, fixed)).toEqual({ yes: 620n, no: 420n });
+    });
+
+    it("falls back to the fixed asks without a usable price or when both legs together would undercut a set", () => {
+        expect(lpAsks(null, ["Yes", "No"], 1000n, fixed)).toBe(fixed);
+        expect(lpAsks(ref("0.5", "0.5"), ["A", "B"], 1000n, fixed)).toBe(fixed);
+        expect(lpAsks(ref("0.2", "0.2"), ["Yes", "No"], 1000n, fixed)).toBe(fixed);
     });
 });

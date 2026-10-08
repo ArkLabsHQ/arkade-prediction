@@ -193,6 +193,15 @@ describe("polymarket eligibility", () => {
 
         expect(code(open)).toBe("eligible");
         expect(code(negRisk)).toBe("neg-risk");
+        const adapter = "0xd91e80cf2e7be2e162c6513ced06f1dd0da35296";
+        expect(deriveConditionId(adapter, negRisk.protocol.questionId)).toBe(negRisk.protocol.conditionId);
+        const withAdapter = setup({ allowlist: [...ALLOWLIST, adapter] }).p;
+        const wide = { minHorizonSeconds: 0, maxHorizonSeconds: 1e10 };
+        expect(code((await withAdapter.discoverMarkets(null, 5)).markets[1]!, wide, withAdapter)).toBe("eligible");
+        const raw = gamma.keyset.response.markets[1];
+        const other = setup({ allowlist: [...ALLOWLIST, adapter], keyset: { markets: [{ ...raw, negRiskOther: true }] } }).p;
+        expect(code((await other.discoverMarkets(null, 5)).markets[0]!, wide, other)).toBe("neg-risk");
+        expect((await withAdapter.discoverMarkets(null, 5)).markets[0]!.versionHash).toBe(open.versionHash);
         expect(code(await p.fetchMarketDefinition("5379000"))).toBe("unknown-resolver");
         expect(code(open, {}, setup({ allowlist: [ALLOWLIST[0]!] }).p)).toBe("unknown-resolver");
         expect(code(await p.fetchMarketDefinition("2758339"))).toBe("closed");
