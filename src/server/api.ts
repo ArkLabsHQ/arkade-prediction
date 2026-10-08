@@ -163,6 +163,12 @@ export function createApi(d: ApiDeps): Hono {
     );
 
     const admin = new Hono();
+    // No token here, so edge credentials ride along on cross-site browser requests; refuse those (CSRF).
+    admin.use("*", async (c, next) => {
+        const site = c.req.header("sec-fetch-site");
+        if (site && site !== "same-origin" && site !== "none") return c.json({ error: "cross-site admin request", code: "csrf" }, 403);
+        await next();
+    });
     admin.get("/overview", async (c) => c.json(await d.overview()));
     admin.post("/import/run", async (c) => {
         if (!d.importNow) throw new HttpError(409, "disabled", "source import is disabled");

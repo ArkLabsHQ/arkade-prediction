@@ -178,8 +178,10 @@ describe("admin workflow retry", () => {
         const admin = createApi({ ...deps, adminRoutes: true });
         const w = wf.enqueue("lp:m:1", "lp-liquidity", "m", { sets: "5", yesTerms: { priceSats: "600" } });
         wf.transition(w, "failed", { error: "registration failed", attempt: true });
-        const retry = () => admin.request("/api/admin/workflows/lp:m:1/retry", { method: "POST" });
+        const retry = (site = "same-origin") => admin.request("/api/admin/workflows/lp:m:1/retry", { method: "POST", headers: { "sec-fetch-site": site } });
 
+        expect((await retry("cross-site")).status).toBe(403);
+        expect(wf.get("lp:m:1")).toMatchObject({ state: "failed" });
         expect((await retry()).status).toBe(200);
         expect(wf.get("lp:m:1")).toMatchObject({ state: "pending", attempts: 0, error: null, payload: { sets: "5", yesTerms: { priceSats: "600" } } });
         expect((await retry()).status).toBe(409);
