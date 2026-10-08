@@ -19,7 +19,6 @@ describe("config redaction", () => {
     it("logs every URL setting as scheme://host only, and secrets as presence flags", () => {
         const cfg = loadConfig({
             ...BASE,
-            PUBLIC_BASE_URL: "https://user:SECRET-pw@app.example/base?SECRET-q=1",
             ARK_SERVER_URL: "http://arkd:7070/SECRET-path",
             EMULATOR_URL: "http://emulator:7072/?token=SECRET-token",
             ESPLORA_URL: "http://esplora:3000/api#SECRET-fragment",
@@ -34,7 +33,7 @@ describe("config redaction", () => {
         const out = redacted(cfg);
         expect(JSON.stringify(out)).not.toMatch(/SECRET[- ]|user/);
         expect(out).toMatchObject({
-            PUBLIC_BASE_URL: "https://app.example",
+            EXPLORER_URL: "https://mempool.example",
             ARK_SERVER_URL: "http://arkd:7070",
             ORACLE_URL: "https://oracle.example:8443",
             POLYGON_RPC_URLS: ["https://polygon-mainnet.g.alchemy.com", "https://lb.drpc.org"],
@@ -47,7 +46,7 @@ describe("config redaction", () => {
 
 describe("endpoint and pin defaults", () => {
     it("needs neither endpoints nor pins on mutinynet", () => {
-        const cfg = loadConfig({ APM_NETWORK: "mutinynet", APM_DEPLOYMENT_ID: "t", PUBLIC_BASE_URL: "https://app.example" });
+        const cfg = loadConfig({ APM_NETWORK: "mutinynet" });
         expect(cfg).toMatchObject({
             ARK_SERVER_URL: "https://mutinynet.arkade.sh",
             EMULATOR_URL: "https://emulator.mutinynet.arkade.sh",

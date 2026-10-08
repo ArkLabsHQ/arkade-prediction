@@ -27,8 +27,8 @@ const hexKey = (bytes: number) => z.string().regex(new RegExp(`^[0-9a-f]{${bytes
 
 const schema = z.object({
     APM_NETWORK: z.enum(["regtest", "mutinynet"]),
-    APM_DEPLOYMENT_ID: z.string().min(1).max(64),
-    PUBLIC_BASE_URL: z.url(),
+    // A label stored in the data volume so it cannot be reused by another deployment by mistake.
+    APM_DEPLOYMENT_ID: z.string().min(1).max(64).optional(),
     HOST: z.string().default("0.0.0.0"),
     PORT: int(37400),
     ARK_SERVER_URL: z.url().optional(),
@@ -72,7 +72,8 @@ const schema = z.object({
     LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
 });
 
-export type Config = Omit<z.infer<typeof schema>, "ARK_SERVER_URL" | "EMULATOR_URL" | "ESPLORA_URL"> & {
+export type Config = Omit<z.infer<typeof schema>, "APM_DEPLOYMENT_ID" | "ARK_SERVER_URL" | "EMULATOR_URL" | "ESPLORA_URL"> & {
+    APM_DEPLOYMENT_ID: string;
     ARK_SERVER_URL: string;
     EMULATOR_URL: string;
     ESPLORA_URL: string;
@@ -106,6 +107,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     };
     return {
         ...c,
+        APM_DEPLOYMENT_ID: c.APM_DEPLOYMENT_ID ?? `apm-${c.APM_NETWORK}`,
         ARK_SERVER_URL: endpoint("ARK_SERVER_URL", c.ARK_SERVER_URL ?? defaults.arkServer),
         EMULATOR_URL: endpoint("EMULATOR_URL", c.EMULATOR_URL ?? defaults.emulator),
         ESPLORA_URL: endpoint("ESPLORA_URL", c.ESPLORA_URL ?? defaults.esplora),

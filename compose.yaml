@@ -19,8 +19,7 @@ services:
       - apm-data:/data
     environment:
       APM_NETWORK: ${APM_NETWORK:?set APM_NETWORK}
-      APM_DEPLOYMENT_ID: ${APM_DEPLOYMENT_ID:?set APM_DEPLOYMENT_ID}
-      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?set PUBLIC_BASE_URL}
+      APM_DEPLOYMENT_ID: ${APM_DEPLOYMENT_ID:-}
       HOST: 0.0.0.0
       PORT: "37400"
       DATA_DIR: /data
