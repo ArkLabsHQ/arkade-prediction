@@ -1,0 +1,3 @@
+# node --import tsx scripts/live/early-resolution-check.ts  (live Polygon finalized reads, 2026-10-08T02:31Z; 2758339 resolved NO, 593972 open)
+{"resolved":"0xbe20fcfd54937c2a48a7b8521ca349e6a2c4373566328ebb950a8c35ab1be3d9","open":"0x136a2773866c2d841b00652b7d99b026409c9a55db769c525ed450e04c653f23","hits":["0xbe20fcfd54937c2a48a7b8521ca349e6a2c4373566328ebb950a8c35ab1be3d9"],"ms":504}
+SCREEN OK

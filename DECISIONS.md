@@ -42,3 +42,63 @@ Each entry: decision, reason, rejected alternatives. Newest last.
 12. **Keeper renewal** = emulator-signed intent proof tunnelling each covenant VTXO (vin k+1 -> vout k), musig
     session key only, forfeits co-signed by the emulator. Proven for the CTRL-holding vault (renewal.test.ts).
 13. **Node EventSource** via the `eventsource` package + `configureEventSource` (SDK batch streams are SSE).
+14. **User keys stay in the browser.** The UI derives the wallet from a mnemonic kept in localStorage encrypted
+    with PBKDF2-SHA256 (600k iterations) + AES-GCM and signs every user transaction client-side. The server holds
+    only its own operator and LP wallets. Offline actions on users' behalf go through covenants that need no
+    user key (offers, claim boxes, keeper renewal). Rejected: server-held user keys or unrestricted delegation.
+15. **Claim boxes for offline payout.** A holder can park claims in a `claim_box` covenant that anyone may renew
+    (tunnel) or redeem after resolution, paying everything to the owner's committed script. Keeps the "auto-claim
+    while offline" promise without giving the keeper spending authority.
+16. **Separate attestor process.** `src/oracle/main.ts` holds the oracle key, pins network/operator/emulator,
+    re-reads the source itself and signs only finalized CTF payouts; the server relays certificates and verifies
+    them against the market's pinned key before use. Rejected: signing inside the app server (one compromise
+    would control both funds routing and outcomes).
+17. **Single writer per volume.** A SQLite lease with a fencing token; every workflow transition is a conditional
+    update on (id, state, token). API-only processes (`WORKERS=none`) may share the volume.
+    Rejected: multi-writer with row locks (SQLite) or an external coordinator (operational weight for a PoC).
+18. **Write-ahead submission and reconciliation.** Keeper workflows record txid + input outpoints before
+    submitting; on restart the indexer classifies them as landed / not-submitted / lost / unknown, so a crash on
+    either side of submission never duplicates a match or a resolution (fault-recovery.test.ts).
+19. **The vault is the coin that holds CTRL.** Coins paid to a vault script by anyone else are ignored by client
+    actions and server reconciliation (they would otherwise make vault lookups ambiguous).
+20. **Final offer fill pays the maker directly.** A zero-asset continuation would make the emulator's asset
+    opcodes fail ("no asset packet vin=0"); expiry settlement tunnels value and assets to the maker.
+21. **Coin selection reads the indexer**, minus a process-wide recently-spent set (5 min TTL), and retries while the
+    indexer catches up. Rejected: the SDK wallet cache, which lagged behind covenant spends and double-selected.
+22. **Genesis may carry existing assets** as transfer groups after the three issuance groups (ByGroup(0) still
+    names CTRL). The admission audit requires exactly three issuance groups and transfers only after them.
+23. **Polymarket profile = CTF v1 binary only.** conditionId recomputed from resolver + questionId, payout read at
+    the Polygon `finalized` tag from >= 2 providers that must agree, resolver allowlist, neg-risk and non-binary
+    rejected, Gamma treated as untrusted discovery data. Imported markets time out to INVALID
+    `IMPORT_TIMEOUT_DAYS` (default 60) after close.
+24. **Packaging for Dokploy.** One image for app and attestor, explicit variable passthrough in `compose.yaml`
+    (Dokploy passes only referenced variables), named volumes, the HTTP port `expose`d rather than published
+    (the local override publishes it), secrets via environment or `*_FILE`, no build arguments.
+25. **Offers are tracked by coin lineage, not by script.** Refresh follows the tracked outpoint through its
+    spending Arkade tx (input index via the checkpoint txid, continuation at the same output index) or its renewal
+    batch, recording one trade per hop. Rejected: "newest unspent coin at the script", which let anyone hijack an
+    offer's tracking by paying a stray coin to its public script.
+26. **Failed workflows re-arm.** Ids are deterministic, so `enqueue` revives a failed row after a growing cooldown
+    (2 min to 1 h), keeping recorded progress and dropping per-attempt fields; `lost` submissions rebuild from
+    fresh state. Multi-step workflows record the in-flight step, so a landed sub-transaction is progress, not
+    completion. Rejected: terminal failure (a contended resolve left markets unresolvable).
+27. **Interrupted arkd submissions are finalized, not resubmitted.** arkd v0.9.16 marks inputs spent on accept,
+    creates outputs on finalize, and refuses a duplicate submission; finalization is keyed by txid and repeatable.
+    The keeper stores signed checkpoints before finalizing and repeats finalization on recovery.
+28. **Clients audit markets themselves.** `src/core/audit.ts` (shared by server and browser) checks genesis and
+    vault from indexer data; the browser also recomputes the binding from the text it displays and checks every
+    offer leg's asset and script. This protects users of an independently served UI; a compromised server that
+    serves the UI bundle is out of reach of any client check (threat model §2a).
+29. **Early source resolution halts trading.** One batched `payoutDenominator` read per Polygon provider per
+    interval screens open imported markets; a finalized payout reported by >= 2 providers, confirmed by the full
+    verifier, sets `source-final` and the market shows `halted` until close (also when a certificate arrives
+    early). LP offers expire at close and are cancelled on halt. The covenant still refuses resolution before
+    close: making early resolution possible would change the template.
+30. **The attestor checks what it signs.** Besides the source identity it requires the definition's outcome labels
+    (in order) and question to match the live source, so a server cannot obtain a certificate for a mirror with
+    swapped labels or a negated question.
+31. **E2E funding comes from fresh notes, and the suite mines first.** Coins inherit the batch expiry of what
+    they spend, so funding tests from the stack's long-lived CLI wallet produced coins that were swept mid-test.
+    Each test process now redeems a small operator note into a new batch through an SDK wallet (with deadlines),
+    and the e2e global setup mines 12 blocks so arkd's sweeper can reclaim expired batches; without blocks its
+    liquidity drained until batches stalled.

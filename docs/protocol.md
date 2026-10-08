@@ -21,9 +21,10 @@ Status labels: **Implemented + tested** cites the regtest test that exercises it
   (`AssetRef.ByGroup(0)`). Asset ids are `(T0 txid, group 0|1|2)`; covenants push the txid byte-reversed.
 - arkd v0.9.16 lets an existing asset grow only if its control asset is spent in the same tx
   (`tx_validation.go:109-145`), and every input's assets must be declared exactly (`:201-238`).
-- T1 spends T0's CTRL output directly into the vault with S × unit collateral. The server and any client audit
-  T0 (exactly CTRL+YES+NO issued first, further groups only transfers) and T1 (CTRL → vault script, YES/NO delta 0)
-  before listing (`src/server/markets.ts auditGenesis`). After T1 only vault covenants can spend CTRL.
+- T1 spends T0's CTRL output directly into the vault with S × unit collateral. `src/core/audit.ts` checks
+  T0 (exactly CTRL+YES+NO issued first, further groups only transfers) and T1 (CTRL → vault script, YES/NO delta 0):
+  the server before listing, the browser before its first money-moving action on a market (`src/web/verify.ts`,
+  which also recomputes the binding from the displayed text). After T1 only vault covenants can spend CTRL.
 - Metadata (`apm.market`, `apm.role`) is descriptive only; authority is the asset id + CTRL path.
 
 ## 3. Contracts and every spending leaf

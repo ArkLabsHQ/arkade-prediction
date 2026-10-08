@@ -12,8 +12,9 @@ services:
     init: true
     restart: unless-stopped
     stop_grace_period: 30s
-    ports:
-      - "${APM_HTTP_PORT:-37400}:37400"
+    # Reached through the platform's proxy (Dokploy domain -> app:37400); compose.regtest.yaml publishes it locally.
+    expose:
+      - "37400"
     volumes:
       - apm-data:/data
     environment:

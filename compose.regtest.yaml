@@ -3,6 +3,8 @@
 services:
   app:
     networks: [default, regtest]
+    ports:
+      - "${APM_HTTP_PORT:-37400}:37400"
   oracle:
     networks: [default, regtest]
 

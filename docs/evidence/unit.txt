@@ -1,0 +1,50 @@
+# pnpm exec vitest run test/unit  (2026-10-08T02:31Z)
+ ✓ test/unit/core.test.ts (7 tests) 383ms
+ ✓ test/unit/server/config.test.ts (2 tests) 21ms
+ ✓ test/unit/sources/polymarket.test.ts (19 tests) 2788ms
+   ✓ polymarket resolution evidence > never turns a failed or empty read into unresolved  2467ms
+ ✓ test/unit/core/audit.test.ts (11 tests) 733ms
+ ✓ test/unit/web/verify.test.ts (12 tests) 645ms
+ ✓ test/unit/oracle/identity.test.ts (2 tests) 2159ms
+   ✓ attestor definition checks > accepts the definition the server builds for a historical replay  2138ms
+ ✓ test/unit/server/resolver.test.ts (1 test) 2500ms
+   ✓ early source resolution > screens open markets with one batched read per provider and flags only verified final payouts  2497ms
+ ✓ test/unit/server/keeper-liquidity.test.ts (6 tests) 12424ms
+   ✓ LP liquidity > expires every offer no later than the market close, with jitter  2793ms
+   ✓ LP liquidity > posts for a market closing in two minutes but not within one minute  4337ms
+   ✓ LP liquidity > does not mint or post into a halted market  2165ms
+   ✓ LP liquidity > stores each offer's terms before posting and retries only the registration  1783ms
+   ✓ LP liquidity > treats a duplicate registration as already registered  1341ms
+ ✓ test/unit/server/api.test.ts (7 tests) 12595ms
+   ✓ api request limits > caps the bytes actually read, including chunked bodies without Content-Length  2590ms
+   ✓ api request limits > clamps numeric query params into a positive range  1088ms
+   ✓ api event stream > replays a backlog past one page and keeps events published during the replay  2080ms
+   ✓ api event stream > gives a client ahead of the log (restored database) a recent window, then live events  2103ms
+   ✓ api event stream > closes a client that cannot keep up; Last-Event-ID resumes without loss  3013ms
+   ✓ api event stream > trims its own log as it publishes  1231ms
+   ✓ admin workflow retry > returns a failed workflow to pending with its payload and refuses other states  481ms
+ ✓ test/unit/server/offers-refresh.test.ts (9 tests) 14716ms
+   ✓ refreshOffer follows the offer's coin lineage > ignores a stray coin paid to the offer script and costs one indexer call  2796ms
+   ✓ refreshOffer follows the offer's coin lineage > records both hops when a partial fill and the final fill land between refreshes  1158ms
+   ✓ refreshOffer follows the offer's coin lineage > records the partial fill and cancels when the maker takes the remainder back  3289ms
+   ✓ refreshOffer follows the offer's coin lineage > follows a renewal without recording a trade, and waits while the batch output is invisible  2860ms
+   ✓ refreshOffer follows the offer's coin lineage > does not double-count when two refreshes race a landing fill  1846ms
+   ✓ refreshOffer follows the offer's coin lineage > reports a buy offer filled before its expiry as filled with a trade  579ms
+   ✓ refreshOffer follows the offer's coin lineage > settles an expired offer returned to the maker untouched  370ms
+   ✓ refreshOffer follows the offer's coin lineage > keeps the keeper's mint-match trade and reads the continuation at the offer's own input index  1586ms
+ ✓ test/unit/server/keeper.test.ts (12 tests) 19247ms
+   ✓ workflow re-arming > revives a failed workflow once the cooldown has passed, with the fresh payload  2516ms
+   ✓ workflow re-arming > backs the cooldown off per re-arm and never revives a done workflow  1014ms
+   ✓ workflow re-arming > keeps a multi-step workflow's progress across a re-arm and drops per-attempt fields  3297ms
+   ✓ in-flight reconciliation > rebuilds from fresh state when the inputs were spent by another transaction  3116ms
+   ✓ in-flight reconciliation > keeps a landed single-step workflow terminal  1872ms
+   ✓ in-flight reconciliation > continues a multi-step activate at the vault step when only the genesis tx landed  671ms
+   ✓ writer lease heartbeat > keeps the lease across a tick longer than the ttl  1511ms
+   ✓ match planning > skips a crossing best pair whose fill would break its min-fill rule and takes the next one  1209ms
+   ✓ match planning > caps the quantity at the vault's remaining open-interest room  1286ms
+   ✓ match planning > plans nothing when the vault is already at the cap  602ms
+   ✓ halted markets > stays in the reconcile sweep, so its vault state keeps moving  1174ms
+   ✓ halted markets > cancels the LP's open offers once per offer and plans no matches  972ms
+ Test Files  11 passed (11)
+      Tests  88 passed (88)
+   Duration  30.93s (transform 10.51s, setup 0ms, collect 50.58s, tests 68.21s, environment 6ms, prepare 10.51s)
