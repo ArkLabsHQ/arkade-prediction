@@ -22,6 +22,8 @@ Updated: 2026-10-08 (session 1). Branch `main`, local commits only (nothing push
 - Regtest e2e 13 files (incl. threshold-oracle), 2 opt-in skipped (`e2e-regtest.txt`), incl. halted-market and finalize-recovery; live Polymarket e2e pass; Docker redeploy/backup/
   restore pass (stale backup remaining=4 reconciled to 3); `node scripts/regtest.mjs up` + `demo` → DEMO OK.
 - Mutinynet read-only preflight 18/18; live early-resolution screen check pass.
+- Mutinynet funded run, single container: 2 imported markets activated with LP asks posted, no failed workflows
+  (`mutinynet-funded.txt`). Two Polygon providers were too few when one timed out; the starter env lists three.
 - Flakes named and fixed in test infrastructure (not app code): emulator log latency in the covenant-refusal
   check, test-server start deadline on a loaded host, faucet coins inheriting an old batch expiry, and arkd
   liquidity drained by unswept batches on a stack that mines only on demand (DECISIONS 31), and a body-limit unit
@@ -29,6 +31,6 @@ Updated: 2026-10-08 (session 1). Branch `main`, local commits only (nothing push
   The faucet's back-to-back sends could spend change arkd had not created yet (`VTXO_NOT_FOUND`); it retries.
 
 ## Not done (needs authorization or is out of scope)
-- Mutinynet transactions (funded test wallets + authorization), hosted Dokploy deployment.
+- On Mutinynet: trading, resolution and redemption; hosted Dokploy deployment.
 - Categorical markets, nonzero-fee renewal (PLAN D4).
 - Residual risks: `docs/threat-model.md` §7.

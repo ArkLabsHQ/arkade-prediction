@@ -1,0 +1,19 @@
+# Funded Mutinynet run, single container (2026-10-08). Test funds only.
+# Wallets funded with 50000 sats each; addresses elided. Run: node --env-file=<starter env + secrets> --import tsx src/server/main.ts
+
+## import (POST /api/admin/import/run)
+{"pages":5,"seen":500,"eligible":6,"activated":["8fc1f21c9884a603eb8ac3d6a8b272cb","31f4357efbd3935ba5d8eff0b7250d03"],"ineligibleByCode":{"horizon":50,"neg-risk":444}}
+
+## GET /api/markets after activation
+31f4357efbd3935ba5d8eff0b7250d03 open vault=open Will Bernie endorse Kshama Sawant for WA-09 by Nov 2 2026 ET?
+8fc1f21c9884a603eb8ac3d6a8b272cb open vault=open Will Bernie endorse James Talarico for TX-Sen by Nov 2 2026 ET?
+
+## admin overview
+wallets: operator available 45670 (from 50000), lp available 38680 (from 50000)
+workflows: failed 0, inFlight 0, pending 0
+liquidity: each market has 1 YES ask and 1 NO ask of 5 units (LP_BOOTSTRAP_SETS=5)
+next import pass: eligible 2, activated [] (IMPORT_MAX_ACTIVE=2 reached)
+
+## Polygon RPC
+With 2 providers, polygon-bor-rpc.publicnode.com timed out (10 s) and the early-resolution screen failed: 1/2 providers answered.
+With 3 providers (drpc, 1rpc, publicnode) on the same data dir: no screen failure over ~5 min; health ready, oracle 1 of 1.
