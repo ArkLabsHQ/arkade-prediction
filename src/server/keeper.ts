@@ -51,8 +51,8 @@ export async function reconcileSubmission(d: Deps, txid: string | null, inputs: 
     return "lost";
 }
 
-/** Regtest-only crash injection at workflow boundaries: APM_FAULT=<before-submit|after-submit>:<kind>. */
-function maybeCrash(cfg: { APM_NETWORK: string }, phase: "before-submit" | "after-submit", kind: string): void {
+/** Regtest-only crash injection at workflow boundaries: APM_FAULT=<before-submit|before-finalize|after-submit>:<kind>. */
+function maybeCrash(cfg: { APM_NETWORK: string }, phase: "before-submit" | "before-finalize" | "after-submit", kind: string): void {
     if (cfg.APM_NETWORK !== "regtest" || process.env.APM_FAULT !== `${phase}:${kind}`) return;
     console.log(JSON.stringify({ level: "warn", msg: "injected crash", phase, kind }));
     process.exit(137);
@@ -97,7 +97,8 @@ export class Keeper {
             for (const m of all<MarketRow>(db, "SELECT id FROM markets WHERE status = 'activating'")) wf.enqueue(`activate:${m.id}`, "activate", m.id, {});
         }
         for (const m of all<MarketRow & { outcome: string }>(db,
-            `SELECT m.*, c.outcome FROM markets m JOIN certificates c ON c.market_id = m.id WHERE m.vault_phase = 'open' AND m.terms IS NOT NULL`)) {
+            `SELECT m.*, c.outcome FROM markets m JOIN certificates c ON c.market_id = m.id
+             WHERE m.vault_phase = 'open' AND m.terms IS NOT NULL AND m.close_at <= ?`, nowS)) {
             wf.enqueue(`resolve:${m.id}`, "resolve", m.id, { outcome: m.outcome });
         }
         for (const m of all<MarketRow>(db, "SELECT * FROM markets WHERE vault_phase = 'open' AND timeout_at > 0 AND timeout_at <= ? AND NOT EXISTS (SELECT 1 FROM certificates c WHERE c.market_id = markets.id)", nowS)) {
@@ -234,6 +235,7 @@ export class Keeper {
             },
             beforeFinalize: ({ txid, checkpoints }) => {
                 current = this.d.wf.transition(this.d.wf.get(current.id)!, "submitting", { txid, payload: { finalCheckpoints: checkpoints } });
+                maybeCrash(this.d.cfg, "before-finalize", current.kind);
             },
         };
     }

@@ -81,7 +81,17 @@ describe("api request limits", () => {
             // An oversized chunked upload is answered 413 and then reset mid-upload; either way it is never parsed (400).
             expect(await post("/api/markets", big, true)).toMatch(/^(413 |ECONNRESET|EPIPE)/);
             expect(await post("/api/admin/replay", big, true)).toMatch(/^(413 |ECONNRESET|EPIPE)/);
-            expect(await post("/api/markets", big, false)).toMatch(/^413 .*too-large/);
+            // Headers only: a client still uploading can see the reset before the 413 when the host is loaded.
+            const declared = await new Promise<string>((resolve) => {
+                const req = request({ host: "127.0.0.1", port, path: "/api/markets", method: "POST", agent: false, headers: { "content-type": "application/json", "content-length": String(Buffer.byteLength(big)) } }, (res) => {
+                    let text = "";
+                    res.on("data", (c) => (text += c));
+                    res.on("end", () => resolve(`${res.statusCode} ${text}`));
+                });
+                req.on("error", () => {});
+                req.flushHeaders();
+            });
+            expect(declared).toMatch(/^413 .*too-large/);
             for (const chunked of [true, false]) expect(await post("/api/markets", JSON.stringify({ marketId: "not-hex" }), chunked)).toMatch(/^400 .*market-id/);
         } finally {
             server.close();

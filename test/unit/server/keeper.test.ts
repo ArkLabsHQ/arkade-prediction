@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { openDb } from "../../../src/server/db.js";
+import { openDb, run } from "../../../src/server/db.js";
 import { WriterLease } from "../../../src/server/lease.js";
 import { harness, inner, insertBuyOffer, insertMarket, P2TR, tempDb } from "./harness.js";
 
@@ -186,5 +186,19 @@ describe("halted markets", () => {
         const kinds = h.wf.list({}).map((w) => `${w.kind}:${w.id}`);
         expect(kinds.filter((k) => k.startsWith("cancel-offer"))).toEqual(["cancel-offer:cancel:lpYes:0"]);
         expect(kinds.filter((k) => k.startsWith("mint-match"))).toHaveLength(0);
+    });
+});
+
+describe("resolution planning", () => {
+    it("waits for the close before planning a resolve, because the covenant refuses earlier ones", async () => {
+        const h = harness();
+        const nowS = Math.floor(Date.now() / 1000);
+        insertMarket(h.db, { id: "early", closeAt: nowS + 600 });
+        insertMarket(h.db, { id: "closed", closeAt: nowS - 5 });
+        for (const id of ["early", "closed"]) {
+            run(h.db, "INSERT INTO certificates(market_id, outcome, numerators, denominator, evidence_digest, signature, signer, issued_at) VALUES (?, 'yes', '[\"1\",\"0\"]', '1', 'e', 's', 'k', 't')", id);
+        }
+        await inner(h.keeper).plan();
+        expect(h.wf.list({ state: "pending" }).filter((w) => w.kind === "resolve").map((w) => w.marketId)).toEqual(["closed"]);
     });
 });
