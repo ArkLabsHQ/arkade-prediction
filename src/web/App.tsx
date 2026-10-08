@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ConfigJson } from "../shared/api.js";
 import { api, startLive, useLive, useLiveState } from "./api.js";
-import { connectChain, readHoldings, type Chain, type Holdings, type Session } from "./chain.js";
+import { connectChain, openSession, readHoldings, type Chain, type Holdings, type Session } from "./chain.js";
 import { AppCtx, useApp, type AppState } from "./ctx.js";
 import { errMsg, n, short } from "./format.js";
-import { hasKeystore } from "./keystore.js";
+import { hasKeystore, isOpenKeystore, unlockKeystore } from "./keystore.js";
 import { CreatePage } from "./pages/Create.js";
 import { MarketPage } from "./pages/Market.js";
 import { Markets } from "./pages/Markets.js";
@@ -66,6 +66,13 @@ function Shell({ config }: { config: ConfigJson }) {
         const t = setInterval(() => void refreshHoldings(), 15_000);
         return () => clearInterval(t);
     }, [session, refreshHoldings]);
+    // A wallet saved without a passphrase opens on load; Lock still closes it until the next load.
+    const [autoOpened, setAutoOpened] = useState(false);
+    useEffect(() => {
+        if (!chain || autoOpened || !isOpenKeystore()) return;
+        setAutoOpened(true);
+        unlockKeystore("").then((ks) => openSession(chain, config, ks)).then(setSession, (e) => setChainError(errMsg(e)));
+    }, [chain, config, autoOpened]);
     const lock = useCallback(async () => {
         setSession(null);
         await session?.wallet.dispose();

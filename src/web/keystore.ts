@@ -20,6 +20,8 @@ interface Meta {
     salt: string;
     /** IndexedDB database holding this wallet's synced coins (not secret). */
     db: string;
+    /** No passphrase chosen: encrypted under the empty string, so anyone with this browser profile can open it. */
+    open?: boolean;
 }
 
 export interface Keystore {
@@ -43,6 +45,7 @@ async function deriveKey(passphrase: string, salt: Uint8Array, iterations: numbe
 }
 
 export const hasKeystore = () => localStorage.getItem(STORAGE_KEY) !== null;
+export const isOpenKeystore = () => (JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}") as Partial<Meta>).open === true;
 
 export async function persist(ks: Keystore): Promise<void> {
     const iv = crypto.getRandomValues(new Uint8Array(12));
@@ -51,11 +54,12 @@ export async function persist(ks: Keystore): Promise<void> {
 }
 
 export async function createKeystore(passphrase: string, mnemonic: string): Promise<Keystore> {
-    if (passphrase.length < MIN_PASSPHRASE) throw new Error(`Passphrase must be at least ${MIN_PASSPHRASE} characters`);
+    if (passphrase && passphrase.length < MIN_PASSPHRASE) throw new Error(`Passphrase must be at least ${MIN_PASSPHRASE} characters`);
     const salt = crypto.getRandomValues(new Uint8Array(16));
     const meta: Meta = {
         v: 1, kdf: "PBKDF2-SHA256", iterations: ITERATIONS, salt: hex.encode(salt),
         db: `apm-wallet-${hex.encode(crypto.getRandomValues(new Uint8Array(6)))}`,
+        ...(passphrase ? {} : { open: true }),
     };
     const ks = { key: await deriveKey(passphrase, salt, ITERATIONS), meta, secrets: { mnemonic, oracleKeys: {} } };
     await persist(ks);
@@ -81,15 +85,6 @@ export function forgetKeystore(): void {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) indexedDB.deleteDatabase((JSON.parse(raw) as Meta).db);
     localStorage.removeItem(STORAGE_KEY);
-}
-
-/** New x-only oracle key, persisted encrypted before it is ever shown or used. */
-export async function addOracleKey(ks: Keystore): Promise<{ publicKey: string; secretKey: string }> {
-    const { secretKey, publicKey } = schnorr.keygen();
-    const pair = { publicKey: hex.encode(publicKey), secretKey: hex.encode(secretKey) };
-    ks.secrets.oracleKeys[pair.publicKey] = pair.secretKey;
-    await persist(ks);
-    return pair;
 }
 
 export function isXOnlyKey(k: string): boolean {

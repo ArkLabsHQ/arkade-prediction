@@ -5,7 +5,7 @@ import { BINARY_VECTORS, redemptionPayout, type BinaryOutcome } from "../../core
 import type { BoxJson, CertificateJson, MarketJson, OfferJson, Outcome } from "../../shared/api.js";
 import { api, refreshOffers } from "../api.js";
 import {
-    cancelFresh, ensureBox, fillWithRetry, logged, oracleSecretFor, postOrder, resolveAsOracle, sendCertificate, type Chain, type Session,
+    cancelFresh, ensureBox, fillWithRetry, logged, oracleKeyFor, postOrder, resolveAsOracle, sendCertificate, type Chain, type Session,
 } from "../chain.js";
 import { useApp } from "../ctx.js";
 import { planFill, type Plan } from "../fills.js";
@@ -37,7 +37,7 @@ export function TradePanels({ m, offers, onChanged }: { m: MarketJson; offers?: 
             {open && <Sets {...live} halted={!trading} />}
             {trading && <OrderForm {...live} />}
             <MyOrders {...live} offers={offers} />
-            {open && oracleSecretFor(session, m) && <Resolve {...live} />}
+            {open && oracleKeyFor(session, m) && <Resolve {...live} />}
         </>
     );
 }

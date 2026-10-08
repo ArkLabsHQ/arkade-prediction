@@ -6,7 +6,7 @@ import { enc } from "../api.js";
 import { MAX_SETS, VAULT_BASE_SATS, clearDraft, loadDraft, runCreate, saveDraft, type Chain, type CreateDraft, type Session } from "../chain.js";
 import { useApp } from "../ctx.js";
 import { fromUnix, n, sats, when } from "../format.js";
-import { addOracleKey, isXOnlyKey } from "../keystore.js";
+import { isXOnlyKey } from "../keystore.js";
 import { ActionStatus, Copy, LockedNotice, Panel, Txid, navigate, useAction } from "../ui.js";
 
 // The server only checks these at registration, after the vault is funded, so they are enforced here first.
@@ -92,16 +92,13 @@ function Form({ session, onStart }: { session: Session; onStart(d: CreateDraft):
     const [timeoutText, setTimeoutText] = useState<string | null>(null);
     const [mode, setMode] = useState<"self" | "paste">("self");
     const [pasted, setPasted] = useState("");
-    const [generated, setGenerated] = useState<{ publicKey: string; secretKey: string } | null>(null);
-    const [saved, setSaved] = useState(false);
-    const keygen = useAction();
     const unit = BigInt(config.unitSats);
     const lock = VAULT_BASE_SATS + unit;
     const now = Date.now() / 1000;
     const closeUnix = unixOf(closeAt);
     const timeoutAt = timeoutText ?? (Number.isFinite(closeUnix) ? localInput(new Date((closeUnix + DEFAULT_TIMEOUT_DAYS * 86400) * 1000)) : "");
     const timeoutUnix = unixOf(timeoutAt);
-    const oracleKey = mode === "self" ? generated?.publicKey ?? "" : pasted.trim().toLowerCase();
+    const oracleKey = mode === "self" ? session.pubkey : pasted.trim().toLowerCase();
     const a = labelA.trim();
     const b = labelB.trim();
 
@@ -112,7 +109,6 @@ function Form({ session, onStart }: { session: Session; onStart(d: CreateDraft):
     if (category.trim().length > MAX_LABEL) problems.push(`Category: at most ${MAX_LABEL} characters`);
     if (!(closeUnix >= now + MIN_LEAD_SECONDS && closeUnix <= now + MAX_HORIZON_SECONDS)) problems.push("Close time: between 5 minutes and 30 days from now");
     if (!(timeoutUnix > closeUnix && timeoutUnix <= closeUnix + MAX_TIMEOUT_AFTER_CLOSE_SECONDS)) problems.push("Timeout: after the close time and at most 365 days after it");
-    if (mode === "self" && !(generated && saved)) problems.push("Oracle: generate your key and confirm you saved its secret");
     if (mode === "paste" && !isXOnlyKey(oracleKey)) problems.push("Oracle: paste a valid 32-byte x-only public key (64 hex characters)");
     if (holdings && holdings.plainSats < lock + CARRIER_SATS) problems.push(`Funds: needs ${sats(lock + CARRIER_SATS)} in spendable coins; you have ${sats(holdings.plainSats)}`);
 
@@ -170,26 +166,9 @@ function Form({ session, onStart }: { session: Session; onStart(d: CreateDraft):
             <Panel title="Oracle">
                 <fieldset className="choices">
                     <legend>Who decides the outcome</legend>
-                    <label className="radio"><input type="radio" name="oracle-mode" checked={mode === "self"} onChange={() => setMode("self")} /> You resolve it, with a separate key generated in this browser</label>
+                    <label className="radio"><input type="radio" name="oracle-mode" checked={mode === "self"} onChange={() => setMode("self")} /> You resolve it with your wallet key (your recovery phrase restores it)</label>
                     <label className="radio"><input type="radio" name="oracle-mode" checked={mode === "paste"} onChange={() => setMode("paste")} /> Someone else resolves it: paste their oracle public key</label>
                 </fieldset>
-                {mode === "self" && (generated ? (
-                    <div className="stack">
-                        <dl className="kv">
-                            <dt>Public key</dt><dd className="mono break">{generated.publicKey}</dd>
-                            <dt>Secret key</dt><dd><span className="mono break secret">{generated.secretKey}</span> <Copy text={generated.secretKey} label="Copy secret" /></dd>
-                        </dl>
-                        <p className="notice warn">Stored encrypted with this wallet, but your recovery phrase does not restore it. Without this secret the market can end only through its timeout.</p>
-                        <label className="check"><input type="checkbox" checked={saved} onChange={(e) => setSaved(e.target.checked)} /> I saved the secret key somewhere safe.</label>
-                    </div>
-                ) : (
-                    <>
-                        <button type="button" className="btn" disabled={keygen.busy} onClick={() => void keygen.run(async () => { setGenerated(await addOracleKey(session.keystore)); return null; })}>
-                            Generate oracle key
-                        </button>
-                        <ActionStatus s={keygen} />
-                    </>
-                ))}
                 {mode === "paste" && (
                     <label className="field">
                         <span>Oracle public key (x-only, hex)</span>
