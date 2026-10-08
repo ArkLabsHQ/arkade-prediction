@@ -1,17 +1,20 @@
-# LIVE_POLYMARKET=1 pnpm exec vitest run --config vitest.e2e.config.ts test/e2e/polymarket-live.test.ts  (2026-10-08T07:33Z)
+# LIVE_POLYMARKET=1 pnpm exec vitest run --config vitest.e2e.config.ts test/e2e/polymarket-live.test.ts  (3 attestor processes, quorum 2; 2026-10-08T11:38Z)
  RUN  v3.2.7 C:/Git/arkade-prediction
-{"ts":"2026-10-08T07:25:36.475Z","service":"attestor","msg":"listening","port":37411,"pubkey":"a67a7e597d9cf4d0b5713930a3a53a3decce53438a5d44674d92c804c8bce9d6","epoch":1}
+{"ts":"2026-10-08T11:30:46.834Z","service":"attestor","msg":"listening","port":37421,"pubkey":"6b31bb63acc6424cf3921635254193cd9511135b3c8bd2540212da083d541ff6","epoch":1}
+{"ts":"2026-10-08T11:30:49.514Z","service":"attestor","msg":"listening","port":37422,"pubkey":"e8dfcee9887fcadfeb907ca1da8f9f280614f3f179ab20c98a4c5f44298d218a","epoch":1}
+{"ts":"2026-10-08T11:30:56.753Z","service":"attestor","msg":"listening","port":37423,"pubkey":"d5b7a905f0dc62bcc2e0e30bccdaa133a31fcc0d2c4b81149d054f01fefaca2b","epoch":1}
 stdout | test/e2e/polymarket-live.test.ts > polymarket import and attested settlement (LIVE network) > imports a live market and settles a historical replay from finalized Polygon state
-import pass {"pages":3,"seen":300,"eligible":5,"activated":["bf786539437a97c1947d9935e7a5b500"],"ineligibleByCode":{"horizon":19,"neg-risk":276}}
+import pass {"pages":3,"seen":300,"eligible":5,"activated":["e1697f2213eac0c2a5392e2f4af085cd"],"ineligibleByCode":{"horizon":19,"neg-risk":276}}
 stdout | test/e2e/polymarket-live.test.ts > polymarket import and attested settlement (LIVE network) > imports a live market and settles a historical replay from finalized Polygon state
 imported live market 593972: Will Bernie endorse James Talarico for TX-Sen by Nov 2 2026 ET? [Yes / No]
-{"ts":"2026-10-08T07:27:57.038Z","service":"attestor","msg":"attested","market":"7312de7e276c77e1d0b003ce99c7c6e9","outcome":"no","block":{"number":"95159508","hash":"0x1433f635af2fd914d094dc5efd9422ba1ae2ae82db055b9218ce774069a511de"}}
+{"ts":"2026-10-08T11:34:02.920Z","service":"attestor","msg":"attested","market":"af5114d0942d3a8d8fe7134362796ebb","outcome":"no","block":{"number":"95169339","hash":"0xa621b2780c1947f02cf38690d0d06a87d1927d56d05d219fee4943a88346a906"}}
+{"ts":"2026-10-08T11:34:16.209Z","service":"attestor","msg":"attested","market":"af5114d0942d3a8d8fe7134362796ebb","outcome":"no","block":{"number":"95169339","hash":"0xa621b2780c1947f02cf38690d0d06a87d1927d56d05d219fee4943a88346a906"}}
 stdout | test/e2e/polymarket-live.test.ts > polymarket import and attested settlement (LIVE network) > imports a live market and settles a historical replay from finalized Polygon state
-replay resolved NO at Polygon block 95159508 0x1433f635af2fd914d094dc5efd9422ba1ae2ae82db055b9218ce774069a511de
- ✓ test/e2e/polymarket-live.test.ts (1 test) 153862ms
-   ✓ polymarket import and attested settlement (LIVE network) > imports a live market and settles a historical replay from finalized Polygon state  153761ms
+replay resolved NO at Polygon block 95169339 0xa621b2780c1947f02cf38690d0d06a87d1927d56d05d219fee4943a88346a906; identical evidence signed by 2 of 3 attestors
+ ✓ test/e2e/polymarket-live.test.ts (1 test) 241700ms
+   ✓ polymarket import and attested settlement (LIVE network) > imports a live market and settles a historical replay from finalized Polygon state  241406ms
  Test Files  1 passed (1)
       Tests  1 passed (1)
-   Start at  09:25:23
-   Duration  160.25s (transform 688ms, setup 0ms, collect 1.73s, tests 153.86s, environment 0ms, prepare 191ms)
+   Start at  13:26:29
+   Duration  477.26s (transform 2.58s, setup 0ms, collect 4.34s, tests 241.70s, environment 0ms, prepare 8.86s)
 EXIT=0

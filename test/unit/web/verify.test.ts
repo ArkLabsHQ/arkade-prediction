@@ -4,7 +4,7 @@ import { hex } from "@scure/base";
 import { beforeAll, describe, expect, it } from "vitest";
 import { assetIdOf } from "../../../src/core/assets.js";
 import { bindingOf, type MarketDefinition } from "../../../src/core/definition.js";
-import { genesisPacket, type ArkadeClient, type MarketAssets, type VaultTerms } from "../../../src/core/market.js";
+import { genesisPacket, oracleSlots, type ArkadeClient, type MarketAssets, type VaultTerms } from "../../../src/core/market.js";
 import { offerContract, type OfferTerms, type Side } from "../../../src/core/offers.js";
 import { offerTermsToJson, termsFromJson, termsToJson, type ConfigJson, type MarketJson, type OfferJson, type Outcome } from "../../../src/shared/api.js";
 import type { Chain } from "../../../src/web/chain.js";
@@ -37,8 +37,8 @@ function served(mirror = false) {
         closeAtUnix: String(CLOSE), timeoutAtUnix: String(TIMEOUT), source: mirror ? SOURCE : null,
     };
     const terms = (assets: MarketAssets): VaultTerms => ({
-        assets, unitSats: UNIT, capSats: BASE + 100n * UNIT, oracleKey: hex.decode(oracleKey),
-        binding: bindingOf({ ...dep, marketId: id, definition, unitSats: UNIT, assets, oracleKeys: [oracleKey], oracleEpoch: 1 }),
+        assets, unitSats: UNIT, capSats: BASE + 100n * UNIT, oracleKeys: oracleSlots([hex.decode(oracleKey)], 1), oracleThreshold: 1,
+        binding: bindingOf({ ...dep, marketId: id, definition, unitSats: UNIT, assets, oracleKeys: [oracleKey, oracleKey, oracleKey], oracleThreshold: 1, oracleEpoch: 1 }),
         closeAt: BigInt(CLOSE), timeoutAt: BigInt(TIMEOUT), exitDelaySeconds: 512n,
     });
     const f = fundedMarket(ark, { terms });
@@ -49,7 +49,7 @@ function served(mirror = false) {
             provider: "polymarket", sourceId: "123", url: "https://polymarket.com/event/x", slug: "x", protocol: "v1", conditionId: "0x01",
             questionId: "0x02", resolver: "0xbe", resolutionSource: "", referencePrices: null, sourceStatus: null, clarifications: [], binding: SOURCE,
         } : null,
-        oracle: { policy: "external-key", keys: [oracleKey], threshold: 1, epoch: 1, label: "" },
+        oracle: { policy: "external-key", keys: [oracleKey, oracleKey, oracleKey], threshold: 1, epoch: 1, label: "" },
         terms: termsToJson(f.terms), genesisTxid: f.genesisTxid, vaultTxid: f.vaultTxid,
         vault: { phase: "open", outcome: null, valueSats: null, outpoint: null, expiresAt: null },
         resolution: { status: "pending", detail: "", certificate: null },
@@ -153,7 +153,7 @@ describe("browser audit before money moves", () => {
     it("blocks a forged CTRL even when the server recomputes the binding for it", async () => {
         const { m, chain } = served();
         const forged = { ...m.terms!.assets, ctrl: assetIdOf(txWith([{ script: p2tr(), amount: 330n }], genesisPacket("x", 0, 1n).groups).id, 0) };
-        const binding = bindingOf({ ...dep, marketId: m.id, definition: displayedDefinition(m), unitSats: UNIT, assets: forged, oracleKeys: m.oracle.keys, oracleEpoch: 1 });
+        const binding = bindingOf({ ...dep, marketId: m.id, definition: displayedDefinition(m), unitSats: UNIT, assets: forged, oracleKeys: m.oracle.keys, oracleThreshold: m.oracle.threshold, oracleEpoch: 1 });
         const lie = { ...m, terms: { ...m.terms!, assets: forged, binding: hex.encode(binding) } };
         expect(() => checkDisplayedBinding(lie, dep)).not.toThrow();
         await expect(verifiedTerms(chain, config, lie)).rejects.toThrow(/asset-ids/);

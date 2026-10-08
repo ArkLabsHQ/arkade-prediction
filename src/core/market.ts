@@ -29,12 +29,41 @@ export interface VaultTerms {
     assets: MarketAssets;
     unitSats: bigint;
     capSats: bigint;
-    oracleKey: Uint8Array;
+    /** One key per vault slot; a market with fewer attestors repeats a key (see `oracleSlots`). */
+    oracleKeys: Uint8Array[];
+    oracleThreshold: number;
     binding: Uint8Array;
     closeAt: bigint;
     timeoutAt: bigint;
     /** CSV (seconds, multiple of 512, >= the operator's unilateral exit delay) of the unspendable exit leaf. */
     exitDelaySeconds: bigint;
+}
+
+export const ORACLE_SLOTS = 3;
+
+/**
+ * Fills the vault's attestor slots. Threshold 1 may repeat keys (the last one pads); a higher threshold needs
+ * three distinct keys, because the vault counts slots and refuses repeated keys above threshold 1.
+ */
+export function oracleSlots(keys: Uint8Array[], threshold: number): Uint8Array[] {
+    if (keys.length === 0 || keys.length > ORACLE_SLOTS) throw new Error(`1 to ${ORACLE_SLOTS} attestor keys`);
+    if (keys.some((k) => k.length !== 32)) throw new Error("attestor keys are 32-byte x-only keys");
+    if (!Number.isInteger(threshold) || threshold < 1 || threshold > ORACLE_SLOTS) throw new Error(`threshold must be 1..${ORACLE_SLOTS}`);
+    const distinct = new Set(keys.map((k) => hex.encode(k))).size;
+    if (threshold > 1 && distinct !== ORACLE_SLOTS) throw new Error(`a threshold above 1 needs ${ORACLE_SLOTS} distinct attestor keys`);
+    return Array.from({ length: ORACLE_SLOTS }, (_, i) => keys[Math.min(i, keys.length - 1)]!);
+}
+
+/** Puts each attestor's signature in its own slot (once, even if its key repeats); other slots stay empty. */
+export function slotSignatures(terms: Pick<VaultTerms, "oracleKeys">, signed: { signer: string; signature: Uint8Array }[]): Uint8Array[] {
+    const used = new Set<string>();
+    return terms.oracleKeys.map((key) => {
+        const k = hex.encode(key);
+        const s = used.has(k) ? undefined : signed.find((x) => x.signer === k);
+        if (!s) return new Uint8Array(0);
+        used.add(k);
+        return s.signature;
+    });
 }
 
 export type ArkadeClient = Awaited<ReturnType<typeof arkade.Arkade.connect>>;
@@ -65,7 +94,9 @@ export function resolvedVault(ark: ArkadeClient, terms: VaultTerms, outcome: Bin
 }
 
 export function marketContracts(ark: ArkadeClient, terms: VaultTerms) {
-    if (terms.oracleKey.length !== 32 || terms.binding.length !== 32) throw new Error("oracle key and binding are 32 bytes");
+    if (terms.binding.length !== 32) throw new Error("binding is 32 bytes");
+    const oracles = oracleSlots(terms.oracleKeys, terms.oracleThreshold);
+    if (terms.oracleKeys.length !== ORACLE_SLOTS) throw new Error(`terms carry exactly ${ORACLE_SLOTS} attestor slots`);
     if (terms.unitSats <= 0n || terms.unitSats % 2n !== 0n) throw new Error("unit must be a positive even number of sats");
     const resolved = {
         yes: resolvedVault(ark, terms, "yes"),
@@ -76,7 +107,10 @@ export function marketContracts(ark: ArkadeClient, terms: VaultTerms) {
         ...assetArgs(terms.assets),
         unit: terms.unitSats,
         capValue: terms.capSats,
-        oracle: terms.oracleKey,
+        "oracles.0": oracles[0]!,
+        "oracles.1": oracles[1]!,
+        "oracles.2": oracles[2]!,
+        threshold: BigInt(terms.oracleThreshold),
         binding: terms.binding,
         closeAt: terms.closeAt,
         timeoutAt: terms.timeoutAt,

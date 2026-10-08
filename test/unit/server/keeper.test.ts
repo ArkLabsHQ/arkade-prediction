@@ -225,7 +225,8 @@ describe("resolution planning", () => {
         insertMarket(h.db, { id: "early", closeAt: nowS + 600 });
         insertMarket(h.db, { id: "closed", closeAt: nowS - 5 });
         for (const id of ["early", "closed"]) {
-            run(h.db, "INSERT INTO certificates(market_id, outcome, numerators, denominator, evidence_digest, signature, signer, issued_at) VALUES (?, 'yes', '[\"1\",\"0\"]', '1', 'e', 's', 'k', 't')", id);
+            run(h.db, "INSERT INTO certificates(market_id, outcome, numerators, denominator, evidence_digest, signature, signer, issued_at) VALUES (?, 'yes', '[\"1\",\"0\"]', '1', ?, ?, ?, 't')",
+                id, "cd".repeat(32), "ab".repeat(64), "22".repeat(32));
         }
         await inner(h.keeper).plan();
         expect(h.wf.list({ state: "pending" }).filter((w) => w.kind === "resolve").map((w) => w.marketId)).toEqual(["closed"]);

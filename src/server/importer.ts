@@ -1,5 +1,7 @@
 import { randomBytes } from "node:crypto";
+import { hex } from "@scure/base";
 import { definitionHash } from "../core/definition.js";
+import { oracleSlots } from "../core/market.js";
 import { getMeta, now, one, run, setMeta, tx } from "./db.js";
 import type { Deps } from "./markets.js";
 import { importedDefinition } from "./sources/definition.js";
@@ -18,6 +20,8 @@ export interface ImportResult {
  * Discovery is separate from activation: every page is persisted with its eligibility verdict, and only
  * eligible markets up to IMPORT_MAX_ACTIVE are activated (operator genesis via the activate workflow).
  */
+const attestorSlots = (cfg: Deps["cfg"]) => oracleSlots(cfg.ORACLE_PUBKEYS.map((k) => hex.decode(k)), cfg.ORACLE_THRESHOLD).map((k) => hex.encode(k));
+
 export async function importOnce(d: Deps & { wf: Workflows; provider: MarketSourceProvider; timeoutDays: number }): Promise<ImportResult> {
     const { cfg, db } = d;
     const result: ImportResult = { pages: 0, seen: 0, eligible: 0, activated: [], ineligibleByCode: {} };
@@ -78,10 +82,10 @@ function activate(d: Deps & { wf: Workflows; timeoutDays: number }, m: SourceMar
     const t = now();
     run(d.db, `INSERT INTO markets(id, kind, status, question, rules, outcomes, category, close_at, timeout_at, source_provider, source_id,
                source_version, source_snapshot, profile, oracle_policy, oracle_keys, oracle_threshold, oracle_epoch, definition_hash, created_at, updated_at)
-               VALUES (?, 'polymarket', 'activating', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'platform-attestor', ?, 1, ?, ?, ?, ?)`,
+               VALUES (?, 'polymarket', 'activating', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'platform-attestor', ?, ?, ?, ?, ?, ?)`,
         id, def.question, def.rules, JSON.stringify(def.outcomes), def.category, Number(def.closeAtUnix), Number(def.timeoutAtUnix),
         m.provider, m.sourceId, m.versionHash, JSON.stringify({ ...m, binding: def.source }), profile,
-        JSON.stringify([d.cfg.ORACLE_PUBKEYS[0]]), d.cfg.ORACLE_EPOCH, definitionHash(def), t, t);
+        JSON.stringify(attestorSlots(d.cfg)), d.cfg.ORACLE_THRESHOLD, d.cfg.ORACLE_EPOCH, definitionHash(def), t, t);
     d.wf.enqueue(`activate:${id}`, "activate", id, {});
     d.bus.publish("market", id, { status: "activating", source: m.sourceId });
     return id;
@@ -104,10 +108,10 @@ export async function replayHistorical(d: Deps & { wf: Workflows; provider: Mark
     const t = now();
     run(d.db, `INSERT INTO markets(id, kind, status, question, rules, outcomes, category, close_at, timeout_at, source_provider, source_id,
                source_version, source_snapshot, profile, oracle_policy, oracle_keys, oracle_threshold, oracle_epoch, definition_hash, created_at, updated_at)
-               VALUES (?, 'polymarket', 'activating', ?, ?, ?, 'historical replay', ?, ?, ?, ?, ?, ?, ?, 'platform-attestor', ?, 1, ?, ?, ?, ?)`,
+               VALUES (?, 'polymarket', 'activating', ?, ?, ?, 'historical replay', ?, ?, ?, ?, ?, ?, ?, 'platform-attestor', ?, ?, ?, ?, ?, ?)`,
         id, def.question, def.rules, JSON.stringify(def.outcomes), Number(def.closeAtUnix), Number(def.timeoutAtUnix),
         m.provider, `${m.sourceId}#replay-${id.slice(0, 8)}`, m.versionHash, JSON.stringify({ ...m, binding: def.source }), "polymarket-ctf-v1-binary",
-        JSON.stringify([d.cfg.ORACLE_PUBKEYS[0]]), d.cfg.ORACLE_EPOCH, definitionHash(def), t, t);
+        JSON.stringify(attestorSlots(d.cfg)), d.cfg.ORACLE_THRESHOLD, d.cfg.ORACLE_EPOCH, definitionHash(def), t, t);
     d.wf.enqueue(`activate:${id}`, "activate", id, {});
     return id;
 }

@@ -88,6 +88,21 @@ a changed operator or emulator key means new contract scripts.
 
 Not yet executed on Mutinynet: steps 6 to 8 (no hosted deployment has been made).
 
+### Alternative: Dokploy Applications (Dockerfile build)
+
+One Application per process, all built from the same repository and `Dockerfile`:
+
+- **app**: default command. Environment tab takes plain values (no `${VAR}` indirection). Advanced → Mounts:
+  a named volume at `/data`, and file mounts at `/run/secrets/<name>` for the `*_FILE` secrets. Domain on
+  container port `37400`. One replica: a second one only waits for the writer lease.
+- **attestor** (one Application per attestor key): command override `node dist/oracle/main.js`, its own volume
+  at `/data`, `ORACLE_SECRET_KEY_FILE`, `ORACLE_PORT=37410`, `APM_NETWORK`, `ARK_SIGNER_XONLY`, `EMULATOR_PUBKEY`,
+  `POLYGON_RPC_URLS`, `POLYMARKET_RESOLVERS`. No public domain needed; set the app's `ORACLE_URLS` to the
+  attestors' internal addresses, `ORACLE_PUBKEYS` to their keys and `ORACLE_THRESHOLD` (2 with three attestors).
+
+Not verified: that the Dokploy Application form offers the command override and that Applications reach each other
+by name on `dokploy-network`; if not, give the attestor an internal domain and use that URL.
+
 ## Health and monitoring
 
 - `GET /api/health/live`: process up (container healthcheck; never restarts the writer for a slow dependency).
@@ -150,8 +165,11 @@ that can be edited in place. The server refuses to start when the volume's recor
 2. Let open markets resolve or time out, and let holders redeem; makers cancel offers.
 3. Start a new deployment (`APM_DEPLOYMENT_ID`, new volume) against the new endpoints.
 
-Attestor key rotation for live markets is not implemented: the server talks to one attestor URL, and each market
-is bound to the key that was current at activation. Rotate only when no market bound to the old key is unresolved.
+Attestors: `ORACLE_PUBKEYS` (1 to 3 keys) and `ORACLE_THRESHOLD` are committed into each imported market at
+activation; `ORACLE_URLS` (plus `ORACLE_URL`) lists where the resolver asks for certificates. Run each attestor on
+separate infrastructure; `compose.attestors.yaml` adds two local ones for testing. Key rotation for live markets is
+not implemented: each market keeps the set current at its activation, so keep those attestors reachable until it
+resolves.
 
 ## Limits
 

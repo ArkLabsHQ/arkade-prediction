@@ -40,7 +40,7 @@ describe("attestor definition checks", () => {
     it("accepts the definition the server builds for a historical replay", async () => {
         const db = openDb(join(mkdtempSync(join(tmpdir(), "apm-replay-")), "apm.sqlite"));
         const d = {
-            cfg: { APM_NETWORK: "regtest", ORACLE_PUBKEYS: ["aa".repeat(32)], ORACLE_EPOCH: 1 } as never,
+            cfg: { APM_NETWORK: "regtest", ORACLE_PUBKEYS: ["aa".repeat(32)], ORACLE_THRESHOLD: 1, ORACLE_EPOCH: 1 } as never,
             db, bus: new EventBus(db), net: {} as never, wf: { enqueue: () => ({}) } as never, provider, timeoutDays: 60,
         };
         const row = getMarket(db, await replayHistorical(d, "2758339"))!;

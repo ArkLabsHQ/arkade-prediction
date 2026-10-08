@@ -17,9 +17,9 @@ Updated: 2026-10-08 (session 1). Branch `main`, local commits only (nothing push
   `ARKADEC=<path> node contracts/build.mjs --check` passes (artifacts match sources).
 
 ## Last gate (2026-10-08, final code; evidence in `docs/evidence/`)
-- `pnpm exec tsc --noEmit -p .` exit 0; unit 92/92 (baseline before reviews: 21/21); `contracts/build.mjs --check`,
+- `pnpm exec tsc --noEmit -p .` exit 0; unit 101/101 (baseline before reviews: 21/21); `contracts/build.mjs --check`,
   `src/web/fills.check.ts`, `pnpm run web:build` pass.
-- Regtest e2e 12 passed, 2 opt-in skipped (`e2e-regtest.txt`), incl. halted-market and finalize-recovery; live Polymarket e2e pass; Docker redeploy/backup/
+- Regtest e2e 13 files (incl. threshold-oracle), 2 opt-in skipped (`e2e-regtest.txt`), incl. halted-market and finalize-recovery; live Polymarket e2e pass; Docker redeploy/backup/
   restore pass (stale backup remaining=4 reconciled to 3); `node scripts/regtest.mjs up` + `demo` → DEMO OK.
 - Mutinynet read-only preflight 18/18; live early-resolution screen check pass.
 - Flakes named and fixed in test infrastructure (not app code): emulator log latency in the covenant-refusal
@@ -30,5 +30,5 @@ Updated: 2026-10-08 (session 1). Branch `main`, local commits only (nothing push
 
 ## Not done (needs authorization or is out of scope)
 - Mutinynet transactions (funded test wallets + authorization), hosted Dokploy deployment.
-- Threshold oracle, categorical markets, nonzero-fee renewal (PLAN C4, D4).
+- Categorical markets, nonzero-fee renewal (PLAN D4).
 - Residual risks: `docs/threat-model.md` §7.

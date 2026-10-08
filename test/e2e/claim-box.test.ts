@@ -51,7 +51,7 @@ describe("claim box: owner offline through renewal and payout", () => {
 
         // Oracle resolves YES; a keeper pays Dana. Paying anyone else, or claiming without a resolved vault, is refused.
         const evidence = evidenceDigest({ fixture: "claim-box", outcome: "YES" });
-        await resolveMarket(ctx, m.terms, "yes", evidence, signAttestation(m.oracleSecret, attestationMessage(m.binding, evidence, BINARY_VECTORS.yes)));
+        await resolveMarket(ctx, m.terms, "yes", evidence, [signAttestation(m.oracleSecret, attestationMessage(m.binding, evidence, BINARY_VECTORS.yes))]);
         await waitFor(async () => (await spendableCoins(ctx, m.resolved.yes.pkScript)).length === 1, { what: "resolved" });
         const vaultNow = (await spendableCoins(ctx, m.resolved.yes.pkScript))[0]!;
         await expectCovenantRejection(execute(ctx, [

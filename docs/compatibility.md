@@ -14,7 +14,7 @@ Checked on 2026-10-07. "Tested on pins" means an executed regtest e2e test again
 | arkade-regtest | submodule `regtest/` @ `8afc1eb` | `.gitmodules` |
 | TypeScript SDK | `@arkade-os/sdk` 0.4.78 (exact) | `package.json`, `pnpm-lock.yaml` |
 | Compiler | `arkadec` from arkade-os/compiler @ `e9703e7` (no stable release exists) | `contracts/build.mjs` |
-| Contract artifacts | fingerprints `marketVault sha256:bb6bc1f8…`, `resolvedVault sha256:4d6bd198…` | `contracts/artifacts/*.json` |
+| Contract artifacts | fingerprints `marketVault sha256:fc778b17…`, `resolvedVault sha256:4d6bd198…` | `contracts/artifacts/*.json` |
 | Runtime | `node:24.16.0-bookworm-slim@sha256:2c87ef9b…a203` | `Dockerfile` |
 | Mutinynet operator | signer `03301078…127a`, emulator `03f823b9…889a`, exit delay 2048 s, zero intent fees | `.env.mutinynet.example` |
 
@@ -40,7 +40,7 @@ new scripts: the server refuses to start when a pin or the stored volume identit
 | Nonzero intent fees during renewal | no | no | fees are zero (preflight) | needs a keeper fee input |
 | Polymarket CTF v1 binary import + finalized-payout verification | yes | live run (opt-in) | n/a (Polygon) | polymarket-live.test.ts, `docs/research/evidence/polymarket/` |
 | Polymarket neg-risk / categorical markets | no | rejected at eligibility (`neg-risk`) | — | test/unit/sources/polymarket.test.ts |
-| Threshold oracle (m-of-n) | no | — | — | 1-of-1 attestor per market |
+| Threshold oracle (k-of-3 attestor slots) | yes | yes | NOT RUN | threshold-oracle.test.ts; live: 3 attestor processes, quorum 2 |
 | Operator signer rotation for existing covenants | no | — | deprecated signer listed | not exercised |
 | Lightning / swaps | no | — | — | out of scope |
 

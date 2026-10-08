@@ -80,6 +80,12 @@ async function main(): Promise<void> {
     const deps = { cfg, db, net, bus, devOracleKey };
     const keeper = new Keeper({ ...deps, wf, lease, operator: operator?.party as Party | undefined, lp: lp?.party, keeperScript, log });
 
+    const attestorHealth = async () => {
+        if (cfg.ORACLE_URLS.length === 0) return { ok: true, detail: "not configured" };
+        const up = await Promise.all(cfg.ORACLE_URLS.map((u) => fetch(`${u}/info`, { signal: AbortSignal.timeout(3000) }).then((r) => r.ok, () => false)));
+        const n = up.filter(Boolean).length;
+        return { ok: n >= cfg.ORACLE_THRESHOLD, detail: `${n} of ${cfg.ORACLE_URLS.length} attestors reachable (quorum ${cfg.ORACLE_THRESHOLD})` };
+    };
     const health = async () => {
         const check = async (p: Promise<unknown>) => p.then(() => ({ ok: true }), (e) => ({ ok: false, detail: String(e).slice(0, 200) }));
         return {
@@ -87,7 +93,7 @@ async function main(): Promise<void> {
             arkd: await check(net.arkProvider.getInfo()),
             emulator: await check(net.emulator.getInfo()),
             writer: { ok: lease.held, detail: lease.held ? "holding writer lease" : "waiting for writer lease" },
-            oracle: cfg.ORACLE_URL ? await check(fetch(`${cfg.ORACLE_URL}/info`, { signal: AbortSignal.timeout(3000) }).then((r) => { if (!r.ok) throw new Error(String(r.status)); })) : { ok: true, detail: "not configured" },
+            oracle: await attestorHealth(),
         };
     };
     const overview = async () => ({

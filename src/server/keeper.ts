@@ -7,7 +7,7 @@ import {
     timeoutMarket, type Ctx, type LiveOffer, type Party,
 } from "../core/actions.js";
 import { bindingOf, type MarketDefinition } from "../core/definition.js";
-import { marketContracts } from "../core/market.js";
+import { marketContracts, oracleSlots } from "../core/market.js";
 import { offerContract } from "../core/offers.js";
 import { renewCovenantVtxos, type RenewTarget } from "../core/renewal.js";
 import { coinFromJson, offerTermsFromJson, offerTermsToJson, termsToJson, type CoinJson, type OfferTermsJson } from "../shared/api.js";
@@ -16,6 +16,7 @@ import type { WriterLease } from "./lease.js";
 import { auditGenesis, getMarket, marketTerms, reconcileVault, type Deps, type MarketRow } from "./markets.js";
 import { getOffer, openOffers, recordTrade, refreshOffer, registerOffer } from "./offers.js";
 import { watchedBoxes } from "./boxes.js";
+import { quorums } from "./certificates.js";
 import { autoClaim, claimBoxContract } from "../core/claimBox.js";
 import { backoffMs, type Workflow, type Workflows } from "./workflows.js";
 
@@ -98,13 +99,11 @@ export class Keeper {
         if (this.d.operator) {
             for (const m of all<MarketRow>(db, "SELECT id FROM markets WHERE status = 'activating'")) wf.enqueue(`activate:${m.id}`, "activate", m.id, {});
         }
-        for (const m of all<MarketRow & { outcome: string }>(db,
-            `SELECT m.*, c.outcome FROM markets m JOIN certificates c ON c.market_id = m.id
-             WHERE m.vault_phase = 'open' AND m.terms IS NOT NULL AND m.close_at <= ?`, nowS)) {
-            wf.enqueue(`resolve:${m.id}`, "resolve", m.id, { outcome: m.outcome });
-        }
-        for (const m of all<MarketRow>(db, "SELECT * FROM markets WHERE vault_phase = 'open' AND timeout_at > 0 AND timeout_at <= ? AND NOT EXISTS (SELECT 1 FROM certificates c WHERE c.market_id = markets.id)", nowS)) {
-            wf.enqueue(`timeout:${m.id}`, "timeout", m.id, {});
+        for (const m of all<MarketRow>(db, "SELECT * FROM markets WHERE vault_phase = 'open' AND terms IS NOT NULL AND close_at <= ?", nowS)) {
+            const terms = marketTerms(m);
+            const reached = terms && quorums(db, m.id, terms)[0];
+            if (reached) wf.enqueue(`resolve:${m.id}`, "resolve", m.id, { outcome: reached.outcome });
+            else if (terms && m.timeout_at > 0 && m.timeout_at <= nowS) wf.enqueue(`timeout:${m.id}`, "timeout", m.id, {});
         }
         const offers = openOffers(db);
         for (const o of offers) {
@@ -248,11 +247,10 @@ export class Keeper {
         const terms = market && marketTerms(market);
         switch (wf.kind) {
             case "resolve": {
-                const cert = all<{ outcome: "yes" | "no" | "invalid"; evidence_digest: string; signature: string }>(this.d.db,
-                    "SELECT outcome, evidence_digest, signature FROM certificates WHERE market_id = ? ORDER BY issued_at LIMIT 1", wf.marketId)[0];
-                if (!cert || !terms) throw new Error("certificate or market not found");
-                const { txid } = await resolveMarket(ctx, terms, cert.outcome, hex.decode(cert.evidence_digest), hex.decode(cert.signature));
-                run(this.d.db, "UPDATE markets SET resolution_status = 'resolved', resolution_detail = ?, updated_at = ? WHERE id = ?", `resolved ${cert.outcome} in ${txid}`, now(), wf.marketId);
+                const q = terms && quorums(this.d.db, wf.marketId!, terms)[0];
+                if (!q || !terms) throw new Error("attestation quorum or market not found");
+                const { txid } = await resolveMarket(ctx, terms, q.outcome, hex.decode(q.evidence), q.signatures);
+                run(this.d.db, "UPDATE markets SET resolution_status = 'resolved', resolution_detail = ?, updated_at = ? WHERE id = ?", `resolved ${q.outcome} in ${txid}`, now(), wf.marketId);
                 return txid;
             }
             case "timeout": {
@@ -403,8 +401,9 @@ export class Keeper {
         const operator = this.d.operator;
         const market = wf.marketId ? getMarket(this.d.db, wf.marketId) : undefined;
         if (!operator || !market) throw new Error("operator wallet or market missing");
-        const oracleKey = this.d.cfg.ORACLE_PUBKEYS[0];
-        if (!oracleKey) throw new Error("ORACLE_PUBKEYS is empty");
+        if (this.d.cfg.ORACLE_PUBKEYS.length === 0) throw new Error("ORACLE_PUBKEYS is empty");
+        const oracleKeys = oracleSlots(this.d.cfg.ORACLE_PUBKEYS.map((k) => hex.decode(k)), this.d.cfg.ORACLE_THRESHOLD);
+        const oracleThreshold = this.d.cfg.ORACLE_THRESHOLD;
         let p = wf.payload as { genesisTxid?: string; vaultTxid?: string; inputs?: string[] };
         if (!p.genesisTxid) {
             this.mark(wf, { step: "genesisTxid" });
@@ -420,11 +419,11 @@ export class Keeper {
         const unit = BigInt(this.d.cfg.MARKET_UNIT_SATS);
         const binding = bindingOf({
             network: this.d.cfg.APM_NETWORK, arkSigner: this.d.net.ark.serverKey, emulatorSigner: this.d.net.ark.emulatorKey!,
-            marketId: market.id, definition, unitSats: unit, assets, oracleKeys: [oracleKey], oracleEpoch: this.d.cfg.ORACLE_EPOCH,
+            marketId: market.id, definition, unitSats: unit, assets, oracleKeys: oracleKeys.map((k) => hex.encode(k)), oracleThreshold, oracleEpoch: this.d.cfg.ORACLE_EPOCH,
         });
         const terms = {
             assets, unitSats: unit, capSats: BigInt(this.d.cfg.MARKET_BASE_SATS) + unit * BigInt(this.d.cfg.MARKET_CAP_SETS),
-            oracleKey: hex.decode(oracleKey), binding, closeAt: BigInt(market.close_at), timeoutAt: BigInt(market.timeout_at),
+            oracleKeys, oracleThreshold, binding, closeAt: BigInt(market.close_at), timeoutAt: BigInt(market.timeout_at),
             exitDelaySeconds: this.d.net.exitDelaySeconds,
         };
         if (!p.vaultTxid) {
@@ -435,8 +434,8 @@ export class Keeper {
             p = { ...p, vaultTxid: txid };
         }
         const { baseSats } = await auditGenesis(this.d.net, terms, p.genesisTxid!, p.vaultTxid!);
-        run(this.d.db, "UPDATE markets SET status = 'open', terms = ?, base_sats = ?, genesis_txid = ?, vault_txid = ?, oracle_keys = ?, oracle_epoch = ?, updated_at = ? WHERE id = ? AND status = 'activating'",
-            JSON.stringify(termsToJson(terms)), String(baseSats), p.genesisTxid!, p.vaultTxid!, JSON.stringify([oracleKey]), this.d.cfg.ORACLE_EPOCH, now(), market.id);
+        run(this.d.db, "UPDATE markets SET status = 'open', terms = ?, base_sats = ?, genesis_txid = ?, vault_txid = ?, oracle_keys = ?, oracle_threshold = ?, oracle_epoch = ?, updated_at = ? WHERE id = ? AND status = 'activating'",
+            JSON.stringify(termsToJson(terms)), String(baseSats), p.genesisTxid!, p.vaultTxid!, JSON.stringify(oracleKeys.map((k) => hex.encode(k))), oracleThreshold, this.d.cfg.ORACLE_EPOCH, now(), market.id);
         this.d.bus.publish("market", market.id, { status: "open" });
         if (this.d.cfg.LP_BOOTSTRAP_SETS > 0 && this.d.lp) {
             this.d.wf.enqueue(`lp:${market.id}:bootstrap`, "lp-liquidity", market.id, {

@@ -14,7 +14,7 @@ const PROVIDERS = ["https://rpc-one.example/v2/SECRET-ONE", "https://rpc-two.exa
 const BLOCK = { number: "0x100", hash: `0x${"11".repeat(32)}`, parentHash: `0x${"10".repeat(32)}`, timestamp: "0x6ac68397" };
 const word = (n: bigint) => `0x${n.toString(16).padStart(64, "0")}`;
 const TERMS = JSON.stringify({
-    assets: { ctrl: "aa", yes: "bb", no: "cc" }, unitSats: "1000", capSats: "1000000", oracleKey: "aa".repeat(32), binding: "bb".repeat(32),
+    assets: { ctrl: "aa", yes: "bb", no: "cc" }, unitSats: "1000", capSats: "1000000", oracleKeys: ["aa".repeat(32), "aa".repeat(32), "aa".repeat(32)], oracleThreshold: 1, binding: "bb".repeat(32),
     closeAtUnix: "0", timeoutAtUnix: "0", exitDelaySeconds: "512",
 });
 
@@ -50,7 +50,7 @@ function setup() {
     const db = openDb(join(mkdtempSync(join(tmpdir(), "apm-resolver-")), "apm.sqlite"));
     const logs: string[] = [];
     const d = {
-        cfg: { APM_NETWORK: "regtest", RESOLUTION_INTERVAL_SECONDS: 0 } as never,
+        cfg: { APM_NETWORK: "regtest", RESOLUTION_INTERVAL_SECONDS: 0, ORACLE_URLS: [] } as never,
         db, bus: new EventBus(db), net: {} as never, provider,
         log: (msg: string, e?: Record<string, unknown>) => void logs.push(JSON.stringify({ msg, ...e })),
     };
@@ -111,7 +111,7 @@ describe("early source resolution", () => {
         run(s.db, "UPDATE markets SET close_at = ? WHERE id = 'm-3409541'", Math.floor(Date.now() / 1000) - 1);
         await resolutionTick(s.d);
         expect(singles().filter((r) => r.req!.params[0]?.data?.includes(early.slice(2)))).toHaveLength(2 * 3);
-        expect(status("3409541")).toMatchObject({ resolution_status: "source-unavailable", resolution_detail: expect.stringContaining("ORACLE_URL") });
+        expect(status("3409541")).toMatchObject({ resolution_status: "source-unavailable", resolution_detail: expect.stringContaining("ORACLE_URLS") });
 
         expect(JSON.stringify([all(s.db, "SELECT resolution_detail FROM markets"), s.d.bus.since(0), s.logs])).not.toMatch(/SECRET/);
     });

@@ -32,7 +32,9 @@ export interface MarketTermsJson {
     assets: { ctrl: string; yes: string; no: string };
     unitSats: string;
     capSats: string;
-    oracleKey: string;
+    /** Vault attestor slots (x-only hex), repeated keys allowed; signatures needed: `oracleThreshold`. */
+    oracleKeys: string[];
+    oracleThreshold: number;
     binding: string;
     closeAtUnix: string;
     timeoutAtUnix: string;
@@ -155,7 +157,7 @@ export interface CreateMarketRequest {
     category: string | null;
     closeAtUnix: string;
     timeoutAtUnix: string;
-    oracle: { policy: "external-key" | "dev-oracle"; key: string };
+    oracle: { policy: "external-key" | "dev-oracle"; keys: string[]; threshold: number };
     marketId: string;
     genesisTxid: string;
     vaultTxid: string;
@@ -186,11 +188,13 @@ export interface PostOfferRequest {
 export const big = (s: string) => BigInt(s);
 
 export function termsFromJson(t: MarketTermsJson): VaultTerms {
+    if (!Array.isArray(t.oracleKeys)) throw new Error("market terms use the retired single-attestor vault template");
     return {
         assets: t.assets,
         unitSats: big(t.unitSats),
         capSats: big(t.capSats),
-        oracleKey: hex.decode(t.oracleKey),
+        oracleKeys: t.oracleKeys.map((k) => hex.decode(k)),
+        oracleThreshold: t.oracleThreshold,
         binding: hex.decode(t.binding),
         closeAt: big(t.closeAtUnix),
         timeoutAt: big(t.timeoutAtUnix),
@@ -203,7 +207,8 @@ export function termsToJson(t: VaultTerms): MarketTermsJson {
         assets: t.assets,
         unitSats: t.unitSats.toString(),
         capSats: t.capSats.toString(),
-        oracleKey: hex.encode(t.oracleKey),
+        oracleKeys: t.oracleKeys.map((k) => hex.encode(k)),
+        oracleThreshold: t.oracleThreshold,
         binding: hex.encode(t.binding),
         closeAtUnix: t.closeAt.toString(),
         timeoutAtUnix: t.timeoutAt.toString(),

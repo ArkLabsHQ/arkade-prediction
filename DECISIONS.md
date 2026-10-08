@@ -105,3 +105,9 @@ Each entry: decision, reason, rejected alternatives. Newest last.
     Each test process now redeems a small operator note into a new batch through an SDK wallet (with deadlines),
     and the e2e global setup mines 12 blocks so arkd's sweeper can reclaim expired batches; without blocks its
     liquidity drained until batches stalled.
+32. **Threshold attestation in the vault (template v2).** The vault has three attestor slots and a threshold; each
+    resolve leaf counts valid `OP_CHECKSIGFROMSTACK` results (empty signature = absent) and requires the quorum.
+    Repeated keys are allowed only at threshold 1 and refused on-chain above it, because the vault counts slots.
+    Attestors sign evidence for a block the resolver pins, so their messages match. Markets on the retired
+    single-key template are marked failed by migration 3. Rejected: per-pair leaves (9 resolve leaves) and
+    MuSig/FROST aggregation (one signature would hide which attestors agreed and needs interactive signing).

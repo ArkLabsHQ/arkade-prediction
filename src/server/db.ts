@@ -50,6 +50,9 @@ const MIGRATIONS: string[] = [
         status TEXT NOT NULL DEFAULT 'watching', created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
      CREATE INDEX boxes_market ON boxes(market_id, status);
      CREATE INDEX boxes_owner ON boxes(owner_script);`,
+    // Vaults built with the retired single-attestor template cannot be driven by this build.
+    `UPDATE markets SET status = 'failed', resolution_detail = 'built with the retired single-attestor vault template; settle it with the previous release'
+     WHERE terms IS NOT NULL AND json_extract(terms, '$.oracleKeys') IS NULL AND status != 'hidden';`,
 ];
 
 export type Db = DatabaseSync;

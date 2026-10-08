@@ -81,7 +81,8 @@ export interface MarketSourceProvider {
     fetchMarketDefinition(sourceId: string): Promise<SourceMarket>;
     evaluateEligibility(market: SourceMarket, policy: EligibilityPolicy, now: Date): Eligibility;
     /** Reads authoritative settlement state at one finalized block across >= 2 providers. */
-    fetchResolutionEvidence(market: SourceMarket): Promise<ResolutionEvidence>;
+    /** `atBlock` pins the read so independent attestors sign identical evidence; it must already be finalized. */
+    fetchResolutionEvidence(market: SourceMarket, opts?: { atBlock?: bigint }): Promise<ResolutionEvidence>;
     /** Trigger, never evidence: condition ids a quorum reports resolved, from one batch per provider. Confirm each. */
     screenResolved(markets: SourceMarket[]): Promise<string[]>;
     /** Re-checks evidence against the pinned profile (identity, resolver allowlist, vector shape). */

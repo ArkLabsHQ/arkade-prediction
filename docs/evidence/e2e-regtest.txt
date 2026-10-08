@@ -1,82 +1,103 @@
-# pnpm exec vitest run --config vitest.e2e.config.ts  (final code, isolated apm-regtest stack, 2026-10-08T07:25Z)
+# pnpm exec vitest run --config vitest.e2e.config.ts  (threshold-oracle build; vault-lifecycle re-run alone after a test-argument fix: PASS; 2026-10-08T12:09Z)
 
  RUN  v3.2.7 C:/Git/arkade-prediction
 
 stdout | test/e2e/halted-market.test.ts > halted market: outcome known before close > withdraws the LP's quotes on-contract, refuses new orders, and settles after the close
-halted 2d91faf8d5c8f200b74b459b41d20516: LP quotes 535b14c76a1a402b3408d4ca785286bd69c5db151bd7425b3ed9ed9c6672d84a:0, 15a98103b2eab0a7ae1ab0d1811f04531c26238567a70395b17298860fe45763:0 cancelled; resolved after close
+halted 54ed352aa2361d707693278092945082: LP quotes 9944f3316a0e21ba1e7e4770eea0ef764f17222cf54e624ebb9fb6cbaa2bf4ad:0, 42573a011cd865c7165232f57decd6968df1122ebe30c34cbc800d068559ff7a:0 cancelled; resolved after close
 
- ✓ test/e2e/halted-market.test.ts (1 test) 260518ms
-   ✓ halted market: outcome known before close > withdraws the LP's quotes on-contract, refuses new orders, and settles after the close  260450ms
- ✓ test/e2e/fault-recovery.test.ts (1 test) 164098ms
-   ✓ crash recovery at workflow boundaries > never duplicates a match or a resolution across crashes before and after submission  163978ms
-stdout | test/e2e/finalize-recovery.test.ts > crash between arkd accepting and finalizing an Arkade transaction > finishes the accepted transaction on restart instead of resubmitting it
-accepted-but-unfinalized 0a1aa9b639d76b97730db76a67e7ffc13cd060413559630808b7aaa2d5b2ce77 finalized after restart; asks d030b058c41413e309f5a78356f2d067687f32ab6cdc8f13a9e8134e8ddd97b0:0, 0a1aa9b639d76b97730db76a67e7ffc13cd060413559630808b7aaa2d5b2ce77:0
+ ✓ test/e2e/halted-market.test.ts (1 test) 262019ms
+   ✓ halted market: outcome known before close > withdraws the LP's quotes on-contract, refuses new orders, and settles after the close  261800ms
+ ↓ test/e2e/polymarket-live.test.ts (1 test | 1 skipped)
+stdout | test/e2e/threshold-oracle.test.ts > 2-of-3 attestor quorum in the vault covenant > refuses one attestor, one attestor in two slots and a quorum over another outcome; resolves with two
+2-of-3 resolution 06c783756ba3824d719d6d9a0ec0b581ceba9f2f569bd3a9d766f3e49cc9471d
 
- ✓ test/e2e/finalize-recovery.test.ts (1 test) 47715ms
-   ✓ crash between arkd accepting and finalizing an Arkade transaction > finishes the accepted transaction on restart instead of resubmitting it  47676ms
+ ✓ test/e2e/threshold-oracle.test.ts (3 tests) 156249ms
+   ✓ 2-of-3 attestor quorum in the vault covenant > refuses one attestor, one attestor in two slots and a quorum over another outcome; resolves with two  10955ms
+   ✓ repeated attestor keys above threshold 1 > are refused by the vault, so one attestor cannot fill two slots of a forged set  2158ms
+   ✓ server aggregation of a 2-of-3 attestor quorum > certifies only at quorum, and the keeper resolves with the aggregated signatures  143019ms
+ ✓ test/e2e/fault-recovery.test.ts (1 test) 141817ms
+   ✓ crash recovery at workflow boundaries > never duplicates a match or a resolution across crashes before and after submission  141449ms
 stdout | test/e2e/server-flow.test.ts > server API end to end > registers a creator-funded market, lists orders, matches, resolves and redeems
-server data dir C:\Users\evilk\AppData\Local\Temp\apm-server-KoxuwN
+server data dir C:\Users\evilk\AppData\Local\Temp\apm-server-fo5TXD
 
- ✓ test/e2e/server-flow.test.ts (1 test) 158001ms
-   ✓ server API end to end > registers a creator-funded market, lists orders, matches, resolves and redeems  157901ms
- ✓ test/e2e/settlement-paths.test.ts (1 test) 58397ms
-   ✓ settlement paths > refuses early attestations, times out to 50/50, and pays fractional and attested-invalid redemptions  58396ms
+ ✓ test/e2e/server-flow.test.ts (1 test) 140969ms
+   ✓ server API end to end > registers a creator-funded market, lists orders, matches, resolves and redeems  140880ms
+ ✓ test/e2e/settlement-paths.test.ts (1 test) 63911ms
+   ✓ settlement paths > refuses early attestations, times out to 50/50, and pays fractional and attested-invalid redemptions  63909ms
+stdout | test/e2e/finalize-recovery.test.ts > crash between arkd accepting and finalizing an Arkade transaction > finishes the accepted transaction on restart instead of resubmitting it
+accepted-but-unfinalized 3579c3d80f533b7dbb93ff81bfd05864641561992139c3e37c89c88a06e4aeee finalized after restart; asks 92311009e6159fb31dd930825032fd5abdb638f653d7a1defa7e57d2eaac4549:0, 3579c3d80f533b7dbb93ff81bfd05864641561992139c3e37c89c88a06e4aeee:0
+
+ ✓ test/e2e/finalize-recovery.test.ts (1 test) 55154ms
+   ✓ crash between arkd accepting and finalizing an Arkade transaction > finishes the accepted transaction on restart instead of resubmitting it  55092ms
 stdout | test/e2e/offers.test.ts > funded standing offers > fills, partially fills, settles, matches, expires, cancels and renews with makers offline
-fills=b6a7764568aca6c12956a6bd249c001ae0b9c5f498be2b8f506c9a8cdab2bd5d,bce69700d14a409fa16aab5e2a332189363611d825d2a560021a975508b4e66a match=c5c9760331a22e1a6290f3b01a94aaa3ed4785b8439bc8e7e37b2a9a8348669e cancel=6bd875cd4095580d05b66ff0b8e46cc703635aa9c7edf269e96b8d54017d4f9a renew=fa27e62b7e79f1843a5fe0c3a233199b5d7038ad07f7286f23864c115f920506
+fills=1afe2e6b5fa3a2bb0111d3c9c7029646a06da1a121cc5b3605c3099aec872ad2,016cf8cbff8b5d1a8724a0bccc66c733b45ec2c5eab4c29786f468d291fdb8e5 match=6aada4ccdf8ac4f7f90917908ccfe9a0de27520b5379e70527f11931a7b838af cancel=ebf6949b95251ce8be9f64b342da8337bc9e566c2fc0913e8b42b49385ec4e5f renew=a7f4bc0c728e25d06a573e9e732ab4cf8fff92c5923122ca658b8e669a0bd9fb
 
- ✓ test/e2e/offers.test.ts (1 test) 44324ms
-   ✓ funded standing offers > fills, partially fills, settles, matches, expires, cancels and renews with makers offline  44321ms
+ ✓ test/e2e/offers.test.ts (1 test) 45248ms
+   ✓ funded standing offers > fills, partially fills, settles, matches, expires, cancels and renews with makers offline  45244ms
+ ↓ test/e2e/docker-redeploy.test.ts (1 test | 1 skipped)
 stdout | test/e2e/withdrawal.test.ts > withdrawal and recovery paths for BTC value > offboards collaboratively and exits unilaterally with a pre-signed package
-offboard commitment=89410f919c5b9542ab725911dfa67d82a280f14816ad968460aca76bc61dc098 landed=20000
+offboard commitment=a276b0ca79e5ea6d89b52a91d289ea7171ff1df1c0626d7a391ba797855ec675 landed=20000
 
 stdout | test/e2e/withdrawal.test.ts > withdrawal and recovery paths for BTC value > offboards collaboratively and exits unilaterally with a pre-signed package
 unilateral exit recovered=59702 txs=4
 
- ✓ test/e2e/withdrawal.test.ts (1 test) 31503ms
-   ✓ withdrawal and recovery paths for BTC value > offboards collaboratively and exits unilaterally with a pre-signed package  30769ms
-stdout | test/e2e/vault-lifecycle.test.ts > market vault lifecycle > issues, mints, merges, resolves and redeems with exact accounting
-genesis=0119dae45f2ce501d09a7a3c95483d7301e23bbe487d893d0c96a6ab595e8231 vault=e5ab9a5e1e45599d6b3516194c50cefff06439cc88134eb492a0b483e5407ab3
-
-stdout | test/e2e/vault-lifecycle.test.ts > market vault lifecycle > issues, mints, merges, resolves and redeems with exact accounting
-mint=9120b63de07424b2bc578658256120492a940f81930805b889fd8270d9f80083 merge=dbf9f4f6ed866cf62d18397528e867562fb6047170faa26329a79e48e460d8c6 resolve=63cd060f992118d644dd6e8aafccc5bdb6b17a91c19b14b5c5de1400564fed54 redeem=6e935e5a8a7e2d3ed748ffb2b0b7563088afe4b09dcd1761f4addb6598a195db
-
- ✓ test/e2e/vault-lifecycle.test.ts (1 test) 15214ms
-   ✓ market vault lifecycle > issues, mints, merges, resolves and redeems with exact accounting  15213ms
+ ✓ test/e2e/withdrawal.test.ts (1 test) 43351ms
+   ✓ withdrawal and recovery paths for BTC value > offboards collaboratively and exits unilaterally with a pre-signed package  42135ms
 stdout | test/e2e/actions-lifecycle.test.ts > market lifecycle through shared actions > runs the documented numeric lifecycle
-genesis=ccdf9654b555cc2cbb3169c9418eabfa31518cf41f30f187ff3133fa7f6e2922
-operator opens vault (1 seed set)  tx=4526c284af51a456 vault=2000
-lp mints 20 sets                   tx=899959c829818017 vault=22000
+genesis=f6b487578779bd6b183f1071863b6152c7efe0cc8eca1169537ea2580933dc43
+operator opens vault (1 seed set)  tx=a8746673d2731a53 vault=2000
+lp mints 20 sets                   tx=8351d9ac236db957 vault=22000
 lp posts asks: 10 YES @600, 10 NO @450 (lp offline from here)
-alice buys 4 YES @600              tx=2502e61e408a9c28 vault=22000
-bob buys 3 NO @450                 tx=b1cfcb5fb802584a vault=22000
-keeper mint-matches 5 sets         tx=3ca11eff01a7a507 vault=27000
-lp merges 5 sets                   tx=9f5d67ba55d4d0cc vault=22000
-oracle attests YES; vault resolves tx=d0ee77c8b829ca26 vault=22000
+alice buys 4 YES @600              tx=6f1a9bce566e6abd vault=22000
+bob buys 3 NO @450                 tx=fcd0797eabab0f49 vault=22000
+keeper mint-matches 5 sets         tx=a7b0a0609bf7ef89 vault=27000
+lp merges 5 sets                   tx=0135be35615d909f vault=22000
+oracle attests YES; vault resolves tx=37aa921dfb53c8de vault=22000
 alice redeems 4 YES -> 4000 sats      vault=18000
 
- ✓ test/e2e/actions-lifecycle.test.ts (1 test) 17071ms
-   ✓ market lifecycle through shared actions > runs the documented numeric lifecycle  17069ms
-stdout | test/e2e/renewal.test.ts > offline covenant renewal > re-anchors an asset-bearing vault through a batch with no owner key
-renewal commitment=c9299c071c693813f94fee7d125721b4c144c999981b6f8874c5ceec618d46ed oldExpiry=2026-10-08T09:23:54.000Z newExpiry=2026-10-08T09:23:59.000Z
-
- ✓ test/e2e/renewal.test.ts (1 test) 8066ms
-   ✓ offline covenant renewal > re-anchors an asset-bearing vault through a batch with no owner key  8064ms
+ ✓ test/e2e/actions-lifecycle.test.ts (1 test) 13956ms
+   ✓ market lifecycle through shared actions > runs the documented numeric lifecycle  13954ms
 stdout | test/e2e/claim-box.test.ts > claim box: owner offline through renewal and payout > renews and redeems a holder's claims without the holder's key
-box renew=c7de5a3d08c8a1ef4ff04846d1a31d9311787195b4d9f0e0bef75b117565aca7 autoClaim=ee07f40dc7f862713ce1909cd3c9d32ef0df54ac509e04253af829c0478c9e4a
+box renew=14b0d6e233cfb68d5d08cfa5a4a492528c6070f769d6813e438ee0087aaee1c6 autoClaim=23407fcea0eee392cb08eb0638e187fcd06240430112e2f814ed2bb192320887
 
- ✓ test/e2e/claim-box.test.ts (1 test) 15887ms
-   ✓ claim box: owner offline through renewal and payout > renews and redeems a holder's claims without the holder's key  15885ms
+ ✓ test/e2e/claim-box.test.ts (1 test) 16059ms
+   ✓ claim box: owner offline through renewal and payout > renews and redeems a holder's claims without the holder's key  16047ms
+stdout | test/e2e/vault-lifecycle.test.ts > market vault lifecycle > issues, mints, merges, resolves and redeems with exact accounting
+genesis=0ee87330ef5bc87acb6916ea92041405caa3c87de7e3b3dedab320a416c3550f vault=2cf0da9a83c00b5f8af97a518160aaa721b2567de70ff729f9c46577ca7d2a39
+
+ ❯ test/e2e/vault-lifecycle.test.ts (1 test | 1 failed) 28145ms
+   × market vault lifecycle > issues, mints, merges, resolves and redeems with exact accounting 28143ms
+     → NO attestation used for YES: refused, but not by the covenant: Error: resolveYes: missing argument oracleSigs.0
+stdout | test/e2e/renewal.test.ts > offline covenant renewal > re-anchors an asset-bearing vault through a batch with no owner key
+renewal commitment=e2c64a8f44865e1e5917e8152bd80f4bfabdd35fb451f01b36b8399ed26907af oldExpiry=2026-10-08T13:55:30.000Z newExpiry=2026-10-08T13:55:36.000Z
+
+ ✓ test/e2e/renewal.test.ts (1 test) 7935ms
+   ✓ offline covenant renewal > re-anchors an asset-bearing vault through a batch with no owner key  7933ms
 stdout | test/e2e/spike-pipeline.test.ts > compiler artifact pipeline > spends a compiled covenant through the emulator
-spike forward txid=6b27a10f99dfcb57fe5eb32d3c7c70320cf4d05d9aa8d7ac6fec99527c036fd9 contract=51204e58e028871d4ee3386f646ccc5515120d5b13588281e7597e3063970e765078
+spike forward txid=ba17799f106e72285c81001763512e0ccc238c4516327782eb7604d0cd1eff0b contract=5120bed1aa9f8f3d1d6b4d98c45ac89933c16542f64deb2d006881f8a190738ce306
 
- ✓ test/e2e/spike-pipeline.test.ts (1 test) 3536ms
-   ✓ compiler artifact pipeline > spends a compiled covenant through the emulator  3535ms
- ↓ test/e2e/docker-redeploy.test.ts (1 test | 1 skipped)
- ↓ test/e2e/polymarket-live.test.ts (1 test | 1 skipped)
+ ✓ test/e2e/spike-pipeline.test.ts (1 test) 5389ms
+   ✓ compiler artifact pipeline > spends a compiled covenant through the emulator  5387ms
 
- Test Files  12 passed | 2 skipped (14)
-      Tests  12 passed | 2 skipped (14)
-   Start at  09:09:24
-   Duration  933.22s (transform 1.76s, setup 0ms, collect 56.02s, tests 824.33s, environment 4ms, prepare 14.40s)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
 
-EXIT=0
+ FAIL  test/e2e/vault-lifecycle.test.ts > market vault lifecycle > issues, mints, merges, resolves and redeems with exact accounting
+Error: NO attestation used for YES: refused, but not by the covenant: Error: resolveYes: missing argument oracleSigs.0
+ ❯ expectCovenantRejection test/e2e/env.ts:105:11
+    103|         await new Promise((resolve) => setTimeout(resolve, 500));
+    104|     }
+    105|     throw new Error(`${label}: refused, but not by the covenant: ${Str…
+       |           ^
+    106| }
+    107| 
+ ❯ test/e2e/vault-lifecycle.test.ts:111:9
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 12 passed | 2 skipped (15)
+      Tests  1 failed | 14 passed | 2 skipped (17)
+   Start at  13:38:38
+   Duration  1056.92s (transform 2.03s, setup 0ms, collect 26.69s, tests 980.20s, environment 5ms, prepare 16.09s)
+
+EXIT=1

@@ -30,7 +30,7 @@ describe("settlement paths", () => {
         const A = await createMarket(ark, aliceW, { closeAt: nowS() + 20n, timeoutAt: nowS() + 35n });
         await mintSets(ctx, alice, A.terms, 4n);
         const early = sig(A, "yes");
-        await expectCovenantRejection(resolveMarket(ctx, A.terms, "yes", early.evidence, early.sig), "attestation before close");
+        await expectCovenantRejection(resolveMarket(ctx, A.terms, "yes", early.evidence, [early.sig]), "attestation before close");
         await expectCovenantRejection(timeoutMarket(ctx, A.terms), "timeout before deadline");
 
         // Transfer 1 YES to Bob peer to peer before resolution.
@@ -52,7 +52,7 @@ describe("settlement paths", () => {
         await waitFor(async () => (await spendableCoins(ctx, A.resolved.invalid.pkScript)).length === 1, { what: "timed out" });
         // The attested path is now impossible: the open vault no longer exists.
         const late = sig(A, "yes");
-        await expect(resolveMarket(ctx, A.terms, "yes", late.evidence, late.sig)).rejects.toThrow(/vault not found/);
+        await expect(resolveMarket(ctx, A.terms, "yes", late.evidence, [late.sig])).rejects.toThrow(/vault not found/);
 
         // INVALID pays 1/2 unit per claim on either side; Bob's single YES gets exactly 500.
         const bobPaid = await redeemAll(ctx, bob, A.terms, "invalid");
@@ -68,8 +68,8 @@ describe("settlement paths", () => {
         await sleepUntil(B.terms.closeAt);
         const inv = sig(B, "invalid");
         const wrong = sig(B, "no");
-        await expectCovenantRejection(resolveMarket(ctx, B.terms, "invalid", wrong.evidence, wrong.sig), "NO certificate on INVALID path");
-        await resolveMarket(ctx, B.terms, "invalid", inv.evidence, inv.sig);
+        await expectCovenantRejection(resolveMarket(ctx, B.terms, "invalid", wrong.evidence, [wrong.sig]), "NO certificate on INVALID path");
+        await resolveMarket(ctx, B.terms, "invalid", inv.evidence, [inv.sig]);
         await waitFor(async () => (await spendableCoins(ctx, B.resolved.invalid.pkScript)).length === 1, { what: "B invalid" });
         const seed = await redeemAll(ctx, alice, B.terms, "invalid");
         expect(seed.payout).toBe(1000n);

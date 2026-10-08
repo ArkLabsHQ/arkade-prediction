@@ -3,11 +3,13 @@ import { Hono, type Context } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { streamSSE } from "hono/streaming";
 import { hex } from "@scure/base";
-import { attestationMessage, signAttestation, verifyAttestation, evidenceDigest } from "../core/attestation.js";
+import { schnorr } from "@noble/curves/secp256k1.js";
+import { attestationMessage, signAttestation, evidenceDigest } from "../core/attestation.js";
 import { BINARY_VECTORS, type BinaryOutcome } from "../core/payout.js";
 import type { CertificateJson, ConfigJson, CreateMarketRequest, MarketEvent, PostOfferRequest, RegisterBoxRequest } from "../shared/api.js";
 import { boxJson, boxesByOwner, registerBox } from "./boxes.js";
-import { backup, now, one, run } from "./db.js";
+import { acceptCertificate } from "./certificates.js";
+import { backup, now, run } from "./db.js";
 import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { Keeper } from "./keeper.js";
@@ -114,24 +116,8 @@ export function createApi(d: ApiDeps): Hono {
         const row = getMarket(d.db, c.req.param("id"));
         const terms = row && marketTerms(row);
         if (!row || !terms) throw new HttpError(404, "market", "unknown market");
-        const cert = await body<CertificateJson>(c);
-        if (!["yes", "no", "invalid"].includes(cert.outcome)) throw new HttpError(400, "outcome", "outcome must be yes, no or invalid");
-        const vector = BINARY_VECTORS[cert.outcome as BinaryOutcome];
-        if (cert.denominator !== vector.denominator.toString() || cert.numerators.join(",") !== vector.numerators.join(",")) {
-            throw new HttpError(400, "vector", "payout vector does not match the outcome");
-        }
-        if (!/^[0-9a-f]{64}$/.test(cert.evidenceDigest) || !/^[0-9a-f]{128}$/.test(cert.signature)) throw new HttpError(400, "encoding", "bad digest or signature encoding");
-        if (cert.signer !== hex.encode(terms.oracleKey)) throw new HttpError(400, "signer", "signer is not this market's oracle key");
-        const msg = attestationMessage(terms.binding, hex.decode(cert.evidenceDigest), vector);
-        if (!verifyAttestation(hex.decode(cert.signature), terms.oracleKey, msg)) throw new HttpError(400, "signature", "certificate signature does not verify");
-        run(d.db, "INSERT OR IGNORE INTO certificates(market_id, outcome, numerators, denominator, evidence_digest, signature, signer, source_block, issued_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            row.id, cert.outcome, JSON.stringify(cert.numerators), cert.denominator, cert.evidenceDigest, cert.signature, cert.signer,
-            cert.sourceBlock ? JSON.stringify(cert.sourceBlock) : null, now());
-        const conflicting = one<{ n: number }>(d.db, "SELECT COUNT(DISTINCT outcome) n FROM certificates WHERE market_id = ?", row.id)!.n > 1;
-        run(d.db, "UPDATE markets SET resolution_status = ?, resolution_detail = ?, updated_at = ? WHERE id = ? AND resolution_status != 'resolved'",
-            conflicting ? "conflicting-certificates" : "certified", conflicting ? "oracle signed more than one outcome; the first submitted resolution wins on-contract" : `certified ${cert.outcome}`, now(), row.id);
-        d.bus.publish("resolution", row.id, { outcome: cert.outcome, conflicting });
-        return c.json({ accepted: true });
+        const { quorum } = acceptCertificate(d, row.id, terms, await body<CertificateJson>(c));
+        return c.json({ accepted: true, quorum });
     });
 
     app.post("/api/offers", async (c) => c.json(await registerOffer(d, await body<PostOfferRequest>(c)), 201));
@@ -217,12 +203,13 @@ export function createApi(d: ApiDeps): Hono {
         const { outcome } = await body<{ outcome: BinaryOutcome }>(c);
         if (!(outcome in BINARY_VECTORS)) throw new HttpError(400, "outcome", "bad outcome");
         const evidence = evidenceDigest({ policy: "dev-oracle", market: row.id, outcome, at: now() });
-        const sig = signAttestation(hex.decode(d.cfg.DEV_ORACLE_SECRET), attestationMessage(terms.binding, evidence, BINARY_VECTORS[outcome]));
-        run(d.db, "INSERT OR IGNORE INTO certificates(market_id, outcome, numerators, denominator, evidence_digest, signature, signer, issued_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            row.id, outcome, JSON.stringify(BINARY_VECTORS[outcome].numerators.map(String)), BINARY_VECTORS[outcome].denominator.toString(),
-            hex.encode(evidence), hex.encode(sig), hex.encode(terms.oracleKey), now());
-        run(d.db, "UPDATE markets SET resolution_status = 'certified', resolution_detail = ?, updated_at = ? WHERE id = ?", `dev oracle certified ${outcome}`, now(), row.id);
-        d.bus.publish("resolution", row.id, { outcome, dev: true });
+        const vector = BINARY_VECTORS[outcome];
+        const signer = hex.encode(schnorr.getPublicKey(hex.decode(d.cfg.DEV_ORACLE_SECRET)));
+        acceptCertificate(d, row.id, terms, {
+            outcome, numerators: vector.numerators.map(String), denominator: vector.denominator.toString(), evidenceDigest: hex.encode(evidence),
+            signature: hex.encode(signAttestation(hex.decode(d.cfg.DEV_ORACLE_SECRET), attestationMessage(terms.binding, evidence, vector))),
+            signer, sourceBlock: null, issuedAt: now(),
+        });
         return c.json({ ok: true });
     });
     admin.post("/workflows/:id/retry", (c) => {

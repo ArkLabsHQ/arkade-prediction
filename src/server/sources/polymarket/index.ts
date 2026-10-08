@@ -13,6 +13,20 @@ import type {
 
 export const PROFILE = "polymarket-ctf-v1-binary";
 export const CTF_ADDRESS = "0x4d97dcd97ec945f40cf65f87097ace5ea0476045";
+
+/**
+ * What an attestation commits to as evidence: chain facts at one finalized block, and nothing that depends on
+ * which providers or when the reader asked, so independent attestors reading that block sign the same digest.
+ */
+export function evidenceRecord(market: SourceMarket, evidence: ResolutionEvidence) {
+    if (evidence.status !== "final" || !evidence.chain || !evidence.vector) throw new Error("evidence is not a final resolution");
+    return {
+        profile: PROFILE, chainId: evidence.chain.chainId, ctf: CTF_ADDRESS, sourceId: market.sourceId,
+        conditionId: market.protocol.conditionId, questionId: market.protocol.questionId, resolver: market.protocol.resolver,
+        block: { number: evidence.chain.blockNumber, hash: evidence.chain.blockHash },
+        payout: { numerators: evidence.vector.numerators.map(String), denominator: evidence.vector.denominator.toString() },
+    };
+}
 export const POLYGON_CHAIN_ID = 137;
 const DEFAULT_GAMMA_URL = "https://gamma-api.polymarket.com";
 const SEL_PAYOUT_DENOMINATOR = "dd34de67";
@@ -284,7 +298,7 @@ export function createPolymarketProvider(opts: PolymarketProviderOptions): Marke
             return { eligible: true, profile: PROFILE };
         },
 
-        async fetchResolutionEvidence(market) {
+        async fetchResolutionEvidence(market, opts = {}) {
             const observedAt = new Date().toISOString();
             const bad = identityProblem(market, allow);
             if (bad) return { status: "unsupported", detail: `${bad.code}: ${bad.reason}`, observedAt };
@@ -319,9 +333,13 @@ export function createPolymarketProvider(opts: PolymarketProviderOptions): Marke
             }));
             const offChain = [...heads].filter(([, h]) => h.chainId !== BigInt(POLYGON_CHAIN_ID)).map(([u]) => label(u));
             if (offChain.length > 0) return done("inconsistent", `not on chain ${POLYGON_CHAIN_ID}: ${offChain.join(", ")}`);
-            const number = quorum(heads, "finalized head")
+            const finalized = quorum(heads, "finalized head")
                 .map((h) => h.number)
                 .reduce((a, b) => (b < a ? b : a));
+            if (opts.atBlock !== undefined && opts.atBlock > finalized) {
+                return done("inconsistent", `block ${opts.atBlock} is not finalized on every provider yet (finalized ${finalized})`);
+            }
+            const number = opts.atBlock ?? finalized;
             const tag = `0x${number.toString(16)}`;
 
             const hashes = await settle([...heads.keys()], (u) =>

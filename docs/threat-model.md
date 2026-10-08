@@ -57,7 +57,10 @@ operator and emulator being honest and available. This is reported as a limitati
 
 - Source trust: Polymarket's UMA/CTF resolution. Mirroring adds local exposure without adding to the source's
   bonds; per-market collateral is capped on-contract (`capValue`, `MARKET_CAP_SETS`).
-- Transport trust: one attestor key per market (threshold 1-of-1; threshold quorums are **not implemented**).
+- Transport trust: each market commits 1 to 3 attestor keys and a threshold (default 1-of-1; `ORACLE_THRESHOLD=2`
+  with three keys gives 2-of-3). A quorum only adds independence if the attestors run on separate infrastructure
+  under separate operators; three keys in one place are one attestor. Below the quorum, nothing resolves and the
+  timeout applies.
   The attestor re-reads the market definition and the finalized CTF payout from ≥ 2 Polygon providers that must
   agree on block hash and values, rejects unknown resolvers/versions/neg-risk/outcome-order changes, and signs a
   message bound to deployment, template, market, claims, outcome order, vector and evidence digest.

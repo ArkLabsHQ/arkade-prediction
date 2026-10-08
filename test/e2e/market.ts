@@ -17,6 +17,7 @@ import {
     TEMPLATE,
     genesisPacket,
     marketContracts,
+    oracleSlots,
     type ArkadeClient,
     type Contract,
     type MarketAssets,
@@ -76,6 +77,8 @@ export interface TestMarket {
     vault: Contract;
     resolved: ReturnType<typeof marketContracts>["resolved"];
     oracleSecret: Uint8Array;
+    /** One secret per attestor; `oracleSecret` is the first. */
+    oracleSecrets: Uint8Array[];
     binding: Uint8Array;
     vaultCoin: Coin;
 }
@@ -84,14 +87,20 @@ export interface TestMarket {
 export async function createMarket(
     ark: ArkadeClient,
     creator: TestWallet,
-    opts: { unit?: bigint; base?: bigint; maxSets?: bigint; closeAt?: bigint; timeoutAt?: bigint } = {},
+    opts: {
+        unit?: bigint; base?: bigint; maxSets?: bigint; closeAt?: bigint; timeoutAt?: bigint; attestors?: number; threshold?: number;
+        /** Builds the vault without the attestor-set checks, for refusal tests of sets our code would never create. */
+        unchecked?: { slots: number[]; contracts: (ark: ArkadeClient, terms: VaultTerms) => ReturnType<typeof marketContracts> };
+    } = {},
 ): Promise<TestMarket> {
     const unit = opts.unit ?? 1000n;
     const base = opts.base ?? 1000n;
     const marketId = `test-${hex.encode(randomBytes(4))}`;
     const assets = await issueGenesis(creator, marketId, 1n);
-    const oracleSecret = randomBytes(32);
-    const oracleKey = schnorr.getPublicKey(oracleSecret);
+    const oracleSecrets = Array.from({ length: opts.attestors ?? 1 }, () => randomBytes(32));
+    const threshold = opts.threshold ?? 1;
+    const attestorKeys = oracleSecrets.map((secret) => schnorr.getPublicKey(secret));
+    const oracleKeys = opts.unchecked ? opts.unchecked.slots.map((i) => attestorKeys[i]!) : oracleSlots(attestorKeys, threshold);
     const closeAt = opts.closeAt ?? BigInt(Math.floor(Date.now() / 1000)) - 60n;
     const timeoutAt = opts.timeoutAt ?? 0n;
     const binding = bindingHash({
@@ -104,11 +113,11 @@ export async function createMarket(
         claims: { ctrl: assets.ctrl, outcomes: [assets.yes, assets.no] },
         outcomeLabels: ["YES", "NO"],
         source: null,
-        oracle: { keys: [hex.encode(oracleKey)], threshold: 1, epoch: 1 },
+        oracle: { keys: oracleKeys.map((k) => hex.encode(k)), threshold, epoch: 1 },
         timing: { closeAt, timeoutAt },
     });
-    const terms: VaultTerms = { assets, unitSats: unit, capSats: base + (opts.maxSets ?? 50n) * unit, oracleKey, binding, closeAt, timeoutAt, exitDelaySeconds: 512n };
-    const { vault, resolved } = marketContracts(ark, terms);
+    const terms: VaultTerms = { assets, unitSats: unit, capSats: base + (opts.maxSets ?? 50n) * unit, oracleKeys, oracleThreshold: threshold, binding, closeAt, timeoutAt, exitDelaySeconds: 512n };
+    const { vault, resolved } = (opts.unchecked?.contracts ?? marketContracts)(ark, terms);
     const creatorScript = await scriptOf(creator);
     const inputs = await walletInputs(creator);
     const built = await buildArkadeTx(network(ark), inputs, [
@@ -119,7 +128,7 @@ export async function createMarket(
     await signInputs(built, creator.identity, built.signerInputs);
     const { txid } = await submitArkadeTx(network(ark), built, (cp) => creator.identity.sign(cp, [0]));
     const vaultCoin = await coinAt(vault.pkScript, "vault", txid);
-    return { assets, terms, vault, resolved, oracleSecret, binding, vaultCoin };
+    return { assets, terms, vault, resolved, oracleSecret: oracleSecrets[0]!, oracleSecrets, binding, vaultCoin };
 }
 
 /** Issues CTRL + YES/NO (seed supply each) to the creator's own address. */

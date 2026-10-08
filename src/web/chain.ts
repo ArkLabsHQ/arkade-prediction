@@ -11,7 +11,7 @@ import type { Coin } from "../core/arkadeTx.js";
 import { attestationMessage, evidenceDigest, signAttestation } from "../core/attestation.js";
 import { claimBoxContract } from "../core/claimBox.js";
 import { bindingOf, type MarketDefinition } from "../core/definition.js";
-import type { ArkadeClient, MarketAssets, VaultTerms } from "../core/market.js";
+import { oracleSlots, slotSignatures, type ArkadeClient, type MarketAssets, type VaultTerms } from "../core/market.js";
 import { offerContract, type OfferTerms, type Side } from "../core/offers.js";
 import { BINARY_VECTORS, type BinaryOutcome } from "../core/payout.js";
 import {
@@ -331,12 +331,13 @@ export const clearDraft = (script: string) => localStorage.removeItem(draftKey(s
 export function draftTerms(chain: Chain, d: CreateDraft, assets: MarketAssets): VaultTerms {
     if (!chain.ark.emulatorKey) throw new Error("The Arkade client has no emulator key");
     const unitSats = BigInt(d.unitSats);
+    const oracleKeys = oracleSlots([hex.decode(d.oracleKey)], 1);
     const binding = bindingOf({
         network: d.network, arkSigner: chain.ark.serverKey, emulatorSigner: chain.ark.emulatorKey, marketId: d.marketId,
-        definition: { ...d.definition, source: null }, unitSats, assets, oracleKeys: [d.oracleKey], oracleEpoch: 1,
+        definition: { ...d.definition, source: null }, unitSats, assets, oracleKeys: oracleKeys.map((k) => hex.encode(k)), oracleThreshold: 1, oracleEpoch: 1,
     });
     return {
-        assets, unitSats, capSats: VAULT_BASE_SATS + MAX_SETS * unitSats, oracleKey: hex.decode(d.oracleKey), binding,
+        assets, unitSats, capSats: VAULT_BASE_SATS + MAX_SETS * unitSats, oracleKeys, oracleThreshold: 1, binding,
         closeAt: BigInt(d.definition.closeAtUnix), timeoutAt: BigInt(d.definition.timeoutAtUnix), exitDelaySeconds: BigInt(d.exitDelaySeconds),
     };
 }
@@ -367,7 +368,7 @@ export async function runCreate(chain: Chain, s: Session, draft: CreateDraft, st
     }
     step("Registering the market with the server");
     const req: CreateMarketRequest = {
-        ...d.definition, oracle: { policy: "external-key", key: d.oracleKey }, marketId: d.marketId,
+        ...d.definition, oracle: { policy: "external-key", keys: [d.oracleKey], threshold: 1 }, marketId: d.marketId,
         genesisTxid: d.genesisTxid!, vaultTxid: d.vaultTxid!, terms: termsToJson(terms),
     };
     const market = await api<MarketJson>("/api/markets", { body: req });
@@ -377,29 +378,39 @@ export async function runCreate(chain: Chain, s: Session, draft: CreateDraft, st
 
 // --- resolution -------------------------------------------------------------------------------
 
-export function oracleSecretFor(s: Session | null, m: MarketJson): string | undefined {
-    return m.terms ? s?.keystore.secrets.oracleKeys[m.terms.oracleKey] : undefined;
+/** The attestor key of this market that the wallet holds, with its secret. */
+export function oracleKeyFor(s: Session | null, m: MarketJson): { key: string; secret: string } | undefined {
+    const key = m.terms?.oracleKeys.find((k) => s?.keystore.secrets.oracleKeys[k]);
+    return key ? { key, secret: s!.keystore.secrets.oracleKeys[key]! } : undefined;
 }
 
-/** Signs the attestation, submits the resolve tx directly, then hands the certificate to the server. */
+export const oracleSecretFor = (s: Session | null, m: MarketJson): string | undefined => oracleKeyFor(s, m)?.secret;
+
+/**
+ * Signs the attestation and hands the certificate to the server. When this one signature meets the quorum the
+ * resolve tx is submitted directly; otherwise the keeper submits it once enough attestors have signed.
+ */
 export async function resolveAsOracle(chain: Chain, s: Session, m: MarketJson, terms: VaultTerms, outcome: BinaryOutcome, note: string) {
-    const secret = oracleSecretFor(s, m);
-    if (!secret) throw new Error("This wallet does not hold the oracle key of this market");
+    const held = oracleKeyFor(s, m);
+    if (!held) throw new Error("This wallet does not hold an oracle key of this market");
+    const secret = held.secret;
     const issuedAt = new Date().toISOString();
     const evidence = evidenceDigest({ market: m.id, outcome, note, at: issuedAt });
     const vector = BINARY_VECTORS[outcome];
     const signature = signAttestation(hex.decode(secret), attestationMessage(terms.binding, evidence, vector));
     const certificate: CertificateJson = {
         outcome, numerators: vector.numerators.map(String), denominator: String(vector.denominator),
-        evidenceDigest: hex.encode(evidence), signature: hex.encode(signature), signer: hex.encode(terms.oracleKey), sourceBlock: null, issuedAt,
+        evidenceDigest: hex.encode(evidence), signature: hex.encode(signature), signer: held.key, sourceBlock: null, issuedAt,
     };
     let txid: string | undefined;
     let resolveError: string | undefined;
-    try {
-        txid = (await logged(chain, s, { kind: "resolve", label: `Resolve ${outcome.toUpperCase()}: ${m.question.slice(0, 60)}`, marketId: m.id, outcome },
-            (ctx) => resolveMarket(ctx, terms, outcome, evidence, signature))).txid;
-    } catch (e) {
-        resolveError = errMsg(e);
+    if (terms.oracleThreshold === 1) {
+        try {
+            txid = (await logged(chain, s, { kind: "resolve", label: `Resolve ${outcome.toUpperCase()}: ${m.question.slice(0, 60)}`, marketId: m.id, outcome },
+                (ctx) => resolveMarket(ctx, terms, outcome, evidence, slotSignatures(terms, [{ signer: held.key, signature }])))).txid;
+        } catch (e) {
+            resolveError = errMsg(e);
+        }
     }
     return { txid, resolveError, certificate, ...(await sendCertificate(m.id, certificate)) };
 }

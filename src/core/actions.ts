@@ -253,12 +253,15 @@ export async function mergeSets(ctx: Ctx, party: Party, terms: VaultTerms, n: bi
 }
 
 /** Moves the open vault to the ResolvedVault of `outcome`. Anyone holding a valid certificate may submit. */
-export async function resolveMarket(ctx: Ctx, terms: VaultTerms, outcome: BinaryOutcome, evidence: Uint8Array, oracleSig: Uint8Array) {
+/** `signatures` follow the vault's attestor slots (see `slotSignatures`); missing trailing slots are empty. */
+export async function resolveMarket(ctx: Ctx, terms: VaultTerms, outcome: BinaryOutcome, evidence: Uint8Array, signatures: Uint8Array[]) {
     const { vault, resolved } = marketContracts(ctx.ark, terms);
     const coin = await contractCoin(ctx, vault, terms.assets.ctrl);
     if (!coin) throw new Error("market vault not found");
     const fn = { yes: "resolveYes", no: "resolveNo", invalid: "resolveInvalid" }[outcome];
-    return execute(ctx, [{ kind: "covenant", coin, contract: vault, fn, args: { evidence, oracleSig } }], [
+    const slot = (i: number) => signatures[i] ?? new Uint8Array(0);
+    const args = { evidence, "oracleSigs.0": slot(0), "oracleSigs.1": slot(1), "oracleSigs.2": slot(2) };
+    return execute(ctx, [{ kind: "covenant", coin, contract: vault, fn, args }], [
         { script: resolved[outcome].pkScript, amount: BigInt(coin.value), assets: [{ assetId: terms.assets.ctrl, amount: 1n }] },
     ]);
 }

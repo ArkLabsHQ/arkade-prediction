@@ -20,7 +20,7 @@ Status legend: TODO / WIP / DONE / BLOCKED / UNSUPPORTED / NOT RUN.
 - C1 Polymarket discovery adapter + eligibility + persistence — DONE
 - C2 Final-resolution verifier (CTF v1 binary, finalized Polygon block) + live historical proof — DONE
 - C3 Attestation encoding + attestor process + in-covenant verification — DONE
-- C4 Threshold (m-of-n) oracle — TODO (1-of-1 today)
+- C4 Threshold oracle (k-of-3 attestor slots) — DONE (threshold-oracle.test.ts, live 2-of-3)
 
 ## D. Trading, durability, renewal
 - D1 sell_offer / buy_offer (partial fill, cancel, expiry settle) + keeper mint-match — DONE

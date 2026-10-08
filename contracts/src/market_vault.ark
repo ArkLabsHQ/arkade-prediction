@@ -8,7 +8,9 @@ contract MarketVault(
   bytes32 noTxid, int noGidx,
   int unit,
   int capValue,
-  pubkey oracle,
+  // Attestor keys and quorum; a single-attestor market repeats one key with threshold 1.
+  pubkey[3] oracles,
+  int threshold,
   bytes32 binding,
   int closeAt,
   int timeoutAt,
@@ -24,6 +26,19 @@ contract MarketVault(
     require(!tx.assetGroups.has(yesTxid, yesGidx) || tx.assetGroups.find(yesTxid, yesGidx).delta == yesDelta, "yes delta");
     require(tx.assetGroups.has(noTxid, noGidx) || noDelta == 0, "no group");
     require(!tx.assetGroups.has(noTxid, noGidx) || tx.assetGroups.find(noTxid, noGidx).delta == noDelta, "no delta");
+  }
+
+  // An absent attestor passes an empty signature (counts 0); a wrong signature fails the script.
+  // Slots are counted, so a quorum above one needs distinct keys or one signer could fill two slots.
+  private function attested(bytes32 message, signature[3] oracleSigs) {
+    require(threshold == 1 || (oracles[0] != oracles[1] && oracles[0] != oracles[2] && oracles[1] != oracles[2]), "attestor set");
+    int valid = 0;
+    for (i, sig) in oracleSigs {
+      if (checkSigFromStack(sig, oracles[i], message)) {
+        valid = valid + 1;
+      }
+    }
+    require(valid >= threshold, "attestation");
   }
 
   private function keepsCtrl() {
@@ -52,30 +67,30 @@ contract MarketVault(
   }
 
   // One-shot transition to the ResolvedVault committed for the attested vector.
-  function resolveYes(bytes32 evidence, signature oracleSig) {
+  function resolveYes(bytes32 evidence, signature[3] oracleSigs) {
     require(checkTime(closeAt), "too early");
     bytes32 message = sha256("APM/attest/v1" + binding + evidence + num2bin(1, 8) + num2bin(0, 8) + num2bin(1, 8));
-    require(checkSigFromStack(oracleSig, oracle, message), "attestation");
+    attested(message, oracleSigs);
     sets(0, 0);
     keepsCtrl();
     require(tx.outputs[0].scriptPubKey == resolvedYes, "target");
     require(tx.outputs[0].value == tx.input.current.value, "value");
   }
 
-  function resolveNo(bytes32 evidence, signature oracleSig) {
+  function resolveNo(bytes32 evidence, signature[3] oracleSigs) {
     require(checkTime(closeAt), "too early");
     bytes32 message = sha256("APM/attest/v1" + binding + evidence + num2bin(0, 8) + num2bin(1, 8) + num2bin(1, 8));
-    require(checkSigFromStack(oracleSig, oracle, message), "attestation");
+    attested(message, oracleSigs);
     sets(0, 0);
     keepsCtrl();
     require(tx.outputs[0].scriptPubKey == resolvedNo, "target");
     require(tx.outputs[0].value == tx.input.current.value, "value");
   }
 
-  function resolveInvalid(bytes32 evidence, signature oracleSig) {
+  function resolveInvalid(bytes32 evidence, signature[3] oracleSigs) {
     require(checkTime(closeAt), "too early");
     bytes32 message = sha256("APM/attest/v1" + binding + evidence + num2bin(1, 8) + num2bin(1, 8) + num2bin(2, 8));
-    require(checkSigFromStack(oracleSig, oracle, message), "attestation");
+    attested(message, oracleSigs);
     sets(0, 0);
     keepsCtrl();
     require(tx.outputs[0].scriptPubKey == resolvedInvalid, "target");

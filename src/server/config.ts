@@ -1,4 +1,6 @@
 import { readFileSync } from "node:fs";
+import { hex } from "@scure/base";
+import { oracleSlots } from "../core/market.js";
 import { join } from "node:path";
 import { z } from "zod";
 
@@ -39,7 +41,9 @@ const schema = z.object({
     EMULATOR_PUBKEY: hexKey(33).optional(),
     DATA_DIR: z.string().default("/data"),
     ORACLE_URL: noCredentials.optional(),
+    ORACLE_URLS: csv.refine((urls) => urls.every((u) => URL.canParse(u) && !new URL(u).username && !new URL(u).password), "attestor URLs must be URLs without credentials"),
     ORACLE_PUBKEYS: csv,
+    ORACLE_THRESHOLD: int(1),
     ORACLE_EPOCH: int(1),
     POLYMARKET_ENABLED: bool,
     POLYMARKET_GAMMA_URL: z.url().default("https://gamma-api.polymarket.com"),
@@ -89,10 +93,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     }
     if (c.POLYMARKET_ENABLED && c.POLYGON_RPC_URLS.length < 2) throw new Error("POLYGON_RPC_URLS needs at least two providers");
     if (c.MARKET_UNIT_SATS % 2 !== 0) throw new Error("MARKET_UNIT_SATS must be even");
+    if (c.ORACLE_PUBKEYS.length > 0) oracleSlots(c.ORACLE_PUBKEYS.map((k) => hex.decode(k)), c.ORACLE_THRESHOLD);
     const adminToken = secret(env, "ADMIN_TOKEN");
     if (adminToken !== undefined && adminToken.length < 24) throw new Error("ADMIN_TOKEN must be at least 24 characters");
     return {
         ...c,
+        ORACLE_URLS: [...new Set([...c.ORACLE_URLS, ...(c.ORACLE_URL ? [c.ORACLE_URL] : [])])],
         OPERATOR_MNEMONIC: secret(env, "OPERATOR_MNEMONIC"),
         LP_MNEMONIC: secret(env, "LP_MNEMONIC"),
         ADMIN_TOKEN: adminToken,

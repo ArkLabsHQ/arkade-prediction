@@ -5,7 +5,7 @@ import { hex } from "@scure/base";
 import { issueMarketAssets, mintSets, openVault, postOffer, redeemAll, takeOffers, walletParty, type Ctx, type Party } from "../../src/core/actions.js";
 import { attestationMessage, evidenceDigest, signAttestation } from "../../src/core/attestation.js";
 import { bindingOf, type MarketDefinition } from "../../src/core/definition.js";
-import type { VaultTerms } from "../../src/core/market.js";
+import { oracleSlots, type VaultTerms } from "../../src/core/market.js";
 import { BINARY_VECTORS } from "../../src/core/payout.js";
 import {
     coinFromJson, offerTermsFromJson, offerTermsToJson, termsToJson,
@@ -61,14 +61,14 @@ describe("server API end to end", () => {
         const { assets, genesisTxid } = await issueMarketAssets(ctx, parties.alice!, marketId, 1n);
         await waitFor(async () => (await parties.alice!.coins()).some((c) => c.assets?.some((a) => a.assetId === assets.ctrl)), { what: "genesis" });
         const terms: VaultTerms = {
-            assets, unitSats: 1000n, capSats: 1000n + 100_000n, oracleKey: hex.decode(oracleKey),
-            binding: bindingOf({ network: "regtest", arkSigner: ark.serverKey, emulatorSigner: ark.emulatorKey!, marketId, definition, unitSats: 1000n, assets, oracleKeys: [oracleKey], oracleEpoch: 1 }),
+            assets, unitSats: 1000n, capSats: 1000n + 100_000n, oracleKeys: oracleSlots([hex.decode(oracleKey)], 1), oracleThreshold: 1,
+            binding: bindingOf({ network: "regtest", arkSigner: ark.serverKey, emulatorSigner: ark.emulatorKey!, marketId, definition, unitSats: 1000n, assets, oracleKeys: [oracleKey, oracleKey, oracleKey], oracleThreshold: 1, oracleEpoch: 1 }),
             closeAt, timeoutAt, exitDelaySeconds: 512n,
         };
         const { txid: vaultTxid } = await openVault(ctx, parties.alice!, terms, 1n, 1000n);
         const req: CreateMarketRequest = {
             question: definition.question, rules: definition.rules, outcomes: ["YES", "NO"], category: "test",
-            closeAtUnix: String(closeAt), timeoutAtUnix: String(timeoutAt), oracle: { policy: "external-key", key: oracleKey },
+            closeAtUnix: String(closeAt), timeoutAtUnix: String(timeoutAt), oracle: { policy: "external-key", keys: [oracleKey], threshold: 1 },
             marketId, genesisTxid, vaultTxid, terms: termsToJson(terms),
         };
         const forged = await api("/api/markets", { method: "POST", body: JSON.stringify({ ...req, question: "Will it resolve NO?" }) });

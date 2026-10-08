@@ -1,0 +1,47 @@
+# Two more attestors for a 2-of-3 quorum, for local verification only: one operator running three keys is not
+# three independent attestors. In production each attestor runs on its own infrastructure; point ORACLE_URLS there.
+#   ORACLE_URLS=http://oracle:37410,http://oracle-2:37410,http://oracle-3:37410
+#   ORACLE_PUBKEYS=<key1>,<key2>,<key3>  ORACLE_THRESHOLD=2
+x-attestor: &attestor
+  image: ${APM_IMAGE:-arkade-prediction:local}
+  command: ["node", "dist/oracle/main.js"]
+  init: true
+  restart: unless-stopped
+  healthcheck:
+    test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:37410/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+    interval: 30s
+    timeout: 5s
+    retries: 3
+
+x-attestor-env: &attestor-env
+  ORACLE_PORT: "37410"
+  ORACLE_DATA_DIR: /data/oracle
+  ORACLE_EPOCH: ${ORACLE_EPOCH:-1}
+  APM_NETWORK: ${APM_NETWORK:?set APM_NETWORK}
+  ARK_SIGNER_XONLY: ${ARK_SIGNER_XONLY:-}
+  EMULATOR_PUBKEY: ${EMULATOR_PUBKEY:-}
+  POLYMARKET_GAMMA_URL: ${POLYMARKET_GAMMA_URL:-https://gamma-api.polymarket.com}
+  POLYGON_RPC_URLS: ${POLYGON_RPC_URLS:-}
+  POLYMARKET_RESOLVERS: ${POLYMARKET_RESOLVERS:-}
+
+services:
+  oracle-2:
+    <<: *attestor
+    volumes:
+      - apm-oracle-2:/data
+    environment:
+      <<: *attestor-env
+      ORACLE_SECRET_KEY: ${ORACLE_2_SECRET_KEY:-}
+      ORACLE_SECRET_KEY_FILE: ${ORACLE_2_SECRET_KEY_FILE:-}
+  oracle-3:
+    <<: *attestor
+    volumes:
+      - apm-oracle-3:/data
+    environment:
+      <<: *attestor-env
+      ORACLE_SECRET_KEY: ${ORACLE_3_SECRET_KEY:-}
+      ORACLE_SECRET_KEY_FILE: ${ORACLE_3_SECRET_KEY_FILE:-}
+
+volumes:
+  apm-oracle-2:
+  apm-oracle-3:

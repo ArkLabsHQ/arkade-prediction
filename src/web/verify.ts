@@ -1,7 +1,7 @@
 import { hex } from "@scure/base";
 import { AuditError, auditGenesis } from "../core/audit.js";
 import { bindingOf, type MarketDefinition } from "../core/definition.js";
-import type { ArkadeClient, VaultTerms } from "../core/market.js";
+import { ORACLE_SLOTS, oracleSlots, type ArkadeClient, type VaultTerms } from "../core/market.js";
 import { offerContract, type Side } from "../core/offers.js";
 import { offerTermsFromJson, termsFromJson, type ConfigJson, type MarketJson, type OfferJson } from "../shared/api.js";
 import type { Chain } from "./chain.js";
@@ -30,7 +30,15 @@ export function checkDisplayedBinding(m: MarketJson, dep: Deployment): void {
     const t = m.terms;
     const definition = displayedDefinition(m);
     if (!t || definition.closeAtUnix !== t.closeAtUnix) throw new Error("the close time shown differs from the funded terms");
-    if (m.oracle.threshold !== 1 || m.oracle.keys.length !== 1 || m.oracle.keys[0]?.toLowerCase() !== t.oracleKey) throw new Error("the oracle key shown is not the key the vault checks");
+    if (m.oracle.threshold !== t.oracleThreshold || m.oracle.keys.map((k) => k.toLowerCase()).join() !== t.oracleKeys.join()) {
+        throw new Error("the attestors shown are not the ones the vault checks");
+    }
+    try {
+        if (t.oracleKeys.length !== ORACLE_SLOTS) throw new Error("wrong number of attestor slots");
+        oracleSlots(t.oracleKeys.map((k) => hex.decode(k)), t.oracleThreshold);
+    } catch (err) {
+        throw new Error(`the vault's attestor set is not valid: ${(err as Error).message}`);
+    }
     const s = m.source;
     const b = s?.binding;
     if (s && (!b || b.sourceId !== s.sourceId || b.protocolVersion !== s.protocol || b.conditionId !== s.conditionId || b.questionId !== s.questionId || (b.resolver ?? null) !== s.resolver)) {
@@ -38,7 +46,7 @@ export function checkDisplayedBinding(m: MarketJson, dep: Deployment): void {
     }
     const expected = bindingOf({
         network: dep.network, arkSigner: dep.arkSigner, emulatorSigner: dep.emulatorSigner, marketId: m.id, definition,
-        unitSats: BigInt(t.unitSats), assets: t.assets, oracleKeys: m.oracle.keys, oracleEpoch: m.oracle.epoch,
+        unitSats: BigInt(t.unitSats), assets: t.assets, oracleKeys: t.oracleKeys, oracleThreshold: t.oracleThreshold, oracleEpoch: m.oracle.epoch,
     });
     if (hex.encode(expected) !== t.binding) throw new Error("the funded terms do not commit to the question, rules, outcomes, timing, source and oracle shown, on this network");
 }

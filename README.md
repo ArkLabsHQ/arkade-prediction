@@ -55,13 +55,14 @@ the full-suite log is `docs/evidence/e2e-regtest.txt`.
 | 13b | Unilateral exit carrying claims or vault collateral | UNSUPPORTED | SDK: exits handle BTC value only; vault exit leaf is NUMS (`DECISIONS.md` 11) | — |
 | 14 | Browser UI against regtest | PASS | `docs/evidence/ui/README.md` + screenshots | manual (Playwright-driven) |
 | 15 | Performance measured (final code; earlier run kept for comparison) | PASS | `docs/evidence/perf.json`, `docs/evidence/perf-24ccc96.json`, `docs/performance.md` | `node --import tsx scripts/perf.ts` |
-| 16 | Unit and property tests (92) | PASS | `docs/evidence/unit.txt` | `pnpm exec vitest run test/unit` |
+| 16 | Unit and property tests (101) | PASS | `docs/evidence/unit.txt` | `pnpm exec vitest run test/unit` |
 | 17 | Mutinynet readiness (read-only) | PASS | `docs/evidence/mutinynet-preflight.txt` | `node --env-file=.env.mutinynet.example --import tsx scripts/preflight.ts` |
 | 17a | Early source resolution detected (batched finalized reads) and trading halted | PASS | `docs/evidence/early-resolution-screen.txt` (live), `test/e2e/halted-market.test.ts`, `test/unit/server/resolver.test.ts` | `node --import tsx scripts/live/early-resolution-check.ts` |
 | 17b | Independent reviews: collateral, oracle, orders, durability | DONE | `docs/reviews.md` (3 high, 11 medium, 9 low: each fixed or documented) | — |
 | 18 | Mutinynet transactions | NOT RUN | needs funded test wallets and authorization | `docs/operations.md` |
 | 19 | Hosted Dokploy deployment | NOT RUN | image and compose tested locally (#12) | `docs/operations.md` |
-| 20 | Threshold oracle, categorical markets, nonzero-fee renewal | NOT RUN (not implemented) | `PLAN.md` C4, D4 | — |
+| 20 | Threshold oracle: 2-of-3 attestors enforced in the vault | PASS | `test/e2e/threshold-oracle.test.ts`, `docs/evidence/polymarket-live.txt` (3 attestor processes) | `threshold-oracle.test.ts` |
+| 21 | Categorical markets, nonzero-fee renewal | NOT RUN (not implemented) | `PLAN.md` D4 | — |
 
 ## Trust summary
 

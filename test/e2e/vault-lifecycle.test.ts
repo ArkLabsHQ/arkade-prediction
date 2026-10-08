@@ -4,7 +4,7 @@ import { randomBytes } from "@noble/hashes/utils.js";
 import { hex } from "@scure/base";
 import { buildArkadeTx, signInputs, submitArkadeTx, type InputSpec, type OutputSpec } from "../../src/core/arkadeTx.js";
 import { attestationMessage, bindingHash, evidenceDigest, signAttestation } from "../../src/core/attestation.js";
-import { TEMPLATE, marketContracts, type VaultTerms } from "../../src/core/market.js";
+import { TEMPLATE, marketContracts, oracleSlots, type VaultTerms } from "../../src/core/market.js";
 import { BINARY_VECTORS, redemptionPayout } from "../../src/core/payout.js";
 import { connectArkade, expectCovenantRejection, faucet, newWallet, waitFor } from "./env.js";
 import { assetBalance, coinAt, issueGenesis, network, scriptOf, sumValue, walletInputs, type TestWallet } from "./market.js";
@@ -46,11 +46,11 @@ describe("market vault lifecycle", () => {
             claims: { ctrl: assets.ctrl, outcomes: [assets.yes, assets.no] },
             outcomeLabels: ["YES", "NO"],
             source: null,
-            oracle: { keys: [hex.encode(oracleKey)], threshold: 1, epoch: 1 },
+            oracle: { keys: [hex.encode(oracleKey), hex.encode(oracleKey), hex.encode(oracleKey)], threshold: 1, epoch: 1 },
             timing: { closeAt: nowS - 60n, timeoutAt: 0n },
         });
         const terms: VaultTerms = {
-            assets, unitSats: UNIT, capSats: BASE + 50n * UNIT, oracleKey, binding, closeAt: nowS - 60n, timeoutAt: 0n, exitDelaySeconds: 512n,
+            assets, unitSats: UNIT, capSats: BASE + 50n * UNIT, oracleKeys: oracleSlots([oracleKey], 1), oracleThreshold: 1, binding, closeAt: nowS - 60n, timeoutAt: 0n, exitDelaySeconds: 512n,
         };
         const { vault, resolved } = marketContracts(ark, terms);
         const creatorScript = await scriptOf(creator);
@@ -105,7 +105,7 @@ describe("market vault lifecycle", () => {
         const sigFor = (outcome: keyof typeof BINARY_VECTORS, key = oracleSecret) =>
             signAttestation(key, attestationMessage(binding, evidence, BINARY_VECTORS[outcome]));
         const resolve = (fn: string, sig: Uint8Array, target = resolved.yes) =>
-            send([{ kind: "covenant", coin: vaultCoin, contract: vault, fn, args: { evidence, oracleSig: sig } }], [
+            send([{ kind: "covenant", coin: vaultCoin, contract: vault, fn, args: { evidence, "oracleSigs.0": sig, "oracleSigs.1": new Uint8Array(0), "oracleSigs.2": new Uint8Array(0) } }], [
                 { script: target.pkScript, amount: BigInt(vaultCoin.value), assets: [{ assetId: assets.ctrl, amount: 1n }] },
             ]);
         await expectCovenantRejection(resolve("resolveYes", sigFor("no")), "NO attestation used for YES");

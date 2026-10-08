@@ -38,7 +38,7 @@ All covenant leaves are `[arkd signer, emulator key tweaked by the covenant]`; B
 |---|---|---|---|
 | `mint(n)` | arkd + emulator (anyone may submit) | out0 = same script, value +n·unit, holds exactly CTRL; value ≤ cap | YES and NO each +n |
 | `merge(n)` | arkd + emulator | out0 = same script, value −n·unit, CTRL kept | YES and NO each −n (burned) |
-| `resolveYes/No/Invalid(evidence, sig)` | arkd + emulator, after `checkTime(closeAt)` and a valid oracle signature over the bound message | out0 = the precommitted ResolvedVault script, same value, CTRL kept | none; vector fixed from now on |
+| `resolveYes/No/Invalid(evidence, sigs[3])` | arkd + emulator, after `checkTime(closeAt)` and at least `threshold` valid attestor signatures over the bound message (one slot per attestor key; empty = absent) | out0 = the precommitted ResolvedVault script, same value, CTRL kept | none; vector fixed from now on |
 | `timeout()` | arkd + emulator after `checkTime(timeoutAt)` (if set) | out0 = ResolvedVault(INVALID), same value | none |
 | `renew()` | emulator only on an intent proof (`tx.version == 2`) | paired intent output keeps script, value, assets (OP_TUNNEL 7) | none (YES/NO delta forced 0) |
 | `unilateral` | CSV + BIP341 NUMS key — **nobody** | — | exists only because arkd refuses intents for scripts with no exit leaf |
@@ -81,11 +81,15 @@ All covenant leaves are `[arkd signer, emulator key tweaked by the covenant]`; B
 ## 5. Attestation binding
 
 `message = sha256("APM/attest/v1" ‖ binding ‖ evidence ‖ num2bin(n₀,8) ‖ num2bin(n₁,8) ‖ num2bin(D,8))`,
-recomputed inside `resolve*` and verified with `OP_CHECKSIGFROMSTACK` against the market's x-only oracle key.
+recomputed inside `resolve*` and verified with `OP_CHECKSIGFROMSTACK` against each of the vault's three attestor
+slots. An empty signature counts 0; an invalid one fails the script; at least `threshold` must verify. A single
+attestor fills all three slots with its key and threshold 1; above threshold 1 the vault refuses repeated keys,
+because it counts slots and one attestor could otherwise fill two (tests: threshold-oracle).
 `binding = taggedHash("APM/market/v1", canonical JSON of {network, arkd signer, emulator signer, template
 fingerprints, market id, definition hash (question, rules, outcomes, close, timeout, source identity), unit,
-CTRL/YES/NO ids, outcome labels, oracle keys/threshold/epoch, timing})`. `evidence` is a digest of the source
-reads (finalized block number/hash, contract, raw `eth_call`s). A certificate for another market, network,
+CTRL/YES/NO ids, outcome labels, oracle keys/threshold/epoch, timing})`. `evidence` is a digest of the chain facts at one
+finalized Polygon block (chain, CTF contract, condition, block number/hash, payout); the resolver picks the block
+and every attestor re-reads that block, so independent attestors sign the same message. A certificate for another market, network,
 template, key, epoch, vector or outcome order fails the in-covenant check (tests: vault-lifecycle,
 settlement-paths). Certificates never expire; double payment is prevented by claim burns, not by expiry.
 

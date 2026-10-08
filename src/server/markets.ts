@@ -1,7 +1,7 @@
 import { hex } from "@scure/base";
 import { AuditError, auditGenesis as auditMarketGenesis } from "../core/audit.js";
 import { bindingOf, definitionHash, type MarketDefinition } from "../core/definition.js";
-import { marketContracts, type VaultTerms } from "../core/market.js";
+import { marketContracts, oracleSlots, type VaultTerms } from "../core/market.js";
 import {
     MAX_TIMEOUT_AFTER_CLOSE_SECONDS,
     termsFromJson,
@@ -9,6 +9,7 @@ import {
     type CertificateJson,
     type CreateMarketRequest,
     type MarketJson,
+    type MarketTermsJson,
     type MarketStatus,
     type OraclePolicy,
 } from "../shared/api.js";
@@ -68,7 +69,12 @@ export interface MarketRow {
 }
 
 export const getMarket = (db: Db, id: string) => one<MarketRow>(db, "SELECT * FROM markets WHERE id = ?", id);
-export const marketTerms = (row: MarketRow): VaultTerms | undefined => (row.terms ? termsFromJson(JSON.parse(row.terms)) : undefined);
+/** Undefined for markets without terms and for the retired single-attestor template (migration 2 fails those). */
+export function marketTerms(row: MarketRow): VaultTerms | undefined {
+    if (!row.terms) return undefined;
+    const json = JSON.parse(row.terms) as MarketTermsJson;
+    return Array.isArray(json.oracleKeys) ? termsFromJson(json) : undefined;
+}
 
 const bounded = (s: unknown, max: number, field: string): string => {
     if (typeof s !== "string" || s.trim().length === 0 || s.length > max) throw new HttpError(400, "invalid-field", `${field} must be 1..${max} characters`);
@@ -107,17 +113,26 @@ export async function registerCustomMarket(d: Deps, req: CreateMarketRequest): P
     }
     const policy = req.oracle?.policy;
     if (policy !== "external-key" && policy !== "dev-oracle") throw new HttpError(400, "oracle-policy", "unsupported oracle policy");
-    if (policy === "dev-oracle" && (d.cfg.APM_NETWORK !== "regtest" || req.oracle.key !== d.devOracleKey)) throw new HttpError(400, "oracle-policy", "dev oracle is regtest-only and must use the server dev key");
-    if (!/^[0-9a-f]{64}$/.test(req.oracle.key)) throw new HttpError(400, "oracle-key", "oracle key must be 32-byte x-only hex");
+    const keys = Array.isArray(req.oracle.keys) ? req.oracle.keys : [];
+    if (!keys.every((k) => typeof k === "string" && /^[0-9a-f]{64}$/.test(k))) throw new HttpError(400, "oracle-key", "oracle keys must be 32-byte x-only hex");
+    if (policy === "dev-oracle" && (d.cfg.APM_NETWORK !== "regtest" || keys.some((k) => k !== d.devOracleKey))) throw new HttpError(400, "oracle-policy", "dev oracle is regtest-only and must use the server dev key");
+    let slots: string[];
+    try {
+        slots = oracleSlots(keys.map((k) => hex.decode(k)), req.oracle.threshold).map((k) => hex.encode(k));
+    } catch (err) {
+        throw new HttpError(400, "oracle-set", (err as Error).message);
+    }
 
     const terms = termsFromJson(req.terms);
     const expected = bindingOf({
         network: d.cfg.APM_NETWORK, arkSigner: d.net.ark.serverKey, emulatorSigner: d.net.ark.emulatorKey!,
         marketId: req.marketId, definition, unitSats: terms.unitSats, assets: terms.assets,
-        oracleKeys: [req.oracle.key], oracleEpoch: 1,
+        oracleKeys: slots, oracleThreshold: req.oracle.threshold, oracleEpoch: 1,
     });
     if (hex.encode(expected) !== hex.encode(terms.binding)) throw new HttpError(400, "binding", "terms.binding does not commit to this definition");
-    if (hex.encode(terms.oracleKey) !== req.oracle.key) throw new HttpError(400, "oracle-key", "terms.oracleKey differs from the oracle policy key");
+    if (terms.oracleKeys.map((k) => hex.encode(k)).join() !== slots.join() || terms.oracleThreshold !== req.oracle.threshold) {
+        throw new HttpError(400, "oracle-key", "terms attestor set differs from the oracle policy");
+    }
     if (terms.closeAt !== closeAt || terms.timeoutAt !== timeoutAt) throw new HttpError(400, "timing", "terms timing differs from the definition");
     if (terms.exitDelaySeconds < d.net.exitDelaySeconds) throw new HttpError(400, "exit-delay", "exit delay below the operator minimum");
     if (terms.unitSats < 100n || terms.unitSats > 1_000_000n || terms.unitSats % 2n !== 0n) throw new HttpError(400, "unit", "unit must be an even number of sats in [100, 1000000]");
@@ -127,9 +142,9 @@ export async function registerCustomMarket(d: Deps, req: CreateMarketRequest): P
     const t = now();
     run(d.db, `INSERT INTO markets(id, kind, status, question, rules, outcomes, category, close_at, timeout_at, oracle_policy, oracle_keys,
                oracle_threshold, oracle_epoch, definition_hash, terms, base_sats, genesis_txid, vault_txid, created_at, updated_at)
-               VALUES (?, 'custom', 'open', ?, ?, ?, ?, ?, ?, ?, ?, 1, 1, ?, ?, ?, ?, ?, ?, ?)`,
+               VALUES (?, 'custom', 'open', ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)`,
         req.marketId, definition.question, definition.rules, JSON.stringify(definition.outcomes), definition.category,
-        Number(closeAt), Number(timeoutAt), policy, JSON.stringify([req.oracle.key]), definitionHash(definition),
+        Number(closeAt), Number(timeoutAt), policy, JSON.stringify(slots), req.oracle.threshold, definitionHash(definition),
         JSON.stringify(termsToJson(terms)), String(baseSats), req.genesisTxid, req.vaultTxid, t, t);
     d.bus.publish("market", req.marketId, { status: "open" });
     return getMarket(d.db, req.marketId)!;

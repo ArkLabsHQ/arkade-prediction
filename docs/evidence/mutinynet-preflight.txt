@@ -7,13 +7,13 @@ PASS  tx limits: maxTxWeight 40000, maxOpReturnOutputs 3, dust 330
 PASS  emulator key == pin: live 03f823b9b2febc81f4af967e77aed2f541cbd3397c6d8f5a72e32eb7b471af889a, pinned 03f823b9b2febc81f4af967e77aed2f541cbd3397c6d8f5a72e32eb7b471af889a
 PASS  emulator version: unknown (regtest-verified: v0.0.9-rc.1)
 PASS  emulator deprecated keys: []
-PASS  esplora reachable: tip 3488022
-PASS  template marketVault: largest covenant asm JSON 1567 chars (< 10,000-byte script cap)
+PASS  esplora reachable: tip 3489113
+PASS  template marketVault: largest covenant asm JSON 2204 chars (< 10,000-byte script cap)
 PASS  template resolvedVault: largest covenant asm JSON 1605 chars (< 10,000-byte script cap)
 PASS  template sell: largest covenant asm JSON 1313 chars (< 10,000-byte script cap)
 PASS  template buy: largest covenant asm JSON 1515 chars (< 10,000-byte script cap)
 PASS  template claimBox: largest covenant asm JSON 744 chars (< 10,000-byte script cap)
-PASS  template fingerprints: {"marketVault":"sha256:bb6bc1f831071cb81df690fee22f171d63ebc6eccabe2d6588daedf8617571cf","resolvedVault":"sha256:4d6bd19813a9981f2b9e4d7bde023330c298508481222d3698d71b1f94901882"}
-PASS  polygon finalized tag on >= 2 providers: polygon-bor-rpc.publicnode.com: 95145542; polygon.drpc.org: 95145542
+PASS  template fingerprints: {"marketVault":"sha256:fc778b173b9531fe65e4ecffd29fa2212f89824ba52fe14c640a4f88e6c9f152","resolvedVault":"sha256:4d6bd19813a9981f2b9e4d7bde023330c298508481222d3698d71b1f94901882"}
+PASS  polygon finalized tag on >= 2 providers: polygon-bor-rpc.publicnode.com: 95169406; polygon.drpc.org: 95169403
 PASS  gamma discovery reachable: HTTP 200
-{"network":"mutinynet","at":"2026-10-08T01:38:40.666Z","arkSigner":"03301078808e4f7bc0dadfe29e34b1df8eaf0108ef06b1722274075ebc107a127a","emulator":"03f823b9b2febc81f4af967e77aed2f541cbd3397c6d8f5a72e32eb7b471af889a","failed":0}
+{"network":"mutinynet","at":"2026-10-08T11:35:23.246Z","arkSigner":"03301078808e4f7bc0dadfe29e34b1df8eaf0108ef06b1722274075ebc107a127a","emulator":"03f823b9b2febc81f4af967e77aed2f541cbd3397c6d8f5a72e32eb7b471af889a","failed":0}

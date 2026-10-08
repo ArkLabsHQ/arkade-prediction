@@ -7,7 +7,7 @@ import {
     spendableCoins, takeOffers, walletParty, type Ctx, type LiveOffer, type Party,
 } from "../../src/core/actions.js";
 import { attestationMessage, bindingHash, evidenceDigest, signAttestation } from "../../src/core/attestation.js";
-import { TEMPLATE, marketContracts, type VaultTerms } from "../../src/core/market.js";
+import { TEMPLATE, marketContracts, oracleSlots, type VaultTerms } from "../../src/core/market.js";
 import { offerContract, type OfferTerms } from "../../src/core/offers.js";
 import { BINARY_VECTORS } from "../../src/core/payout.js";
 import { connectArkade, faucet, indexerProvider, newWallet, randomP2TR, waitFor } from "./env.js";
@@ -41,11 +41,11 @@ describe("market lifecycle through shared actions", () => {
             template: TEMPLATE, marketId, definitionHash: "00".repeat(32),
             collateral: { kind: "BTC", unitSats: UNIT }, claims: { ctrl: assets.ctrl, outcomes: [assets.yes, assets.no] },
             outcomeLabels: ["YES", "NO"], source: null,
-            oracle: { keys: [hex.encode(schnorr.getPublicKey(oracleSecret))], threshold: 1, epoch: 1 },
+            oracle: { keys: [hex.encode(schnorr.getPublicKey(oracleSecret)), hex.encode(schnorr.getPublicKey(oracleSecret)), hex.encode(schnorr.getPublicKey(oracleSecret))], threshold: 1, epoch: 1 },
             timing: { closeAt, timeoutAt: 0n },
         });
         const terms: VaultTerms = {
-            assets, unitSats: UNIT, capSats: BASE + 100n * UNIT, oracleKey: schnorr.getPublicKey(oracleSecret), binding,
+            assets, unitSats: UNIT, capSats: BASE + 100n * UNIT, oracleKeys: oracleSlots([schnorr.getPublicKey(oracleSecret)], 1), oracleThreshold: 1, binding,
             closeAt, timeoutAt: 0n, exitDelaySeconds: 512n,
         };
         const { vault, resolved } = marketContracts(ark, terms);
@@ -87,7 +87,7 @@ describe("market lifecycle through shared actions", () => {
 
         const evidence = evidenceDigest({ fixture: "dev-oracle", outcome: "YES" });
         const sig = signAttestation(oracleSecret, attestationMessage(binding, evidence, BINARY_VECTORS.yes));
-        await step("oracle attests YES; vault resolves", () => resolveMarket(ctx, terms, "yes", evidence, sig), BASE + 21n * UNIT, resolved.yes);
+        await step("oracle attests YES; vault resolves", () => resolveMarket(ctx, terms, "yes", evidence, [sig]), BASE + 21n * UNIT, resolved.yes);
 
         const bal = async (party: Party) => (await party.coins()).reduce((s, c) => s + BigInt(c.value), 0n);
         const aliceBefore = await bal(p.alice);

@@ -4,7 +4,7 @@ import { randomBytes } from "@noble/hashes/utils.js";
 import { base64, hex } from "@scure/base";
 import { assetIdOf } from "../../../src/core/assets.js";
 import type { AuditSource } from "../../../src/core/audit.js";
-import { genesisPacket, marketContracts, type ArkadeClient, type MarketAssets, type VaultTerms } from "../../../src/core/market.js";
+import { genesisPacket, marketContracts, oracleSlots, type ArkadeClient, type MarketAssets, type VaultTerms } from "../../../src/core/market.js";
 
 export const UNIT = 1000n;
 export const BASE = 1000n;
@@ -57,7 +57,7 @@ export function fundedMarket(ark: ArkadeClient, v: Funding = {}) {
     const genesisTxid = t0.id;
     const assets = { ctrl: assetIdOf(genesisTxid, 0), yes: assetIdOf(genesisTxid, 1), no: assetIdOf(genesisTxid, 2) };
     const terms: VaultTerms = v.terms?.(assets) ?? {
-        assets, unitSats: UNIT, capSats: BASE + 100n * UNIT, oracleKey: randomBytes(32), binding: randomBytes(32),
+        assets, unitSats: UNIT, capSats: BASE + 100n * UNIT, oracleKeys: oracleSlots([randomBytes(32)], 1), oracleThreshold: 1, binding: randomBytes(32),
         closeAt: 1_900_000_000n, timeoutAt: 1_902_592_000n, exitDelaySeconds: 512n,
     };
     const vault = marketContracts(ark, terms).vault.pkScript;

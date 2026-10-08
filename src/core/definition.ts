@@ -26,7 +26,9 @@ export interface BindingInput {
     definition: MarketDefinition;
     unitSats: bigint;
     assets: MarketAssets;
+    /** The vault's attestor slots, in order (see `oracleSlots`). */
     oracleKeys: string[];
+    oracleThreshold: number;
     oracleEpoch: number;
 }
 
@@ -41,7 +43,7 @@ export function marketBinding(b: BindingInput): MarketBinding {
         claims: { ctrl: b.assets.ctrl, outcomes: [b.assets.yes, b.assets.no] },
         outcomeLabels: [...b.definition.outcomes],
         source: b.definition.source ?? null,
-        oracle: { keys: b.oracleKeys, threshold: 1, epoch: b.oracleEpoch },
+        oracle: { keys: b.oracleKeys, threshold: b.oracleThreshold, epoch: b.oracleEpoch },
         timing: { closeAt: BigInt(b.definition.closeAtUnix), timeoutAt: BigInt(b.definition.timeoutAtUnix) },
     };
 }
