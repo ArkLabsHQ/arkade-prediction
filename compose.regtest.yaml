@@ -5,6 +5,7 @@ services:
     networks: [default, regtest]
     ports:
       - "${APM_HTTP_PORT:-37400}:37400"
+      - "127.0.0.1:${APM_ADMIN_PORT:-37499}:37401"
   oracle:
     networks: [default, regtest]
 

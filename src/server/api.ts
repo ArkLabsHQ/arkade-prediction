@@ -1,4 +1,3 @@
-import { timingSafeEqual } from "node:crypto";
 import { Hono, type Context } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { streamSSE } from "hono/streaming";
@@ -23,6 +22,7 @@ export interface ApiDeps extends Deps {
     overview: () => Promise<unknown>;
     faucet?: (address: string, amount: number) => Promise<string>;
     replay?: (sourceId: string) => Promise<string>;
+    adminRoutes?: boolean;
 }
 
 const MAX_BODY = 64 * 1024;
@@ -40,12 +40,6 @@ async function body<T>(c: Context): Promise<T> {
 function intParam(raw: string | undefined, def: number, min: number, max: number): number {
     const n = Math.trunc(Number(raw || NaN));
     return Number.isNaN(n) ? def : Math.min(Math.max(n, min), max);
-}
-
-function adminOk(c: Context, token: string | undefined): boolean {
-    const got = c.req.header("authorization")?.replace(/^Bearer /, "") ?? "";
-    if (!token || got.length !== token.length) return false;
-    return timingSafeEqual(Buffer.from(got), Buffer.from(token));
 }
 
 export function createApi(d: ApiDeps): Hono {
@@ -169,10 +163,6 @@ export function createApi(d: ApiDeps): Hono {
     );
 
     const admin = new Hono();
-    admin.use("*", async (c, next) => {
-        if (!adminOk(c, d.cfg.ADMIN_TOKEN)) return c.json({ error: "unauthorized", code: "auth" }, 401);
-        await next();
-    });
     admin.get("/overview", async (c) => c.json(await d.overview()));
     admin.post("/import/run", async (c) => {
         if (!d.importNow) throw new HttpError(409, "disabled", "source import is disabled");
@@ -232,7 +222,8 @@ export function createApi(d: ApiDeps): Hono {
         if (!/^[0-9]{1,12}$/.test(String(sourceId))) throw new HttpError(400, "source-id", "numeric Polymarket market id expected");
         return c.json({ marketId: await d.replay(String(sourceId)) }, 201);
     });
-    app.route("/api/admin", admin);
+    // Only the admin listener (ADMIN_PORT) mounts these; it is meant to be reachable only through a protected edge.
+    if (d.adminRoutes) app.route("/api/admin", admin);
 
     if (d.cfg.DEV_ENDPOINTS && d.faucet) {
         app.post("/api/dev/faucet", async (c) => {

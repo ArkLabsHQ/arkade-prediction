@@ -13,8 +13,10 @@ services:
     restart: unless-stopped
     stop_grace_period: 30s
     # Reached through the platform's proxy (Dokploy domain -> app:37400); compose.regtest.yaml publishes it locally.
+    # 37401 is the unauthenticated operator API/console: route it only through an access-controlled edge.
     expose:
       - "37400"
+      - "37401"
     volumes:
       - apm-data:/data
     environment:
@@ -36,8 +38,7 @@ services:
       OPERATOR_MNEMONIC_FILE: ${OPERATOR_MNEMONIC_FILE:-}
       LP_MNEMONIC: ${LP_MNEMONIC:-}
       LP_MNEMONIC_FILE: ${LP_MNEMONIC_FILE:-}
-      ADMIN_TOKEN: ${ADMIN_TOKEN:-}
-      ADMIN_TOKEN_FILE: ${ADMIN_TOKEN_FILE:-}
+      ORACLE_SECRET_KEY: ${APP_ORACLE_SECRET_KEY:-}
       DEV_ORACLE_SECRET: ${DEV_ORACLE_SECRET:-}
       ORACLE_URL: ${ORACLE_URL:-http://oracle:37410}
       ORACLE_URLS: ${ORACLE_URLS:-}

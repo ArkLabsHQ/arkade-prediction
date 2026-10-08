@@ -1,7 +1,8 @@
 # HTTP API
 
 Types: `src/shared/api.ts`. Amounts are decimal strings, bytes are lowercase hex. Errors: `{ "error": string, "code": string }`
-with 4xx/5xx. Public endpoints need no auth; `/api/admin/*` needs `Authorization: Bearer <ADMIN_TOKEN>`;
+with 4xx/5xx. Public endpoints need no auth; `/api/admin/*` exists only on the admin listener (`ADMIN_PORT`, default 37401),
+which has no authentication and must be reachable only through an access-controlled edge;
 `/api/dev/*` exists only when `DEV_ENDPOINTS=true` (regtest).
 
 The server never holds user keys. Browsers (and the CLI) build, sign and submit their own Arkade

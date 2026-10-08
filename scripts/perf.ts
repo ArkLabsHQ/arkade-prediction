@@ -10,12 +10,11 @@ import { network } from "../test/e2e/market.js";
 import type { TestServer } from "../test/e2e/server.js";
 
 const base = process.env.APM_URL ?? "http://127.0.0.1:37400";
-const token = readFileSync(process.env.APM_ENV_FILE ?? ".env.regtest", "utf8").match(/^ADMIN_TOKEN=(.+)$/m)?.[1]?.trim();
+const adminBase = process.env.APM_ADMIN_URL ?? "http://127.0.0.1:37499";
 const api: TestServer["api"] = async (path, init = {}) => {
     const headers = new Headers(init.headers);
     if (init.body) headers.set("content-type", "application/json");
-    if (init.admin) headers.set("authorization", `Bearer ${token}`);
-    const r = await fetch(`${base}${path}`, { ...init, headers });
+    const r = await fetch(`${init.admin ? adminBase : base}${path}`, { ...init, headers });
     const text = await r.text();
     return { status: r.status, body: text ? JSON.parse(text) : undefined };
 };

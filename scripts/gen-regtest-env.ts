@@ -9,7 +9,6 @@ const oracle = randomBytes(32);
 const values: Record<string, string> = {
     OPERATOR_MNEMONIC: generateMnemonic(wordlist),
     LP_MNEMONIC: generateMnemonic(wordlist),
-    ADMIN_TOKEN: randomBytes(24).toString("hex"),
     DEV_ORACLE_SECRET: randomBytes(32).toString("hex"),
     ORACLE_SECRET_KEY: oracle.toString("hex"),
     ORACLE_PUBKEYS: Buffer.from(schnorr.getPublicKey(oracle)).toString("hex"),

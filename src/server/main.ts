@@ -14,6 +14,7 @@ import { EventBus } from "./events.js";
 import { Keeper } from "./keeper.js";
 import { WriterLease } from "./lease.js";
 import { connectNetwork, partyFromMnemonic, type NetworkHandle } from "./network.js";
+import { startEmbeddedAttestor } from "./embeddedAttestor.js";
 import { Workflows } from "./workflows.js";
 import { importOnce, replayHistorical } from "./importer.js";
 import { resolutionTick } from "./resolver.js";
@@ -27,21 +28,27 @@ const db = openDb(cfg.DB_PATH);
 const bus = new EventBus(db);
 const lease = new WriterLease(db);
 const wf = new Workflows(db, lease);
-let ready: Hono | undefined;
+let ready: { public: Hono; admin: Hono } | undefined;
 let shuttingDown = false;
 
-const root = new Hono();
-root.get("/api/health/live", (c) => c.json({ ok: true, shuttingDown }));
-root.all("*", async (c, next) => {
-    if (!c.req.path.startsWith("/api/")) return next();
-    if (ready) return ready.fetch(c.req.raw);
-    return c.json({ error: "starting: waiting for arkd/emulator", code: "starting" }, 503);
-});
-const webDir = join(process.cwd(), "dist", "web");
-root.use("/*", serveStatic({ root: "./dist/web" }));
-root.get("*", (c) => (existsSync(join(webDir, "index.html")) ? c.html(readFileSync(join(webDir, "index.html"), "utf8")) : c.text("UI not built", 404)));
+/** Same UI on both listeners; only the admin one mounts /api/admin. */
+function listener(kind: "public" | "admin"): Hono {
+    const root = new Hono();
+    root.get("/api/health/live", (c) => c.json({ ok: true, shuttingDown }));
+    root.all("*", async (c, next) => {
+        if (!c.req.path.startsWith("/api/")) return next();
+        if (ready) return ready[kind].fetch(c.req.raw);
+        return c.json({ error: "starting: waiting for arkd/emulator", code: "starting" }, 503);
+    });
+    const webDir = join(process.cwd(), "dist", "web");
+    root.use("/*", serveStatic({ root: "./dist/web" }));
+    root.get("*", (c) => (existsSync(join(webDir, "index.html")) ? c.html(readFileSync(join(webDir, "index.html"), "utf8")) : c.text("UI not built", 404)));
+    return root;
+}
 
-const server = serve({ fetch: root.fetch, hostname: cfg.HOST, port: cfg.PORT }, (a) => log("listening", { port: a.port }));
+const server = serve({ fetch: listener("public").fetch, hostname: cfg.HOST, port: cfg.PORT }, (a) => log("listening", { port: a.port }));
+const adminServer = serve({ fetch: listener("admin").fetch, hostname: cfg.HOST, port: cfg.ADMIN_PORT }, (a) => log("admin listening", { port: a.port }));
+const stopAttestor = cfg.ORACLE_SECRET_KEY ? startEmbeddedAttestor(cfg, cfg.ORACLE_SECRET_KEY, log) : undefined;
 
 /** A volume belongs to one network/operator/emulator; switching them is a drain + migration, not an env edit. */
 function guardIdentity(net: NetworkHandle): void {
@@ -121,7 +128,8 @@ async function main(): Promise<void> {
         return importOnce(sourceDeps);
     });
     const replay = sourceDeps && cfg.DEV_ENDPOINTS ? (sourceId: string) => replayHistorical(sourceDeps, sourceId) : undefined;
-    ready = createApi({ ...deps, keeper, health, overview, faucet, importNow, replay });
+    const apiDeps = { ...deps, keeper, health, overview, faucet, importNow, replay };
+    ready = { public: createApi(apiDeps), admin: createApi({ ...apiDeps, adminRoutes: true }) };
     log("api ready", { network: cfg.APM_NETWORK, operator: !!operator, lp: !!lp });
 
     if (cfg.WORKERS === "all") {
@@ -158,7 +166,9 @@ async function shutdown(signal: string): Promise<void> {
     shuttingDown = true;
     log("shutting down", { signal });
     for (const f of onShutdown) await f().catch((e) => log("shutdown step failed", { error: String(e) }));
+    stopAttestor?.();
     server.close();
+    adminServer.close();
     db.close();
     process.exit(0);
 }
@@ -167,5 +177,6 @@ process.on("SIGINT", () => void shutdown("SIGINT"));
 
 main().catch((err) => {
     console.error(JSON.stringify({ level: "fatal", msg: "startup failed", error: String(err) }));
+    stopAttestor?.();
     process.exit(1);
 });

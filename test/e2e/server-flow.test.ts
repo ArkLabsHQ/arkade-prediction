@@ -33,7 +33,8 @@ describe("server API end to end", () => {
         // Fund the operator (backs the dev faucet), then fund traders through the real faucet endpoint.
         const overview = await api<{ wallets: { operator: { address: string } } }>("/api/admin/overview", { admin: true });
         expect(overview.status).toBe(200);
-        expect((await api("/api/admin/overview")).status).toBe(401);
+        // Admin routes exist only on the admin listener.
+        expect((await api("/api/admin/overview")).status).toBe(404);
         await faucet(overview.body.wallets.operator.address, 200_000);
         const parties: Record<string, Party> = {};
         const keys: Record<string, Awaited<ReturnType<typeof newWallet>>> = {};

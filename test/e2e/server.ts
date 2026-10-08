@@ -8,7 +8,7 @@ import { wordlist } from "@scure/bip39/wordlists/english.js";
 
 export interface TestServer {
     url: string;
-    adminToken: string;
+    adminUrl: string;
     devOracleSecret: string;
     dataDir: string;
     env: Record<string, string>;
@@ -21,16 +21,15 @@ export interface TestServer {
 /** Starts src/server/main.ts as a real child process against the regtest stack. */
 export async function startServer(opts: { port: number; dataDir?: string; env?: Record<string, string> }): Promise<TestServer> {
     const dataDir = opts.dataDir ?? mkdtempSync(join(tmpdir(), "apm-server-"));
-    const adminToken = opts.env?.ADMIN_TOKEN ?? randomBytes(24).toString("hex");
     const devOracleSecret = opts.env?.DEV_ORACLE_SECRET ?? randomBytes(32).toString("hex");
     const env: Record<string, string> = {
         APM_NETWORK: "regtest", APM_DEPLOYMENT_ID: "apm-regtest-e2e",
         HOST: "127.0.0.1", ARK_SERVER_URL: "http://localhost:37070", EMULATOR_URL: "http://localhost:37073",
         ESPLORA_URL: "http://localhost:37000/api", OPERATOR_MNEMONIC: generateMnemonic(wordlist),
-        LP_MNEMONIC: generateMnemonic(wordlist), ADMIN_TOKEN: adminToken, DEV_ORACLE_SECRET: devOracleSecret,
+        LP_MNEMONIC: generateMnemonic(wordlist), DEV_ORACLE_SECRET: devOracleSecret,
         DEV_ENDPOINTS: "true", KEEPER_INTERVAL_SECONDS: "3", RENEW_THRESHOLD_SECONDS: "600", WORKERS: "all",
         ...opts.env,
-        PORT: String(opts.port), PUBLIC_BASE_URL: `http://localhost:${opts.port}`, DATA_DIR: dataDir,
+        PORT: String(opts.port), ADMIN_PORT: String(opts.port + 1000), DATA_DIR: dataDir,
     };
     writeFileSync(join(dataDir, "env.json"), JSON.stringify({ ...env, OPERATOR_MNEMONIC: "<redacted>", LP_MNEMONIC: "<redacted>" }));
     const proc = spawn(process.execPath, ["--import", "tsx", "src/server/main.ts"], { env: { ...process.env, ...env }, stdio: ["ignore", "pipe", "pipe"] });
@@ -43,13 +42,14 @@ export async function startServer(opts: { port: number; dataDir?: string; env?: 
     proc.stdout!.on("data", capture);
     proc.stderr!.on("data", capture);
     const url = `http://127.0.0.1:${opts.port}`;
+    const adminUrl = `http://127.0.0.1:${opts.port + 1000}`;
     const api: TestServer["api"] = async (path, init = {}) => {
         const headers = new Headers(init.headers);
         if (init.body) headers.set("content-type", "application/json");
-        if (init.admin) headers.set("authorization", `Bearer ${adminToken}`);
-        const r = await fetch(`${url}${path}`, { ...init, headers });
+        const r = await fetch(`${init.admin ? adminUrl : url}${path}`, { ...init, headers });
         const text = await r.text();
-        return { status: r.status, body: text ? JSON.parse(text) : undefined };
+        const json = (r.headers.get("content-type") ?? "").includes("json");
+        return { status: r.status, body: text && json ? JSON.parse(text) : (text || undefined) as never };
     };
     // tsx compiles the server on start; on a loaded host that alone has exceeded a minute.
     const deadline = Date.now() + 180_000;
@@ -66,5 +66,5 @@ export async function startServer(opts: { port: number; dataDir?: string; env?: 
             proc.once("exit", (code) => resolve(code));
             proc.kill(signal);
         });
-    return { url, adminToken, devOracleSecret, dataDir, env, proc, logs, stop, api };
+    return { url, adminUrl, devOracleSecret, dataDir, env, proc, logs, stop, api };
 }

@@ -171,18 +171,19 @@ describe("admin workflow retry", () => {
         const lease = new WriterLease(db);
         lease.tryAcquire();
         const wf = new Workflows(db, lease);
-        const token = "t".repeat(32);
-        const app = createApi({
-            cfg: { APM_NETWORK: "regtest", ADMIN_TOKEN: token } as never, db, bus: new EventBus(db), net: {} as never,
+        const deps = {
+            cfg: { APM_NETWORK: "regtest" } as never, db, bus: new EventBus(db), net: {} as never,
             health: async () => ({}), overview: async () => ({}), keeper: { deps: { wf, lease } } as never,
-        });
+        };
+        const admin = createApi({ ...deps, adminRoutes: true });
         const w = wf.enqueue("lp:m:1", "lp-liquidity", "m", { sets: "5", yesTerms: { priceSats: "600" } });
         wf.transition(w, "failed", { error: "registration failed", attempt: true });
-        const retry = () => app.request("/api/admin/workflows/lp:m:1/retry", { method: "POST", headers: { authorization: `Bearer ${token}` } });
+        const retry = () => admin.request("/api/admin/workflows/lp:m:1/retry", { method: "POST" });
 
         expect((await retry()).status).toBe(200);
         expect(wf.get("lp:m:1")).toMatchObject({ state: "pending", attempts: 0, error: null, payload: { sets: "5", yesTerms: { priceSats: "600" } } });
         expect((await retry()).status).toBe(409);
-        expect((await app.request("/api/admin/workflows/lp:m:1/retry", { method: "POST" })).status).toBe(401);
+        // The public listener has no admin routes at all.
+        expect((await createApi(deps).request("/api/admin/workflows/lp:m:1/retry", { method: "POST" })).status).toBe(404);
     });
 });

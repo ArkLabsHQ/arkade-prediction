@@ -65,38 +65,32 @@ hosts, Esplora to the SDK's, the operator key is read from the Ark server and th
 pin. Set `ARK_SERVER_URL`/`EMULATOR_URL`/`ESPLORA_URL` or `ARK_SIGNER_PUBKEY`/`EMULATOR_PUBKEY` only to override
 or pin them. The first start records the keys in the volume and refuses to start if they later change.
 
-1. **Generate secrets on your machine** (never on the server, never in the repository):
+### Simplest: one Dokploy Application (Dockerfile build)
+
+One container runs the UI/API, the keeper and a local 1-of-1 attestor (started by the app when
+`ORACLE_SECRET_KEY` is set; it listens on 127.0.0.1 only).
+
+1. **Generate secrets** on your machine:
    ```sh
-   node --input-type=module -e "import {generateMnemonic} from '@scure/bip39'; import {wordlist} from '@scure/bip39/wordlists/english.js'; console.log(generateMnemonic(wordlist))"   # OPERATOR_MNEMONIC, then LP_MNEMONIC
-   node -e "console.log(require('node:crypto').randomBytes(24).toString('hex'))"   # ADMIN_TOKEN
-   node --input-type=module -e "import {randomBytes} from 'node:crypto'; import {schnorr} from '@noble/curves/secp256k1.js'; const k=randomBytes(32); console.log('ORACLE_SECRET_KEY='+k.toString('hex')); console.log('ORACLE_PUBKEYS='+Buffer.from(schnorr.getPublicKey(k)).toString('hex'))"
+   node --input-type=module -e "import {generateMnemonic} from '@scure/bip39'; import {wordlist} from '@scure/bip39/wordlists/english.js'; console.log(generateMnemonic(wordlist))"   # run twice: OPERATOR_MNEMONIC, LP_MNEMONIC
+   node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"   # ORACLE_SECRET_KEY
    ```
-2. **Create a Docker Compose service** from your private repository; compose path `compose.yaml`.
-   Dokploy builds the `Dockerfile` and keeps the named volumes `apm-data` and `apm-oracle` across redeploys.
-3. **Environment tab:** paste the non-secret values from `.env.mutinynet.example` and set `PUBLIC_BASE_URL`,
-   `APM_DEPLOYMENT_ID` and `ORACLE_PUBKEYS`. Dokploy only passes variables that `compose.yaml` references;
-   every supported variable is referenced there.
-4. **Secrets:** either set `OPERATOR_MNEMONIC`, `LP_MNEMONIC`, `ADMIN_TOKEN`, `ORACLE_SECRET_KEY` as environment
-   variables (simplest; visible to anyone with access to the Dokploy project and to `docker inspect`), or create
-   Dokploy file mounts and point the `*_FILE` variables at them, which needs a matching
-   `- ../files/<name>:/run/secrets/<name>:ro` volume line added to the service in your deployment's compose file.
-   The server fails closed if a `*_FILE` path is set but unreadable.
-5. **Domain:** Domains tab, service `app`, container port `37400`, HTTPS on. Dokploy adds the Traefik labels and
-   `dokploy-network`; `compose.yaml` only `expose`s the port.
-6. **Deploy, then check** `GET /api/health/ready` (all components `ok`) and the server log line `api ready`.
-   The first start records network, deployment id, operator key and emulator key in the volume.
-7. **Fund the wallets with test sats.** `GET /api/admin/overview` (Bearer `ADMIN_TOKEN`) shows the operator and
-   LP Arkade addresses and balances. Per imported market the operator locks `MARKET_BASE_SATS` plus one seed set
-   (`MARKET_UNIT_SATS`, returned as 1 YES + 1 NO) plus 330-sat carriers; the LP locks
-   `LP_BOOTSTRAP_SETS x MARKET_UNIT_SATS` plus carriers when bootstrap liquidity is enabled.
-8. **Enable imports** with `POLYMARKET_ENABLED=true` and a small `IMPORT_MAX_ACTIVE`; trigger one pass with
-   `POST /api/admin/import/run` and watch `/api/admin/overview`.
+2. **Create an Application** from the repository, build type Dockerfile, default command.
+3. **Environment:** `APM_NETWORK=mutinynet`, the three secrets above, and the rest of `.env.mutinynet.example`
+   (plain values; endpoints, keys, attestor URL and key all default).
+4. **Volume:** Advanced → Mounts, a named volume at `/data` (database, backups, attestor log).
+5. **Domains:** public domain on container port `37400`. The operator console and `/api/admin` are on port
+   `37401` with no authentication: give it a separate domain behind your edge access control, or none.
+6. **Deploy** and check `GET /api/health/ready`.
+7. **Fund** the operator and LP addresses shown in the admin console (`/api/admin/overview` on 37401) with
+   Mutinynet test sats: per imported market the operator locks `MARKET_BASE_SATS` + one seed set + carriers;
+   the LP locks `LP_BOOTSTRAP_SETS x MARKET_UNIT_SATS` + carriers.
 
 Not yet executed on Mutinynet: steps 6 to 8 (no hosted deployment has been made).
 
-### Alternative: Dokploy Applications (Dockerfile build)
+### Separate attestors (Dokploy Applications)
 
-One Application per process, all built from the same repository and `Dockerfile`:
+For attestors outside the app container (needed for k-of-n), one Application per process, all built from the same repository and `Dockerfile`:
 
 - **app**: default command. Environment tab takes plain values (no `${VAR}` indirection). Advanced → Mounts:
   a named volume at `/data`, and file mounts at `/run/secrets/<name>` for the `*_FILE` secrets. Domain on
@@ -130,7 +124,7 @@ LP's offers, and other makers see a notice to cancel theirs. LP offers always ex
 ## Backup and restore
 
 ```sh
-curl -X POST -H "authorization: Bearer $ADMIN_TOKEN" https://<host>/api/admin/backup   # -> {"path":"/data/backups/apm-<time>.sqlite"}
+curl -X POST https://<admin host>/api/admin/backup   # -> {"path":"/data/backups/apm-<time>.sqlite"}
 ```
 
 `VACUUM INTO` writes a consistent snapshot while the server runs. Copy it off the host (`docker cp`) or use

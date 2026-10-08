@@ -3,31 +3,9 @@ import { ApiError, api, enc, useLive } from "../api.js";
 import { count } from "../format.js";
 import { ActionStatus, ErrorBox, Loading, Panel, useAction, useAsync } from "../ui.js";
 
-const TOKEN_KEY = "apm.adminToken";
-
+/** Admin routes exist only on the server's admin port, which is protected at the edge rather than by a token. */
 export function Operator() {
-    const [token, setToken] = useState(() => sessionStorage.getItem(TOKEN_KEY) ?? "");
-    const [typed, setTyped] = useState("");
-    if (token) return <Console token={token} onForget={() => { sessionStorage.removeItem(TOKEN_KEY); setToken(""); }} />;
-    return (
-        <div className="stack narrow">
-            <div className="page-head"><h1>Operator</h1></div>
-            <Panel title="Admin token">
-                <form className="stack" onSubmit={(e) => { e.preventDefault(); sessionStorage.setItem(TOKEN_KEY, typed.trim()); setToken(typed.trim()); }}>
-                    <label className="field">
-                        <span>Admin token</span>
-                        <input type="password" autoComplete="off" value={typed} onChange={(e) => setTyped(e.target.value)} />
-                    </label>
-                    <p className="muted small">Kept in this tab's session storage only, and sent as a bearer token to /api/admin.</p>
-                    <button type="submit" className="btn primary" disabled={!typed.trim()}>Use token</button>
-                </form>
-            </Panel>
-        </div>
-    );
-}
-
-function Console({ token, onForget }: { token: string; onForget(): void }) {
-    const overview = useAsync(() => api<Record<string, unknown>>("/api/admin/overview", { token }), [token]);
+    const overview = useAsync(() => api<Record<string, unknown>>("/api/admin/overview"), []);
     useLive(() => overview.reload());
     const act = useAction();
     const importAct = useAction();
@@ -38,22 +16,21 @@ function Console({ token, onForget }: { token: string; onForget(): void }) {
     const id = marketId.trim();
     const post = (path: string, body?: unknown, a = act) => a.run(async (step) => {
         step(`POST ${path}`);
-        const r = await api<unknown>(path, { method: "POST", body, token });
+        const r = await api<unknown>(path, { method: "POST", body });
         overview.reload();
         return <pre className="json">{JSON.stringify(r, null, 2)}</pre>;
     });
-    const rejected = overview.error instanceof ApiError && overview.error.status === 401;
+    const elsewhere = overview.error instanceof ApiError && overview.error.status === 404;
     const liquidityOk = !!id && !!count(sets) && !!count(yesAsk) && !!count(noAsk);
     return (
         <div className="stack">
             <div className="page-head">
                 <h1>Operator</h1>
-                <button type="button" className="btn small ghost" onClick={onForget}>Forget token</button>
             </div>
             <div className="cols">
                 <Panel title="Overview" actions={<button type="button" className="btn small" onClick={overview.reload}>Refresh</button>}>
                     {overview.data ? <DataView value={overview.data} />
-                        : rejected ? <p className="error" role="alert">The server rejected this token. <button type="button" className="btn small" onClick={onForget}>Enter another</button></p>
+                        : elsewhere ? <p className="muted" role="status">The operator console is served on the admin port, not this one.</p>
                         : overview.error ? <ErrorBox error={overview.error} onRetry={overview.reload} /> : <Loading what="overview" />}
                 </Panel>
                 <div className="stack side">

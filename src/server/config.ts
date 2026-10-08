@@ -1,9 +1,13 @@
 import { readFileSync } from "node:fs";
+import { schnorr } from "@noble/curves/secp256k1.js";
 import { hex } from "@scure/base";
 import { defaultEndpoints } from "../core/endpoints.js";
 import { oracleSlots } from "../core/market.js";
 import { join } from "node:path";
 import { z } from "zod";
+
+export const EMBEDDED_ATTESTOR_PORT = 37410;
+export const EMBEDDED_ATTESTOR_URL = `http://127.0.0.1:${EMBEDDED_ATTESTOR_PORT}`;
 
 /** `NAME_FILE` wins over `NAME` so secrets can be mounted instead of passed as env values. */
 function secret(env: NodeJS.ProcessEnv, name: string): string | undefined {
@@ -31,6 +35,8 @@ const schema = z.object({
     APM_DEPLOYMENT_ID: z.string().min(1).max(64).optional(),
     HOST: z.string().default("0.0.0.0"),
     PORT: int(37400),
+    // Operator API and console, unauthenticated: expose it only behind an access-controlled edge.
+    ADMIN_PORT: int(37401),
     ARK_SERVER_URL: z.url().optional(),
     EMULATOR_URL: z.url().optional(),
     ESPLORA_URL: z.url().optional(),
@@ -79,8 +85,8 @@ export type Config = Omit<z.infer<typeof schema>, "APM_DEPLOYMENT_ID" | "ARK_SER
     ESPLORA_URL: string;
     OPERATOR_MNEMONIC: string | undefined;
     LP_MNEMONIC: string | undefined;
-    ADMIN_TOKEN: string | undefined;
     DEV_ORACLE_SECRET: string | undefined;
+    ORACLE_SECRET_KEY: string | undefined;
     DB_PATH: string;
 };
 
@@ -95,11 +101,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     if (c.APM_NETWORK !== "regtest") {
         if (c.DEV_ENDPOINTS) throw new Error("DEV_ENDPOINTS is only allowed on regtest");
     }
-    if (c.POLYMARKET_ENABLED && c.POLYGON_RPC_URLS.length < 2) throw new Error("POLYGON_RPC_URLS needs at least two providers");
     if (c.MARKET_UNIT_SATS % 2 !== 0) throw new Error("MARKET_UNIT_SATS must be even");
-    if (c.ORACLE_PUBKEYS.length > 0) oracleSlots(c.ORACLE_PUBKEYS.map((k) => hex.decode(k)), c.ORACLE_THRESHOLD);
-    const adminToken = secret(env, "ADMIN_TOKEN");
-    if (adminToken !== undefined && adminToken.length < 24) throw new Error("ADMIN_TOKEN must be at least 24 characters");
+    // ORACLE_SECRET_KEY on the app runs a local attestor beside it (see embeddedAttestor.ts): one container.
+    const attestorSecret = secret(env, "ORACLE_SECRET_KEY");
+    if ((c.POLYMARKET_ENABLED || attestorSecret) && c.POLYGON_RPC_URLS.length < 2) throw new Error("POLYGON_RPC_URLS needs at least two providers");
+    if (attestorSecret !== undefined && !/^[0-9a-f]{64}$/.test(attestorSecret)) throw new Error("ORACLE_SECRET_KEY must be 32-byte hex");
+    const embeddedKey = attestorSecret && hex.encode(schnorr.getPublicKey(hex.decode(attestorSecret)));
+    const oraclePubkeys = c.ORACLE_PUBKEYS.length > 0 ? c.ORACLE_PUBKEYS : embeddedKey ? [embeddedKey] : [];
+    if (oraclePubkeys.length > 0) oracleSlots(oraclePubkeys.map((k) => hex.decode(k)), c.ORACLE_THRESHOLD);
     const defaults = defaultEndpoints(c.APM_NETWORK);
     const endpoint = (name: string, value: string | undefined) => {
         if (!value) throw new Error(`${name} is required on ${c.APM_NETWORK} (no published default)`);
@@ -111,10 +120,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
         ARK_SERVER_URL: endpoint("ARK_SERVER_URL", c.ARK_SERVER_URL ?? defaults.arkServer),
         EMULATOR_URL: endpoint("EMULATOR_URL", c.EMULATOR_URL ?? defaults.emulator),
         ESPLORA_URL: endpoint("ESPLORA_URL", c.ESPLORA_URL ?? defaults.esplora),
-        ORACLE_URLS: [...new Set([...c.ORACLE_URLS, ...(c.ORACLE_URL ? [c.ORACLE_URL] : [])])],
+        ORACLE_URLS: [...new Set([...c.ORACLE_URLS, ...(c.ORACLE_URL ? [c.ORACLE_URL] : []), ...(attestorSecret ? [EMBEDDED_ATTESTOR_URL] : [])])],
+        ORACLE_PUBKEYS: oraclePubkeys,
+        ORACLE_SECRET_KEY: attestorSecret,
         OPERATOR_MNEMONIC: secret(env, "OPERATOR_MNEMONIC"),
         LP_MNEMONIC: secret(env, "LP_MNEMONIC"),
-        ADMIN_TOKEN: adminToken,
         DEV_ORACLE_SECRET: c.APM_NETWORK === "regtest" ? secret(env, "DEV_ORACLE_SECRET") : undefined,
         DB_PATH: join(c.DATA_DIR, "apm.sqlite"),
     };
@@ -122,10 +132,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
 
 /** Config fields safe to log or expose. URL settings keep only scheme://host: keys hide in userinfo, path and query. */
 export function redacted(c: Config): Record<string, unknown> {
-    const { OPERATOR_MNEMONIC, LP_MNEMONIC, ADMIN_TOKEN, DEV_ORACLE_SECRET, ...rest } = c;
+    const { OPERATOR_MNEMONIC, LP_MNEMONIC, DEV_ORACLE_SECRET, ORACLE_SECRET_KEY, ...rest } = c;
     const origin = (u: string) => (URL.canParse(u) ? `${new URL(u).protocol}//${new URL(u).host}` : "[invalid url]");
     const urls = Object.entries(rest)
         .filter(([k, v]) => /_URLS?$/.test(k) && v !== undefined)
         .map(([k, v]) => [k, Array.isArray(v) ? v.map(String).map(origin) : origin(String(v))]);
-    return { ...rest, ...Object.fromEntries(urls), OPERATOR_MNEMONIC: !!OPERATOR_MNEMONIC, LP_MNEMONIC: !!LP_MNEMONIC, ADMIN_TOKEN: !!ADMIN_TOKEN, DEV_ORACLE_SECRET: !!DEV_ORACLE_SECRET };
+    return { ...rest, ...Object.fromEntries(urls), OPERATOR_MNEMONIC: !!OPERATOR_MNEMONIC, LP_MNEMONIC: !!LP_MNEMONIC, DEV_ORACLE_SECRET: !!DEV_ORACLE_SECRET, ORACLE_SECRET_KEY: !!ORACLE_SECRET_KEY };
 }

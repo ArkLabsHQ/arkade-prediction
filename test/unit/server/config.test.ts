@@ -27,7 +27,7 @@ describe("config redaction", () => {
             ORACLE_URL: "https://oracle.example:8443/v1/SECRET-oracle",
             POLYMARKET_GAMMA_URL: "https://gamma.example/?apikey=SECRET-gamma",
             POLYGON_RPC_URLS: "https://polygon-mainnet.g.alchemy.com/v2/SECRET-alchemy,https://lb.drpc.org/ogrpc?network=polygon&dkey=SECRET-drpc",
-            ADMIN_TOKEN: "SECRET-admin-token-0123456789",
+            ORACLE_SECRET_KEY: "5ec2e7".padEnd(64, "0"),
             OPERATOR_MNEMONIC: "SECRET mnemonic words",
         });
         const out = redacted(cfg);
@@ -37,7 +37,7 @@ describe("config redaction", () => {
             ARK_SERVER_URL: "http://arkd:7070",
             ORACLE_URL: "https://oracle.example:8443",
             POLYGON_RPC_URLS: ["https://polygon-mainnet.g.alchemy.com", "https://lb.drpc.org"],
-            ADMIN_TOKEN: true,
+            ORACLE_SECRET_KEY: true,
             OPERATOR_MNEMONIC: true,
             LP_MNEMONIC: false,
         });
@@ -59,5 +59,18 @@ describe("endpoint and pin defaults", () => {
 
     it("still requires explicit endpoints on regtest", () => {
         expect(() => loadConfig({ APM_NETWORK: "regtest", APM_DEPLOYMENT_ID: "t", PUBLIC_BASE_URL: "http://app" })).toThrow(/ARK_SERVER_URL is required on regtest/);
+    });
+});
+
+describe("single-container attestor", () => {
+    it("runs a local attestor and trusts only its key when ORACLE_SECRET_KEY is set on the app", async () => {
+        const { schnorr } = await import("@noble/curves/secp256k1.js");
+        const secret = "11".repeat(32);
+        expect(() => loadConfig({ APM_NETWORK: "mutinynet", ORACLE_SECRET_KEY: secret })).toThrow(/POLYGON_RPC_URLS/);
+        const cfg = loadConfig({ APM_NETWORK: "mutinynet", ORACLE_SECRET_KEY: secret, POLYGON_RPC_URLS: "https://a,https://b" });
+        expect(cfg.ORACLE_URLS).toEqual(["http://127.0.0.1:37410"]);
+        expect(cfg.ORACLE_PUBKEYS).toEqual([Buffer.from(schnorr.getPublicKey(Buffer.from(secret, "hex"))).toString("hex")]);
+        expect(cfg.ADMIN_PORT).toBe(37401);
+        expect(redacted(cfg).ORACLE_SECRET_KEY).toBe(true);
     });
 });

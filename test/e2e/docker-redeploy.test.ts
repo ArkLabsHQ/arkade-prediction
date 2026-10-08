@@ -19,8 +19,7 @@ const URL = "http://127.0.0.1:37400";
 const api: TestServer["api"] = async (path, init = {}) => {
     const headers = new Headers(init.headers);
     if (init.body) headers.set("content-type", "application/json");
-    if (init.admin) headers.set("authorization", `Bearer ${env.ADMIN_TOKEN}`);
-    const r = await fetch(`${URL}${path}`, { ...init, headers });
+    const r = await fetch(`${init.admin ? "http://127.0.0.1:37499" : URL}${path}`, { ...init, headers });
     const text = await r.text();
     return { status: r.status, body: text ? JSON.parse(text) : undefined };
 };
