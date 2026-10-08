@@ -7,10 +7,9 @@ export class ApiError extends Error {
     }
 }
 
-export async function api<T>(path: string, opts: { method?: "GET" | "POST"; body?: unknown; token?: string } = {}): Promise<T> {
+export async function api<T>(path: string, opts: { method?: "GET" | "POST"; body?: unknown } = {}): Promise<T> {
     const headers: Record<string, string> = {};
     if (opts.body !== undefined) headers["content-type"] = "application/json";
-    if (opts.token) headers.authorization = `Bearer ${opts.token}`;
     let res: Response;
     try {
         res = await fetch(path, {
