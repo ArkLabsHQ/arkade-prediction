@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { hex } from "@scure/base";
 import { definitionHash } from "../core/definition.js";
 import { oracleSlots } from "../core/market.js";
-import { getMeta, now, one, run, setMeta, tx } from "./db.js";
+import { all, now, one, run, setMeta, tx } from "./db.js";
 import type { Deps } from "./markets.js";
 import { importedDefinition } from "./sources/definition.js";
 import type { MarketSourceProvider, SourceMarket } from "./sources/types.js";
@@ -25,18 +25,26 @@ const attestorSlots = (cfg: Deps["cfg"]) => oracleSlots(cfg.ORACLE_PUBKEYS.map((
 export async function importOnce(d: Deps & { wf: Workflows; provider: MarketSourceProvider; timeoutDays: number }): Promise<ImportResult> {
     const { cfg, db } = d;
     const result: ImportResult = { pages: 0, seen: 0, eligible: 0, activated: [], ineligibleByCode: {} };
-    let cursor = getMeta(db, "import.cursor") ?? null;
+    const policy = {
+        profiles: ["polymarket-ctf-v1-binary"], tags: cfg.IMPORT_TAGS,
+        maxHorizonSeconds: cfg.IMPORT_MAX_HORIZON_SECONDS, minHorizonSeconds: cfg.IMPORT_MIN_HORIZON_SECONDS,
+    };
+    const record = (m: SourceMarket) => {
+        const verdict = d.provider.evaluateEligibility(m, policy, new Date());
+        upsertSource(d, m, verdict.eligible ? { eligible: true, profile: verdict.profile } : { eligible: false, code: verdict.code, reason: verdict.reason });
+        return verdict;
+    };
+    const seen = new Set<string>();
+    // Discovery is ordered by 24h volume, so every pass starts from the busiest markets.
+    let cursor: string | null = null;
     try {
         for (let page = 0; page < cfg.IMPORT_MAX_PAGES; page++) {
             const { markets, next } = await d.provider.discoverMarkets(cursor, Math.min(cfg.IMPORT_PAGE_LIMIT, 100));
             result.pages++;
             for (const m of markets) {
                 result.seen++;
-                const verdict = d.provider.evaluateEligibility(m, {
-                    profiles: ["polymarket-ctf-v1-binary"], tags: cfg.IMPORT_TAGS,
-                    maxHorizonSeconds: cfg.IMPORT_MAX_HORIZON_SECONDS, minHorizonSeconds: cfg.IMPORT_MIN_HORIZON_SECONDS,
-                }, new Date());
-                upsertSource(d, m, verdict.eligible ? { eligible: true, profile: verdict.profile } : { eligible: false, code: verdict.code, reason: verdict.reason });
+                seen.add(m.sourceId);
+                const verdict = record(m);
                 if (!verdict.eligible) {
                     result.ineligibleByCode[verdict.code] = (result.ineligibleByCode[verdict.code] ?? 0) + 1;
                     continue;
@@ -46,8 +54,14 @@ export async function importOnce(d: Deps & { wf: Workflows; provider: MarketSour
                 if (id) result.activated.push(id);
             }
             cursor = next;
-            setMeta(db, "import.cursor", cursor ?? "");
             if (!next) break;
+        }
+        // Funded markets outside the pages read still get fresh reference odds.
+        const funded = all<{ source_id: string }>(db, "SELECT source_id FROM markets WHERE kind = 'polymarket' AND status IN ('open','halted','closed','resolving') AND source_id NOT LIKE '%#%'");
+        for (const { source_id } of funded) {
+            if (seen.has(source_id)) continue;
+            const m = await d.provider.fetchMarketDefinition(source_id).catch(() => null);
+            if (m) record(m);
         }
         setMeta(db, "import.lastRun", now());
         setMeta(db, "import.lastError", "");
@@ -70,9 +84,11 @@ export function upsertSource(d: Deps, m: SourceMarket, v: { eligible: boolean; c
         run(d.db, "INSERT OR IGNORE INTO source_versions(provider, source_id, version_hash, snapshot, observed_at) VALUES (?, ?, ?, ?, ?)",
             m.provider, m.sourceId, m.versionHash, snapshot, now());
         // Display fields only, and only while the definition is the one the market was funded on.
-        run(d.db, `UPDATE markets SET source_snapshot = json_set(source_snapshot, '$.referencePrices', json(?), '$.fetchedAt', ?, '$.image', ?, '$.event', json(?))
+        // Gamma's single-market endpoint omits events, so a missing image or event keeps the last one seen.
+        run(d.db, `UPDATE markets SET source_snapshot = json_set(source_snapshot, '$.referencePrices', json(?), '$.fetchedAt', ?,
+                   '$.image', COALESCE(?, json_extract(source_snapshot, '$.image')), '$.event', COALESCE(json(?), json(json_extract(source_snapshot, '$.event'))))
                    WHERE source_provider = ? AND source_id = ? AND source_version = ?`,
-            JSON.stringify(m.referencePrices), m.fetchedAt, m.image, JSON.stringify(m.event), m.provider, m.sourceId, m.versionHash);
+            JSON.stringify(m.referencePrices), m.fetchedAt, m.image, m.event ? JSON.stringify(m.event) : null, m.provider, m.sourceId, m.versionHash);
     });
 }
 
