@@ -106,8 +106,9 @@ One Application per process, all built from the same repository and `Dockerfile`
   `POLYGON_RPC_URLS`, `POLYMARKET_RESOLVERS`. No public domain needed; set the app's `ORACLE_URLS` to the
   attestors' internal addresses, `ORACLE_PUBKEYS` to their keys and `ORACLE_THRESHOLD` (2 with three attestors).
 
-Not verified: that the Dokploy Application form offers the command override and that Applications reach each other
-by name on `dokploy-network`; if not, give the attestor an internal domain and use that URL.
+Dokploy applies an Application's command field as the container command (split on spaces) and attaches
+Applications to `dokploy-network` unless "detach" is set; services are named by their App Name, so the attestor
+is reachable as `http://<attestor App Name>:37410` (Swarm service DNS; not yet exercised on a live Dokploy host).
 
 ## Health and monitoring
 
