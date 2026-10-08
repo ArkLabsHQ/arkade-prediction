@@ -54,7 +54,7 @@ the full-suite log is `docs/evidence/e2e-regtest.txt`.
 | 13a | Collaborative offboard and unilateral exit of BTC | PASS | `test/e2e/withdrawal.test.ts` | `withdrawal.test.ts` |
 | 13b | Unilateral exit carrying claims or vault collateral | UNSUPPORTED | SDK: exits handle BTC value only; vault exit leaf is NUMS (`DECISIONS.md` 11) | — |
 | 14 | Browser UI against regtest | PASS | `docs/evidence/ui/README.md` + screenshots | manual (Playwright-driven) |
-| 15 | Performance measured | PASS | `docs/evidence/perf.json`, `docs/performance.md` | `node --import tsx scripts/perf.ts` |
+| 15 | Performance measured (final code; earlier run kept for comparison) | PASS | `docs/evidence/perf.json`, `docs/evidence/perf-24ccc96.json`, `docs/performance.md` | `node --import tsx scripts/perf.ts` |
 | 16 | Unit and property tests (90) | PASS | `docs/evidence/unit.txt` | `pnpm exec vitest run test/unit` |
 | 17 | Mutinynet readiness (read-only) | PASS | `docs/evidence/mutinynet-preflight.txt` | `node --env-file=.env.mutinynet.example --import tsx scripts/preflight.ts` |
 | 17a | Early source resolution detected (batched finalized reads) and trading halted | PASS | `docs/evidence/early-resolution-screen.txt` (live), `test/e2e/halted-market.test.ts`, `test/unit/server/resolver.test.ts` | `node --import tsx scripts/live/early-resolution-check.ts` |
