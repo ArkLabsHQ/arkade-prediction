@@ -28,6 +28,11 @@ The server holds no user keys and cannot sign covenant spends, but it is not pow
 - **It can withhold certificates.** Only the server asks the attestor to sign. If it never does, an imported
   market reaches its timeout and anyone can settle it as INVALID (50/50) instead of the true outcome.
 - **It can delay** matching, renewals and auto-claims; delayed renewals end in the sweep case of §3.
+- **In the single-container deployment it holds the attestor key** (`ORACLE_SECRET_KEY` on the app), so it can
+  also pick the outcome of imported markets bound to that key, as in the key-compromise row of §3.
+- **Its admin port is unauthenticated** and relies on edge protection; anyone past the edge can trigger imports,
+  activations, retries and LP liquidity (spending the operator's and LP's own wallets) and hide markets, but
+  cannot move user funds.
 
 ## 2. Spending authority over pooled collateral
 

@@ -115,3 +115,11 @@ Each entry: decision, reason, rejected alternatives. Newest last.
     server and emulator hosts and the SDK's Esplora URL, read the operator key from `/v1/info`, and use the SDK's
     per-network emulator pin (never the emulator's self-report). Explicit pins remain as overrides. Safety against
     a silent key change comes from the volume identity guard. Regtest keeps explicit endpoints (local ports).
+34. **One container for a proof of concept.** `ORACLE_SECRET_KEY` on the app starts the attestor as a supervised
+    child bound to `127.0.0.1`, as the market's only key (1-of-1). It stays a separate process holding the key, but
+    the app operator now also controls resolution of imported markets; separate attestors (`compose.attestors.yaml`)
+    remain the way to a quorum that adds independence.
+35. **Admin API on its own port, without a token.** `/api/admin` and the operator console are mounted only on
+    `ADMIN_PORT`, which the deployer protects at the edge; the public port returns 404 for them. Browser requests
+    that `Sec-Fetch-Site` marks cross-site are refused, so edge credentials cannot be ridden by another page.
+    No `Host` allowlist: the edge routes by host, and the container port is not published.
