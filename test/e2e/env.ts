@@ -71,7 +71,16 @@ async function freshFunder(amount: number): Promise<Wallet> {
 /** Pay `amount` sats offchain from a freshly funded wallet. */
 export async function faucet(address: string, amount: number): Promise<void> {
     const wallet = await freshFunder(amount);
-    await within(wallet.send({ address, amount }), 60_000, "faucet send");
+    for (let attempt = 1; ; attempt++) {
+        try {
+            await within(wallet.send({ address, amount }), 60_000, "faucet send");
+            break;
+        } catch (err) {
+            // Back-to-back sends can spend the previous change before arkd has created it; arkd refuses, nothing moves.
+            if (attempt >= 5 || !/VTXO_NOT_FOUND/.test(String(err))) throw err;
+            await new Promise((resolve) => setTimeout(resolve, 1000 * attempt));
+        }
+    }
     funder!.left -= amount;
 }
 

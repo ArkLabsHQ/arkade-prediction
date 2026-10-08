@@ -82,9 +82,37 @@ describe("in-flight reconciliation", () => {
         const w = h.wf.enqueue("match:a:b", "mint-match", "m1", { yes: "a", no: "b", qty: "1" });
         h.wf.transition(w, "submitting", { txid: "T_MATCH", payload: { inputs: ["A:0"] } });
         h.fakes.virtualTxs = ["psbt"];
+        h.fakes.vtxos = [{ txid: "A", vout: 0, isSpent: true, arkTxId: "T_MATCH" }, { txid: "T_MATCH", vout: 0, isSpent: false }];
 
         await h.keeper.execute(h.wf.get("match:a:b")!);
         expect(h.wf.get("match:a:b")!.state).toBe("done");
+    });
+
+    it("rebuilds a submission arkd recorded but failed, whose inputs are still unspent", async () => {
+        const h = harness();
+        const w = h.wf.enqueue("match:a:b", "mint-match", "m1", { yes: "a", no: "b", qty: "1" });
+        h.wf.transition(w, "submitting", { txid: "T_FAILED", payload: { inputs: ["A:0"] } });
+        h.fakes.virtualTxs = ["psbt-of-failed-tx"];
+        h.fakes.vtxos = [{ txid: "A", vout: 0, isSpent: false }];
+        const rebuilt: (string | null)[] = [];
+        inner(h.keeper).handle = async (next) => {
+            rebuilt.push((next as { txid: string | null }).txid);
+            return "T_RETRY";
+        };
+
+        await h.keeper.execute(h.wf.get("match:a:b")!);
+        expect(rebuilt).toEqual([null]);
+    });
+
+    it("waits while arkd has accepted a submission but not yet created its outputs", async () => {
+        const h = harness();
+        const w = h.wf.enqueue("resolve:m1", "resolve", "m1", { outcome: "yes" });
+        h.wf.transition(w, "submitting", { txid: "T_ACCEPTED", payload: { inputs: ["V:0"] } });
+        h.fakes.virtualTxs = ["psbt"];
+        h.fakes.vtxos = [{ txid: "V", vout: 0, isSpent: true, arkTxId: "T_ACCEPTED" }];
+
+        await h.keeper.execute(h.wf.get("resolve:m1")!);
+        expect(h.wf.get("resolve:m1")).toMatchObject({ state: "submitting", txid: "T_ACCEPTED" });
     });
 
     it("continues a multi-step activate at the vault step when only the genesis tx landed", async () => {
@@ -93,6 +121,7 @@ describe("in-flight reconciliation", () => {
         // beforeSubmit of step 1, which now records which step is in flight.
         h.wf.transition(w, "submitting", { txid: "T0_GENESIS", payload: { inputs: ["op:1"], step: "genesisTxid" } });
         h.fakes.virtualTxs = ["psbt-of-T0"];
+        h.fakes.vtxos = [{ txid: "op", vout: 1, isSpent: true, arkTxId: "T0_GENESIS" }, { txid: "T0_GENESIS", vout: 0, isSpent: false }];
         let seen: Record<string, unknown> | undefined;
         inner(h.keeper).handle = async (next) => {
             seen = (next as { payload: Record<string, unknown> }).payload;

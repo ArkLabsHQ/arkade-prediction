@@ -44,7 +44,9 @@ export function harness(overrides: Partial<KeeperDeps> = {}): Harness {
     const fakes: Fakes = { virtualTxs: [], vtxos: [] };
     const indexer = {
         getVirtualTxs: async () => ({ txs: fakes.virtualTxs }),
-        getVtxos: async () => ({ vtxos: fakes.vtxos }),
+        getVtxos: async (q: { outpoints?: { txid: string; vout: number }[] } = {}) => ({
+            vtxos: q.outpoints ? fakes.vtxos.filter((v) => q.outpoints!.some((o) => o.txid === v.txid && o.vout === v.vout)) : fakes.vtxos,
+        }),
     };
     const deps = {
         cfg: { APM_NETWORK: "regtest", RENEW_THRESHOLD_SECONDS: 3600, MARKET_UNIT_SATS: 1000, LP_BOOTSTRAP_SETS: 0 },

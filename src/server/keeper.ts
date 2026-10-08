@@ -38,17 +38,19 @@ const LP_MIN_WINDOW_SECONDS = 60;
 
 /** Classifies an ambiguous submission from authoritative indexer state; a timeout alone never means failure. */
 export async function reconcileSubmission(d: Deps, txid: string | null, inputs: string[]): Promise<Outcome> {
-    if (txid) {
-        const known = await d.net.indexer.getVirtualTxs([txid]).then((r) => r.txs.length > 0, () => undefined);
-        if (known) return "landed";
-    }
-    if (inputs.length === 0) return "unknown";
+    if (inputs.length === 0) return txid && (await outputsVisible(d, txid)) ? "landed" : "unknown";
     const outpoints = inputs.map((o) => ({ txid: o.split(":")[0]!, vout: Number(o.split(":")[1]) }));
     const { vtxos } = await d.net.indexer.getVtxos({ outpoints });
     if (vtxos.length < outpoints.length) return "unknown";
+    // arkd also lists a submission it recorded and then failed, so the inputs decide, not the tx's presence.
     if (vtxos.every((v) => !v.isSpent && !v.settledBy)) return "not-submitted";
-    if (txid && vtxos.some((v) => v.arkTxId === txid)) return "landed";
+    if (txid && vtxos.some((v) => v.arkTxId === txid)) return (await outputsVisible(d, txid)) ? "landed" : "unknown";
     return "lost";
+}
+
+/** arkd spends the inputs when it accepts a transaction but creates the outputs only when it is finalized. */
+async function outputsVisible(d: Deps, txid: string): Promise<boolean> {
+    return (await d.net.indexer.getVtxos({ outpoints: [{ txid, vout: 0 }] })).vtxos.length > 0;
 }
 
 /** Regtest-only crash injection at workflow boundaries: APM_FAULT=<before-submit|before-finalize|after-submit>:<kind>. */
