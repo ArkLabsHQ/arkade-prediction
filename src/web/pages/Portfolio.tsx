@@ -7,6 +7,7 @@ import { useApp } from "../ctx.js";
 import { btc, errMsg, n, pct, sats, short } from "../format.js";
 import { PENDING, updateLog, useLog, type LogEntry } from "../txlog.js";
 import { ActionStatus, ErrorBox, Link, Loading, LockedNotice, Panel, StatusBadge, Time, Txid, useAction, useAsync } from "../ui.js";
+import { verifiedTerms } from "../verify.js";
 import { CancelButton } from "./Trade.js";
 
 type Page = { markets: MarketJson[]; next: string | null };
@@ -294,13 +295,15 @@ function Boxes({ session, index }: { session: Session; index: Map<string, Market
 }
 
 function WithdrawButton({ session, m, coin, onDone }: { session: Session; m: MarketJson; coin: CoinJson; onDone(): void }) {
-    const { chain, refreshHoldings } = useApp();
+    const { chain, config, refreshHoldings } = useApp();
     const act = useAction();
     if (!chain) return null;
     const withdraw = () => act.run(async (step) => {
+        step("Verifying the market against the Arkade indexer");
+        const terms = await verifiedTerms(chain, config, m);
         step("Withdrawing to your wallet");
         const r = await logged(chain, session, { kind: "withdraw", label: `Withdraw box: ${m.question.slice(0, 60)}`, marketId: m.id },
-            (ctx) => withdrawBox(ctx, session, m, coin));
+            (ctx) => withdrawBox(ctx, session, terms, coin));
         onDone();
         void refreshHoldings();
         return <>Moved to your wallet. <Txid txid={r.txid} /></>;

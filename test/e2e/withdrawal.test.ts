@@ -11,7 +11,7 @@ afterAll(() => {
 describe("withdrawal and recovery paths for BTC value", () => {
     it("offboards collaboratively and exits unilaterally with a pre-signed package", { timeout: 900_000 }, async () => {
         const alice = await newWallet();
-        faucet(await alice.wallet.getAddress(), 80_000);
+        await faucet(await alice.wallet.getAddress(), 80_000);
         await waitFor(async () => (await alice.wallet.getBalance()).available >= 80_000, { what: "alice funds" });
 
         // Collaborative path: the operator joins a batch that pays an L1 output.

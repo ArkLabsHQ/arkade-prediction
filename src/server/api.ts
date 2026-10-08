@@ -1,10 +1,11 @@
 import { timingSafeEqual } from "node:crypto";
 import { Hono, type Context } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { streamSSE } from "hono/streaming";
 import { hex } from "@scure/base";
 import { attestationMessage, signAttestation, verifyAttestation, evidenceDigest } from "../core/attestation.js";
 import { BINARY_VECTORS, type BinaryOutcome } from "../core/payout.js";
-import type { CertificateJson, ConfigJson, CreateMarketRequest, PostOfferRequest, RegisterBoxRequest } from "../shared/api.js";
+import type { CertificateJson, ConfigJson, CreateMarketRequest, MarketEvent, PostOfferRequest, RegisterBoxRequest } from "../shared/api.js";
 import { boxJson, boxesByOwner, registerBox } from "./boxes.js";
 import { backup, now, one, run } from "./db.js";
 import { mkdirSync } from "node:fs";
@@ -23,15 +24,20 @@ export interface ApiDeps extends Deps {
 }
 
 const MAX_BODY = 64 * 1024;
+const SSE_QUEUE_MAX = 1000;
+const SSE_REWIND = 100;
 
 async function body<T>(c: Context): Promise<T> {
-    const len = Number(c.req.header("content-length") ?? 0);
-    if (len > MAX_BODY) throw new HttpError(413, "too-large", "request body too large");
     try {
         return (await c.req.json()) as T;
     } catch {
         throw new HttpError(400, "json", "body must be JSON");
     }
+}
+
+function intParam(raw: string | undefined, def: number, min: number, max: number): number {
+    const n = Math.trunc(Number(raw || NaN));
+    return Number.isNaN(n) ? def : Math.min(Math.max(n, min), max);
 }
 
 function adminOk(c: Context, token: string | undefined): boolean {
@@ -49,6 +55,10 @@ export function createApi(d: ApiDeps): Hono {
         console.error(JSON.stringify({ level: "error", msg: "api error", path: c.req.path, error: String(err) }));
         return c.json({ error: "internal error", code: "internal" }, 500);
     });
+    const tooLarge = (c: Context) => c.json({ error: "request body too large", code: "too-large" }, 413);
+    // Declared lengths are refused before bodyLimit opens the body stream: node-server can only drain an unopened one.
+    app.use("*", async (c, next) => (Number(c.req.header("content-length") ?? 0) > MAX_BODY ? tooLarge(c) : next()));
+    app.use("*", bodyLimit({ maxSize: MAX_BODY, onError: tooLarge }));
 
     app.get("/api/health/live", (c) => c.json({ ok: true }));
     app.get("/api/health/ready", async (c) => {
@@ -78,7 +88,7 @@ export function createApi(d: ApiDeps): Hono {
     });
 
     app.get("/api/markets", (c) => {
-        const limit = Math.min(Number(c.req.query("limit") ?? 50) || 50, 200);
+        const limit = intParam(c.req.query("limit"), 50, 1, 200);
         const rows = listMarkets(d.db, {
             status: c.req.query("status") || undefined, kind: c.req.query("kind") || undefined,
             q: c.req.query("q")?.slice(0, 100) || undefined, limit, cursor: c.req.query("cursor") || undefined,
@@ -93,7 +103,7 @@ export function createApi(d: ApiDeps): Hono {
     });
 
     app.get("/api/markets/:id/offers", (c) => c.json({ offers: listOffers(d.db, c.req.param("id"), c.req.query("status") || undefined).map(offerJson) }));
-    app.get("/api/markets/:id/trades", (c) => c.json({ trades: trades(d.db, { marketId: c.req.param("id"), limit: Math.min(Number(c.req.query("limit") ?? 100) || 100, 500) }) }));
+    app.get("/api/markets/:id/trades", (c) => c.json({ trades: trades(d.db, { marketId: c.req.param("id"), limit: intParam(c.req.query("limit"), 100, 1, 500) }) }));
 
     app.post("/api/markets", async (c) => {
         const row = await registerCustomMarket(d, await body<CreateMarketRequest>(c));
@@ -142,18 +152,29 @@ export function createApi(d: ApiDeps): Hono {
 
     app.get("/api/events", (c) =>
         streamSSE(c, async (stream) => {
-            let last = Number(c.req.header("last-event-id") ?? c.req.query("since") ?? 0) || 0;
-            const send = async (e: { id: number; type: string }) => {
+            let last = intParam(c.req.header("last-event-id") ?? c.req.query("since"), 0, 0, Number.MAX_SAFE_INTEGER);
+            // Subscribed before the replay so nothing published meanwhile is lost. A full queue closes the stream: the
+            // client reconnects with Last-Event-ID and replays from the log.
+            const queue: MarketEvent[] = [];
+            let overflow = false;
+            const unsubscribe = d.bus.subscribe((e) => {
+                if (queue.length < SSE_QUEUE_MAX) queue.push(e);
+                else overflow = true;
+            });
+            stream.onAbort(unsubscribe);
+            // Ids rewind after a database restore; a client ahead of the log gets a recent window instead of silence.
+            const max = d.bus.lastId();
+            if (last > max) last = Math.max(0, max - SSE_REWIND);
+            const send = async (e: MarketEvent) => {
                 if (e.id <= last) return;
                 last = e.id;
                 await stream.writeSSE({ id: String(e.id), event: e.type, data: JSON.stringify(e) });
             };
-            for (const e of d.bus.since(last)) await send(e);
-            const queue: { id: number; type: string }[] = [];
-            const unsubscribe = d.bus.subscribe((e) => queue.push(e));
-            stream.onAbort(unsubscribe);
-            while (!stream.aborted) {
-                while (queue.length) await send(queue.shift()!);
+            for (let page = d.bus.since(last); page.length > 0 && !stream.aborted; page = d.bus.since(last)) {
+                for (const e of page) await send(e);
+            }
+            while (!stream.aborted && !overflow) {
+                while (queue.length && !overflow) await send(queue.shift()!);
                 await stream.sleep(1000);
                 if (queue.length === 0) await stream.writeSSE({ event: "ping", data: "{}" });
             }
@@ -203,6 +224,14 @@ export function createApi(d: ApiDeps): Hono {
         run(d.db, "UPDATE markets SET resolution_status = 'certified', resolution_detail = ?, updated_at = ? WHERE id = ?", `dev oracle certified ${outcome}`, now(), row.id);
         d.bus.publish("resolution", row.id, { outcome, dev: true });
         return c.json({ ok: true });
+    });
+    admin.post("/workflows/:id/retry", (c) => {
+        const deps = d.keeper?.deps;
+        const w = deps?.wf.get(c.req.param("id"));
+        if (!deps || !w) throw new HttpError(404, "workflow", "unknown workflow");
+        if (w.state !== "failed") throw new HttpError(409, "state", "only failed workflows can be retried");
+        if (!deps.lease.held) throw new HttpError(409, "writer", "this process does not hold the writer lease");
+        return c.json(deps.wf.transition(w, "pending", { error: null, nextAt: Date.now(), resetAttempts: true }));
     });
     admin.post("/backup", (c) => {
         const target = join(d.cfg.DATA_DIR, "backups", `apm-${new Date().toISOString().replace(/[:.]/g, "-")}.sqlite`);

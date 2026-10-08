@@ -1,9 +1,9 @@
-import { Extension, Transaction, asset } from "@arkade-os/sdk";
-import { base64, hex } from "@scure/base";
-import { assetIdOf } from "../core/assets.js";
+import { hex } from "@scure/base";
+import { AuditError, auditGenesis as auditMarketGenesis } from "../core/audit.js";
 import { bindingOf, definitionHash, type MarketDefinition } from "../core/definition.js";
 import { marketContracts, type VaultTerms } from "../core/market.js";
 import {
+    MAX_TIMEOUT_AFTER_CLOSE_SECONDS,
     termsFromJson,
     termsToJson,
     type CertificateJson,
@@ -75,63 +75,14 @@ const bounded = (s: unknown, max: number, field: string): string => {
     return s.trim();
 };
 
-async function fetchTx(net: NetworkHandle, txid: string): Promise<Transaction> {
-    const { txs } = await net.indexer.getVirtualTxs([txid]);
-    const tx = txs.map((p) => Transaction.fromPSBT(base64.decode(p))).find((t) => t.id === txid);
-    if (!tx) throw new HttpError(404, "tx-not-found", `transaction ${txid} is not known to the indexer`);
-    return tx;
-}
-
-function packetOf(tx: Transaction): asset.Packet | undefined {
-    try {
-        return Extension.fromTx(tx).getPackets().find((p) => p.type() === asset.Packet.PACKET_TYPE) as asset.Packet | undefined;
-    } catch {
-        return undefined;
-    }
-}
-
-const outSum = (g: asset.AssetGroup) => g.outputs.reduce((s, o) => s + o.amount, 0n);
-const inSum = (g: asset.AssetGroup) => g.inputs.reduce((s, i) => s + i.input.amount, 0n);
-const groupFor = (p: asset.Packet, id: string) => p.groups.find((g) => g.assetId?.toString() === id);
-
-/**
- * Supply is fixed by T0 (CTRL=1, YES=NO=seed, controlled by CTRL) and CTRL must move straight into the vault
- * in T1 without reissuing YES/NO. After that only vault covenants can spend CTRL, so supply == locked sets.
- */
+/** The core genesis audit (src/core/audit.ts) with its refusals mapped to HTTP errors. */
 export async function auditGenesis(net: NetworkHandle, terms: VaultTerms, genesisTxid: string, vaultTxid: string): Promise<{ seed: bigint; baseSats: bigint }> {
-    const ids = [0, 1, 2].map((i) => assetIdOf(genesisTxid, i));
-    if (ids[0] !== terms.assets.ctrl || ids[1] !== terms.assets.yes || ids[2] !== terms.assets.no) {
-        throw new HttpError(400, "asset-ids", "asset ids do not derive from the genesis txid");
+    try {
+        return await auditMarketGenesis(net, terms, genesisTxid, vaultTxid);
+    } catch (e) {
+        if (e instanceof AuditError) throw new HttpError(e.code === "tx-not-found" ? 404 : 400, e.code, e.message);
+        throw e;
     }
-    const t0 = packetOf(await fetchTx(net, genesisTxid));
-    const [ctrl, yes, no] = t0?.groups ?? [];
-    if (!t0 || !ctrl || !yes || !no) throw new HttpError(400, "genesis-shape", "genesis must issue CTRL, YES, NO as its first three groups");
-    // Later groups may only carry the creator's existing assets through; any other issuance is refused.
-    if (t0.groups.slice(3).some((g) => g.assetId === null)) throw new HttpError(400, "genesis-shape", "genesis may not issue anything besides CTRL, YES, NO");
-    const fresh = (g: asset.AssetGroup) => g.assetId === null && g.inputs.length === 0;
-    const byCtrl = (g: asset.AssetGroup) => g.controlAsset?.ref.type === asset.AssetRefType.ByGroup && g.controlAsset.ref.groupIndex === 0;
-    if (!fresh(ctrl) || ctrl.controlAsset !== null || outSum(ctrl) !== 1n) throw new HttpError(400, "genesis-ctrl", "CTRL must be a fresh supply of 1 with no control");
-    if (!fresh(yes) || !fresh(no) || !byCtrl(yes) || !byCtrl(no)) throw new HttpError(400, "genesis-claims", "YES/NO must be fresh and controlled by CTRL");
-    const seed = outSum(yes);
-    if (seed <= 0n || outSum(no) !== seed) throw new HttpError(400, "genesis-seed", "YES and NO seed supplies must match");
-    const ctrlVout = ctrl.outputs[0]!.vout;
-    const { vtxos } = await net.indexer.getVtxos({ outpoints: [{ txid: genesisTxid, vout: ctrlVout }] });
-    if (vtxos[0]?.arkTxId !== vaultTxid) throw new HttpError(400, "genesis-ctrl-path", "CTRL did not move directly from genesis into the vault tx");
-
-    const t1tx = await fetchTx(net, vaultTxid);
-    const t1 = packetOf(t1tx);
-    const c1 = t1 && groupFor(t1, terms.assets.ctrl);
-    if (!t1 || !c1 || c1.outputs.length !== 1 || c1.outputs[0]!.amount !== 1n) throw new HttpError(400, "vault-ctrl", "vault tx must hold CTRL in exactly one output");
-    const vaultOut = t1tx.getOutput(c1.outputs[0]!.vout);
-    const { vault } = marketContracts(net.ark, terms);
-    if (!vaultOut.script || hex.encode(vaultOut.script) !== hex.encode(vault.pkScript)) throw new HttpError(400, "vault-script", "CTRL output is not the vault script for these terms");
-    for (const id of [terms.assets.yes, terms.assets.no]) {
-        const g = groupFor(t1, id);
-        if (g && outSum(g) !== inSum(g)) throw new HttpError(400, "vault-reissue", "vault tx must not change YES/NO supply");
-    }
-    const baseSats = (vaultOut.amount ?? 0n) - seed * terms.unitSats;
-    if (baseSats < 330n) throw new HttpError(400, "vault-collateral", "vault holds less than the seed collateral plus a carrier");
-    return { seed, baseSats };
 }
 
 export async function registerCustomMarket(d: Deps, req: CreateMarketRequest): Promise<MarketRow> {
@@ -150,7 +101,10 @@ export async function registerCustomMarket(d: Deps, req: CreateMarketRequest): P
     const closeAt = BigInt(definition.closeAtUnix);
     const timeoutAt = BigInt(definition.timeoutAtUnix);
     if (closeAt < nowS + 60n || closeAt > nowS + BigInt(d.cfg.IMPORT_MAX_HORIZON_SECONDS)) throw new HttpError(400, "close-time", "close time outside the allowed horizon");
-    if (timeoutAt !== 0n && timeoutAt <= closeAt) throw new HttpError(400, "timeout", "timeout must be after close");
+    // A timeout of 0 compiles to a timeout leaf that never succeeds: one-sided holders could never redeem.
+    if (timeoutAt <= closeAt || timeoutAt > closeAt + BigInt(MAX_TIMEOUT_AFTER_CLOSE_SECONDS)) {
+        throw new HttpError(400, "timeout", "timeout must be after close and at most 365 days after it");
+    }
     const policy = req.oracle?.policy;
     if (policy !== "external-key" && policy !== "dev-oracle") throw new HttpError(400, "oracle-policy", "unsupported oracle policy");
     if (policy === "dev-oracle" && (d.cfg.APM_NETWORK !== "regtest" || req.oracle.key !== d.devOracleKey)) throw new HttpError(400, "oracle-policy", "dev oracle is regtest-only and must use the server dev key");
@@ -224,12 +178,15 @@ export function marketJson(db: Db, row: MarketRow): MarketJson {
             clarifications: all<{ observed_at: string; version_hash: string }>(db,
                 "SELECT observed_at, version_hash FROM source_versions WHERE provider = ? AND source_id = ? AND version_hash != ? ORDER BY observed_at",
                 row.source_provider, row.source_id, row.source_version).map((v) => ({ observedAt: v.observed_at, note: `source definition changed (version ${v.version_hash.slice(0, 12)}); funded terms unchanged` })),
+            binding: snapshot.binding ?? null,
         },
         oracle: {
             policy: row.oracle_policy, keys: JSON.parse(row.oracle_keys), threshold: row.oracle_threshold, epoch: row.oracle_epoch,
             label: { "platform-attestor": "Platform attestor (verifies the source on-chain)", "external-key": "Creator-designated oracle key", "dev-oracle": "Development oracle (regtest only)" }[row.oracle_policy],
         },
         terms,
+        genesisTxid: row.genesis_txid,
+        vaultTxid: row.vault_txid,
         vault: { phase: row.vault_phase ?? "open", outcome: row.vault_outcome, valueSats: row.vault_value, outpoint: row.vault_outpoint, expiresAt: row.vault_expires_at },
         resolution: {
             status: row.resolution_status, detail: row.resolution_detail,
@@ -266,7 +223,10 @@ export async function reconcileVault(d: Deps, row: MarketRow): Promise<void> {
     const coin = live.reduce((a, b) => (a.createdAt > b.createdAt ? a : b));
     const [, phase, outcome] = candidates.find((c) => c[0] === coin.script)!;
     const nowS = Date.now() / 1000;
-    const status: MarketStatus = phase === "resolved" ? "resolved" : nowS >= row.close_at ? (row.resolution_status === "certified" ? "resolving" : "closed") : "open";
+    // Before close, an early source result or a certificate means the outcome is known: trading halts.
+    const status: MarketStatus = phase === "resolved" ? "resolved"
+        : nowS >= row.close_at ? (row.resolution_status === "certified" ? "resolving" : "closed")
+        : row.resolution_status === "source-final" || row.resolution_status === "certified" ? "halted" : "open";
     const changed = row.vault_outpoint !== `${coin.txid}:${coin.vout}` || row.status !== status;
     run(d.db, "UPDATE markets SET vault_phase = ?, vault_outcome = ?, vault_value = ?, vault_outpoint = ?, vault_expires_at = ?, status = CASE WHEN status IN ('hidden','failed','activating') THEN status ELSE ? END, resolution_status = CASE WHEN ? = 'resolved' THEN 'resolved' ELSE resolution_status END, updated_at = ? WHERE id = ?",
         phase, outcome, String(coin.value), `${coin.txid}:${coin.vout}`, coin.expiresAt?.toISOString() ?? null, status, phase, now(), row.id);

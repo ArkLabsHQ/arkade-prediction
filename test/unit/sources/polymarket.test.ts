@@ -36,10 +36,23 @@ const dataOf = (params: unknown[]) => (params[0] as { data?: string }).data ?? "
 const isRead = (params: unknown[], selector: string, index?: bigint) =>
     dataOf(params).startsWith(selector) && (index === undefined || BigInt(`0x${dataOf(params).slice(-64)}`) === index);
 const callsOf = (ev: ResolutionEvidence) => ev.reads?.calls as Call[];
+const labels = (urls: string[]) => urls.map((u, i) => `${new URL(u).host}#${i + 1}`);
 
-function setup(opts: { scenario?: string; override?: Override; markets?: Record<string, unknown>; keyset?: unknown; allowlist?: string[] } = {}) {
+interface SetupOpts {
+    scenario?: string;
+    scenarios?: string[];
+    rpcUrls?: string[];
+    override?: Override;
+    markets?: Record<string, unknown>;
+    keyset?: unknown;
+    allowlist?: string[];
+}
+
+function setup(opts: SetupOpts = {}) {
     const requests: string[] = [];
-    const exchanges: Exchange[] = [...rpc.chainId, ...(opts.scenario ? rpc.scenarios[opts.scenario].exchanges : [])];
+    const posts: { url: string; body: unknown }[] = [];
+    const scenarios = opts.scenarios ?? (opts.scenario ? [opts.scenario] : []);
+    const exchanges: Exchange[] = [...rpc.chainId, ...scenarios.flatMap((s) => rpc.scenarios[s].exchanges as Exchange[])];
     const fake = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
         const url = String(input);
         requests.push(url);
@@ -49,22 +62,28 @@ function setup(opts: { scenario?: string; override?: Override; markets?: Record<
             const body = pathname === "/markets/keyset" ? (opts.keyset ?? gamma.keyset.response) : (opts.markets?.[id] ?? gamma.markets[id]?.response);
             return body ? Response.json(body) : new Response("not found", { status: 404 });
         }
-        const req = JSON.parse(String(init?.body));
-        const key = JSON.stringify(req.params).toLowerCase();
-        const hit = exchanges.find((e) => e.rpcUrl === url && e.method === req.method && JSON.stringify(e.params).toLowerCase() === key);
-        if (!hit) return new Response(`no fixture for ${req.method} ${key}`, { status: 400 });
-        const result = opts.override ? opts.override(url, req.method, req.params, hit.result) : hit.result;
-        return Response.json({ jsonrpc: "2.0", id: req.id, result });
+        const body = JSON.parse(String(init?.body));
+        posts.push({ url, body });
+        // Fixtures are keyed by provider host, so keyed URLs replay them too; `finalized` screen reads reuse the recorded value.
+        const answer = (req: { id: unknown; method: string; params: unknown[] }) => {
+            const screen = req.method === "eth_call" && req.params[1] === "finalized";
+            const key = (params: unknown[]) => JSON.stringify(screen ? params[0] : params).toLowerCase();
+            const hit = exchanges.find((e) => new URL(e.rpcUrl).host === new URL(url).host && e.method === req.method && key(e.params) === key(req.params));
+            return hit && { jsonrpc: "2.0", id: req.id, result: opts.override ? opts.override(url, req.method, req.params, hit.result) : hit.result };
+        };
+        if (Array.isArray(body)) return Response.json(body.map((r) => answer(r) ?? { jsonrpc: "2.0", id: r.id, error: { code: -32000, message: "no fixture" } }));
+        const hit = answer(body);
+        return hit ? Response.json(hit) : new Response(`no fixture for ${body.method}`, { status: 400 });
     };
     const p = createPolymarketProvider({
-        rpcUrls: opts.scenario ? rpc.scenarios[opts.scenario].providers : [PUBLICNODE, DRPC],
+        rpcUrls: opts.rpcUrls ?? (opts.scenario ? rpc.scenarios[opts.scenario].providers : [PUBLICNODE, DRPC]),
         resolverAllowlist: opts.allowlist ?? ALLOWLIST,
         fetch: fake as typeof fetch,
     });
-    return { p, requests };
+    return { p, requests, posts };
 }
 
-const definition = (id: string, opts: Parameters<typeof setup>[0] = {}) => setup(opts).p.fetchMarketDefinition(id);
+const definition = (id: string, opts: SetupOpts = {}) => setup(opts).p.fetchMarketDefinition(id);
 
 describe("polymarket normalization", () => {
     it("normalizes a keyset page and pages with after_cursor", async () => {
@@ -202,10 +221,10 @@ describe("polymarket resolution evidence", () => {
         expect(ev.status).toBe("final");
         expect(ev.detail).toContain(label);
         expect(ev.vector).toEqual({ numerators, denominator });
-        expect(ev.chain).toEqual({ chainId: 137, blockNumber, blockHash, providers });
+        expect(ev.chain).toEqual({ chainId: 137, blockNumber, blockHash, providers: labels(providers) });
         const calls = callsOf(ev);
         expect(calls).toHaveLength(providers.length * 6);
-        expect(calls.every((c) => providers.includes(c.provider) && c.method && c.params && c.result !== undefined && !c.error)).toBe(true);
+        expect(calls.every((c) => labels(providers).includes(c.provider) && c.method && c.params && c.result !== undefined && !c.error)).toBe(true);
         expect(calls.filter((c) => c.method === "eth_call").every((c) => c.params[1] === `0x${BigInt(blockNumber).toString(16)}`)).toBe(true);
         expect(p.verifyFinalResolution(market, ev, PROFILE)).toEqual({ ok: true });
     });
@@ -214,7 +233,7 @@ describe("polymarket resolution evidence", () => {
         const { p } = setup({ scenario: "559651" });
         const market = await p.fetchMarketDefinition("559651");
         const ev = await p.fetchResolutionEvidence(market);
-        expect(ev).toMatchObject({ status: "unresolved", chain: { blockNumber: "95126347", providers: [PUBLICNODE, DRPC] } });
+        expect(ev).toMatchObject({ status: "unresolved", chain: { blockNumber: "95126347", providers: labels([PUBLICNODE, DRPC]) } });
         expect(ev.vector).toBeUndefined();
         expect(ev.reads?.payout).toEqual({ numerators: [0n, 0n], denominator: 0n });
         expect(p.verifyFinalResolution(market, ev, PROFILE)).toMatchObject({ ok: false });
@@ -266,8 +285,9 @@ describe("polymarket resolution evidence", () => {
 
         const three = setup({ scenario: "2758339", override: emptyDen(TENDERLY) }).p;
         const ev = await three.fetchResolutionEvidence(await three.fetchMarketDefinition("2758339"));
-        expect(ev).toMatchObject({ status: "final", chain: { providers: [PUBLICNODE, DRPC] } });
-        expect(callsOf(ev).some((c) => c.provider === TENDERLY && c.error?.includes("not a uint256 word"))).toBe(true);
+        const [publicnode, drpc, tenderly] = labels([PUBLICNODE, DRPC, TENDERLY]);
+        expect(ev).toMatchObject({ status: "final", chain: { providers: [publicnode, drpc] } });
+        expect(callsOf(ev).some((c) => c.provider === tenderly && c.error?.includes("not a uint256 word"))).toBe(true);
 
         for (const target of [DRPC, undefined]) {
             const two = setup({ scenario: "4737427", override: emptyDen(target) }).p;
@@ -310,5 +330,78 @@ describe("polymarket verifyFinalResolution", () => {
         expect(reason({ ...ev, chain: { ...chain, chainId: 1 } })).toMatch(/chain 137/);
         expect(reason({ ...ev, chain: { ...chain, blockHash: "" } })).toMatch(/block number\/hash/);
         expect(reason({ ...ev, chain: { ...chain, providers: [PUBLICNODE, PUBLICNODE] } })).toMatch(/1 providers < 2/);
+    });
+});
+
+describe("polymarket early-resolution screen", () => {
+    const IDS = ["559651", "4737427", "2758339"];
+    const load = (p: ReturnType<typeof setup>["p"]) => Promise.all(IDS.map((id) => p.fetchMarketDefinition(id)));
+
+    it("sends one finalized payoutDenominator batch per provider and needs a quorum of resolved reports", async () => {
+        const { p, posts } = setup({ scenarios: IDS });
+        const markets = await load(p);
+        const [open, fifty, no] = markets.map((m) => m.protocol.conditionId);
+        expect((await p.screenResolved(markets)).sort()).toEqual([fifty, no].sort());
+        expect(posts.map((x) => x.url)).toEqual([PUBLICNODE, DRPC]);
+        for (const { body } of posts) {
+            const batch = body as { method: string; params: [{ to: string; data: string }, string] }[];
+            expect(batch.map((r) => [r.method, r.params[0].to, r.params[1]])).toEqual(IDS.map(() => ["eth_call", CTF_ADDRESS, "finalized"]));
+            expect(batch.map((r) => r.params[0].data)).toEqual([open, fifty, no].map((c) => `${DEN}${c!.slice(2)}`));
+        }
+
+        const lagging: Override = (u, _m, params, r) => (u === DRPC && dataOf(params).includes(no!.slice(2)) ? word(0n) : r);
+        const one = setup({ scenarios: IDS, override: lagging }).p;
+        expect(await one.screenResolved(await load(one))).toEqual([fifty]);
+    });
+
+    it("counts a malformed or partial batch answer as a failed provider, never as unresolved, and does not retry", async () => {
+        const { p, posts } = setup({ scenarios: IDS, override: (u, _m, _params, r) => (u === DRPC ? "0x" : r) });
+        await expect(p.screenResolved(await load(p))).rejects.toThrow(/1\/2 providers answered; polygon\.drpc\.org#2: .*not a uint256 word/);
+        expect(posts).toHaveLength(2);
+        const partial = setup({ scenarios: ["559651", "4737427"] });
+        await expect(partial.p.screenResolved(await load(partial.p))).rejects.toThrow(/0\/2 providers answered/);
+    });
+
+    it("does no reads for markets outside the profile", async () => {
+        const { p, posts } = setup({ scenarios: IDS });
+        const [, negRisk] = (await p.discoverMarkets(null, 5)).markets;
+        expect(await p.screenResolved([negRisk!])).toEqual([]);
+        expect(posts).toHaveLength(0);
+    });
+});
+
+describe("polymarket provider labels", () => {
+    const KEYED = ["https://polygon-bor-rpc.publicnode.com/v2/SECRET-ONE", "https://polygon.drpc.org/ogrpc?dkey=SECRET-TWO", "https://rpc.example/SECRET-THREE"];
+    const show = (x: unknown) => JSON.stringify(x, (_k, v) => (typeof v === "bigint" ? v.toString() : v));
+
+    it("never puts provider URLs, which may embed API keys, into evidence, details or errors", async () => {
+        const { p } = setup({ scenario: "4737427", rpcUrls: KEYED });
+        const market = await p.fetchMarketDefinition("4737427");
+        const ev = await p.fetchResolutionEvidence(market);
+        expect(ev).toMatchObject({ status: "final", chain: { providers: ["polygon-bor-rpc.publicnode.com#1", "polygon.drpc.org#2"] } });
+        expect(callsOf(ev).filter((c) => c.error).map((c) => [c.provider, c.error])).toContainEqual(["rpc.example#3", "HTTP 400 from rpc.example#3"]);
+
+        const forked: Override = (u, m, params, r) => (u === KEYED[1] && m === "eth_getBlockByNumber" && params[0] !== "finalized" ? { ...(r as object), hash: `0x${"ab".repeat(32)}` } : r);
+        const inconsistent = await setup({ scenario: "4737427", rpcUrls: KEYED, override: forked }).p.fetchResolutionEvidence(market);
+        expect(inconsistent.detail).toContain(`polygon.drpc.org#2=0x${"ab".repeat(32)}`);
+        const down = setup({ scenario: "4737427", rpcUrls: [KEYED[0]!, KEYED[2]!] }).p;
+        const failed = await down.fetchResolutionEvidence(market).catch((e: Error) => e.message);
+        expect(failed).toMatch(/1\/2 providers answered; rpc\.example#2 eth_chainId: HTTP 400 from rpc\.example#2/);
+        const screen = await down.screenResolved([market]).catch((e: Error) => e.message);
+        expect(screen).toMatch(/1\/2 providers answered; rpc\.example#2: batch item 0/);
+        expect(show([ev, inconsistent, failed, screen])).not.toMatch(/SECRET/);
+    });
+
+    it("refuses URLs that fetch would echo back in its errors", () => {
+        for (const bad of ["polygon.drpc.org/SECRET", "https://user:SECRET@polygon.drpc.org/"]) {
+            let message = "";
+            try {
+                createPolymarketProvider({ rpcUrls: [PUBLICNODE, bad], resolverAllowlist: ALLOWLIST });
+            } catch (e) {
+                message = (e as Error).message;
+            }
+            expect(message).toMatch(/^RPC URL #2 /);
+            expect(message).not.toMatch(/SECRET/);
+        }
     });
 });

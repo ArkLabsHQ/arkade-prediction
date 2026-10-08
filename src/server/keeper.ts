@@ -3,8 +3,8 @@ import { hex } from "@scure/base";
 import { assetIdOf } from "../core/assets.js";
 import { sha256Hex } from "../core/encoding.js";
 import {
-    issueMarketAssets, mintMatch, mintSets, openVault, postOffer, resolveMarket, settleExpiredOffer, timeoutMarket,
-    type Ctx, type LiveOffer, type Party,
+    cancelOffer, issueMarketAssets, mintMatch, mintSets, openVault, postOffer, resolveMarket, settleExpiredOffer,
+    timeoutMarket, type Ctx, type LiveOffer, type Party,
 } from "../core/actions.js";
 import { bindingOf, type MarketDefinition } from "../core/definition.js";
 import { marketContracts } from "../core/market.js";
@@ -14,7 +14,7 @@ import { coinFromJson, offerTermsFromJson, offerTermsToJson, termsToJson, type C
 import { all, now, run, type Db } from "./db.js";
 import type { WriterLease } from "./lease.js";
 import { auditGenesis, getMarket, marketTerms, reconcileVault, type Deps, type MarketRow } from "./markets.js";
-import { openOffers, recordTrade, refreshOffer, registerOffer } from "./offers.js";
+import { getOffer, openOffers, recordTrade, refreshOffer, registerOffer } from "./offers.js";
 import { watchedBoxes } from "./boxes.js";
 import { autoClaim, claimBoxContract } from "../core/claimBox.js";
 import { backoffMs, type Workflow, type Workflows } from "./workflows.js";
@@ -29,6 +29,12 @@ export interface KeeperDeps extends Deps {
 }
 
 type Outcome = "landed" | "not-submitted" | "lost" | "unknown";
+
+/** Kinds whose handler runs several sub-transactions: a landed step is progress, never completion. */
+const MULTI_STEP = new Set(["activate", "lp-liquidity"]);
+const MATCH_CANDIDATES = 5;
+const RENEW_DEADLINE_MS = 10 * 60_000;
+const LP_MIN_WINDOW_SECONDS = 60;
 
 /** Classifies an ambiguous submission from authoritative indexer state; a timeout alone never means failure. */
 export async function reconcileSubmission(d: Deps, txid: string | null, inputs: string[]): Promise<Outcome> {
@@ -74,7 +80,8 @@ export class Keeper {
     }
 
     private async refresh(): Promise<void> {
-        for (const m of all<MarketRow>(this.d.db, "SELECT * FROM markets WHERE terms IS NOT NULL AND status IN ('open','closed','resolving','resolved')")) {
+        // Dropping 'halted' here would freeze the market's vault state: never 'resolved', so no auto-claims.
+        for (const m of all<MarketRow>(this.d.db, "SELECT * FROM markets WHERE terms IS NOT NULL AND status IN ('open','halted','closed','resolving','resolved')")) {
             await reconcileVault(this.d, m).catch((e) => this.d.log("vault reconcile failed", { market: m.id, error: String(e) }));
         }
         for (const o of openOffers(this.d.db)) {
@@ -85,6 +92,10 @@ export class Keeper {
     private async plan(): Promise<void> {
         const { db, wf } = this.d;
         const nowS = Math.floor(Date.now() / 1000);
+        // Nothing else re-enqueues activation, and a stuck 'activating' row still counts against IMPORT_MAX_ACTIVE.
+        if (this.d.operator) {
+            for (const m of all<MarketRow>(db, "SELECT id FROM markets WHERE status = 'activating'")) wf.enqueue(`activate:${m.id}`, "activate", m.id, {});
+        }
         for (const m of all<MarketRow & { outcome: string }>(db,
             `SELECT m.*, c.outcome FROM markets m JOIN certificates c ON c.market_id = m.id WHERE m.vault_phase = 'open' AND m.terms IS NOT NULL`)) {
             wf.enqueue(`resolve:${m.id}`, "resolve", m.id, { outcome: m.outcome });
@@ -100,6 +111,7 @@ export class Keeper {
             }
         }
         this.planMatches(offers);
+        this.planCancels(offers);
         const boxes = await this.boxCoins();
         this.planRenewals(offers, nowS, boxes);
         for (const b of boxes) {
@@ -121,22 +133,26 @@ export class Keeper {
         }));
     }
 
-    /** Best YES bid + best NO bid paying at least one unit per set: mint between them. */
     private planMatches(offers: ReturnType<typeof openOffers>): void {
-        const byMarket = new Map<string, typeof offers>();
-        for (const o of offers) if (o.side === "buy" && o.coin) byMarket.set(o.market_id, [...(byMarket.get(o.market_id) ?? []), o]);
+        const byMarket = new Map<string, Bid[]>();
+        for (const o of offers) if (o.side === "buy" && o.coin) byMarket.set(o.market_id, [...(byMarket.get(o.market_id) ?? []), asBid(o)]);
         for (const [marketId, bids] of byMarket) {
             const m = getMarket(this.d.db, marketId);
             const terms = m && marketTerms(m);
-            if (!m || !terms || m.vault_phase !== "open" || m.status !== "open") continue;
-            const price = (o: (typeof bids)[number]) => BigInt(JSON.parse(o.terms).priceSats);
-            const best = (outcome: string) => bids.filter((b) => b.outcome === outcome && BigInt(b.remaining) > 0n).sort((a, b) => Number(price(b) - price(a)))[0];
-            const yes = best("yes");
-            const no = best("no");
-            if (!yes || !no || price(yes) + price(no) < terms.unitSats) continue;
-            const qty = [BigInt(yes.remaining), BigInt(no.remaining)].reduce((a, b) => (a < b ? a : b));
-            const coins = [JSON.parse(yes.coin!).txid, JSON.parse(no.coin!).txid];
-            this.d.wf.enqueue(`match:${coins.join(":")}`, "mint-match", marketId, { yes: yes.id, no: no.id, qty: qty.toString() });
+            if (!m || !terms || m.vault_phase !== "open" || m.status !== "open" || m.vault_value === null) continue;
+            const room = (terms.capSats - BigInt(m.vault_value)) / terms.unitSats;
+            const pair = room > 0n ? bestMintMatch(bids, terms.unitSats, room) : undefined;
+            if (!pair) continue;
+            this.d.wf.enqueue(`match:${pair.yes.txid}:${pair.no.txid}`, "mint-match", marketId, { yes: pair.yes.id, no: pair.no.id, qty: pair.qty.toString() });
+        }
+    }
+
+    private planCancels(offers: ReturnType<typeof openOffers>): void {
+        const lp = this.d.lp && hex.encode(this.d.lp.script);
+        if (!lp) return;
+        for (const o of offers) {
+            if (o.maker_script !== lp || getMarket(this.d.db, o.market_id)?.status !== "halted") continue;
+            this.d.wf.enqueue(`cancel:${o.id}`, "cancel-offer", o.market_id, { offerId: o.id });
         }
     }
 
@@ -162,12 +178,18 @@ export class Keeper {
     async execute(wf: Workflow): Promise<void> {
         try {
             if (wf.state === "submitting") {
+                await this.finalizePending(wf);
                 const r = await reconcileSubmission(this.d, wf.txid, (wf.payload.inputs as string[] | undefined) ?? []);
                 this.d.log("reconciled in-flight workflow", { id: wf.id, outcome: r });
-                if (r === "landed") return void this.finish(this.d.wf.transition(wf, "done", { error: null }));
-                if (r === "lost") return void this.d.wf.transition(wf, "failed", { error: "inputs spent by another transaction" });
                 if (r === "unknown") return void this.d.wf.transition(wf, "submitting", { nextAt: Date.now() + backoffMs(wf.attempts), attempt: true });
-                wf = this.d.wf.transition(wf, "pending", { txid: null });
+                if (r === "landed" && !MULTI_STEP.has(wf.kind)) return void this.finish(this.d.wf.transition(wf, "done", { error: null }));
+                // `lost` (another tx spent our inputs) rebuilds rather than gives up; a landed multi-step tx is
+                // recorded under its step's field so the handler resumes at the next one.
+                const step = r === "landed" ? (wf.payload.step as string | undefined) : undefined;
+                wf = this.d.wf.transition(wf, "pending", {
+                    payload: { ...(step ? { [step]: wf.txid } : {}), step: null, inputs: null, finalCheckpoints: null },
+                    txid: null, error: r === "lost" ? "inputs spent by another transaction" : null, attempt: r === "lost",
+                });
             }
             const txid = await this.handle(wf);
             maybeCrash(this.d.cfg, "after-submit", wf.kind);
@@ -176,11 +198,25 @@ export class Keeper {
         } catch (err) {
             const latest = this.d.wf.get(wf.id)!;
             const message = err instanceof Error ? err.message : String(err);
-            const permanent = /not found|does not cross|already|covenant|spent|expired|no claims/i.test(message) && latest.state === "pending";
+            const permanent = /does not cross|already|covenant|spent|expired|no claims/i.test(message) && latest.state === "pending";
             this.d.log("workflow attempt failed", { id: wf.id, state: latest.state, error: message });
             if (permanent || latest.attempts >= 8) this.d.wf.transition(latest, "failed", { error: message, attempt: true });
             else this.d.wf.transition(latest, latest.state, { error: message, nextAt: Date.now() + backoffMs(latest.attempts), attempt: true });
         }
+    }
+
+    /** arkd spends the inputs on submission but creates the outputs on finalize: until then the value is stranded. */
+    private async finalizePending(wf: Workflow): Promise<void> {
+        const checkpoints = wf.payload.finalCheckpoints as string[] | undefined;
+        if (!wf.txid || !checkpoints?.length) return;
+        await this.d.net.arkProvider.finalizeTx(wf.txid, checkpoints).then(
+            () => this.d.log("finalized an interrupted submission", { id: wf.id, txid: wf.txid }),
+            (e) => this.d.log("could not finalize an interrupted submission", { id: wf.id, txid: wf.txid, error: String(e) }),
+        );
+    }
+
+    private mark(wf: Workflow, patch: Record<string, unknown>): void {
+        this.d.wf.transition(this.d.wf.get(wf.id)!, "pending", { payload: patch, txid: null });
     }
 
     private finish(wf: Workflow): void {
@@ -195,6 +231,9 @@ export class Keeper {
             beforeSubmit: ({ txid, inputs }) => {
                 current = this.d.wf.transition(this.d.wf.get(current.id)!, "submitting", { txid, payload: { inputs } });
                 maybeCrash(this.d.cfg, "before-submit", current.kind);
+            },
+            beforeFinalize: ({ txid, checkpoints }) => {
+                current = this.d.wf.transition(this.d.wf.get(current.id)!, "submitting", { txid, payload: { finalCheckpoints: checkpoints } });
             },
         };
     }
@@ -223,6 +262,13 @@ export class Keeper {
                 if (offer.status !== "open" || !offer.coin) return undefined;
                 return (await settleExpiredOffer(ctx, { terms: offerTermsFromJson(offer.terms), coin: coinFromJson(offer.coin) })).txid;
             }
+            case "cancel-offer": {
+                const lp = this.d.lp;
+                if (!lp) throw new Error("LP wallet not configured");
+                const offer = await refreshOffer(this.d, wf.payload.offerId as string);
+                if (offer.status !== "open" || !offer.coin) return undefined;
+                return (await cancelOffer(ctx, lp, { terms: offerTermsFromJson(offer.terms), coin: coinFromJson(offer.coin) })).txid;
+            }
             case "mint-match": {
                 if (!terms) throw new Error("market not found");
                 const [yes, no] = await Promise.all([refreshOffer(this.d, wf.payload.yes as string), refreshOffer(this.d, wf.payload.no as string)]);
@@ -230,6 +276,8 @@ export class Keeper {
                 const live = (o: typeof yes): LiveOffer => ({ terms: offerTermsFromJson(o.terms), coin: coinFromJson(o.coin!) });
                 const qty = [BigInt(wf.payload.qty as string), BigInt(yes.remaining), BigInt(no.remaining)].reduce((a, b) => (a < b ? a : b));
                 if (qty <= 0n) throw new Error("bids already filled");
+                // A fill shrunk by a refresh can fall under a bid's min fill; re-plan instead of being refused.
+                for (const o of [yes, no]) if (!bidTakes(asBid(getOffer(this.d.db, o.id)!), qty)) throw new Error("fill below the bid's min fill");
                 const { txid } = await mintMatch(ctx, terms, live(yes), live(no), qty, this.d.keeperScript);
                 for (const o of [yes, no]) {
                     recordTrade(this.d.db, { txid, offerId: o.id, marketId: o.marketId, outcome: o.outcome, kind: "mint-match", makerSide: "buy", qty, priceSats: o.terms.priceSats });
@@ -292,36 +340,56 @@ export class Keeper {
             { ark: this.d.net.arkProvider, emulator: this.d.net.emulator, indexer: this.d.net.indexer, network: networks[this.d.cfg.APM_NETWORK] },
             targets,
             SingleKey.fromRandomBytes().signerSession(),
+            { signal: AbortSignal.timeout(RENEW_DEADLINE_MS) },
         );
         this.d.log("renewed covenant vtxos", { commitmentTxid, count: targets.length });
         return commitmentTxid;
     }
 
+    /** Each offer's terms are stored before it is funded: the jittered expiry is part of its script. */
     private async liquidity(wf: Workflow, ctx: Ctx): Promise<string | undefined> {
         const lp = this.d.lp;
         const market = wf.marketId ? getMarket(this.d.db, wf.marketId) : undefined;
         const terms = market && marketTerms(market);
         if (!lp || !terms || !market) throw new Error("LP wallet or market not found");
-        const p = wf.payload as { sets: string; yesAsk: string; noAsk: string; minted?: string; posted?: string[] };
+        const nowS = Math.floor(Date.now() / 1000);
+        if (market.status !== "open" || market.close_at - nowS < LP_MIN_WINDOW_SECONDS) return undefined;
+        const p = wf.payload as Record<string, unknown>;
+        const sets = BigInt(p.sets as string);
         if (!p.minted) {
-            const { txid } = await mintSets(ctx, lp, terms, BigInt(p.sets));
-            this.d.wf.transition(this.d.wf.get(wf.id)!, "pending", { payload: { minted: txid }, txid: null });
+            this.mark(wf, { step: "minted" });
+            const { txid } = await mintSets(ctx, lp, terms, sets);
+            this.mark(wf, { minted: txid, step: null, inputs: null, finalCheckpoints: null });
         }
-        const posted = p.posted ?? [];
         const lpKey = await lp.identity.xOnlyPublicKey();
-        for (const [outcome, price] of [["yes", p.yesAsk], ["no", p.noAsk]] as const) {
-            if (posted.includes(outcome) || BigInt(price) <= 0n) continue;
-            const offerTerms = {
-                side: "sell" as const, maker: lpKey, makerScript: lp.script, assetId: terms.assets[outcome], priceSats: BigInt(price),
-                minFill: 1n, expiresAt: BigInt(Math.floor(Date.now() / 1000) + 30 * 86400 + Math.floor(Math.random() * 3600)), reserveSats: 330n,
-                exitDelaySeconds: this.d.net.exitDelaySeconds,
-            };
-            await waitForAsset(lp, terms.assets[outcome], BigInt(p.sets));
-            const { txid } = await postOffer(ctx, lp, offerTerms, BigInt(p.sets));
-            this.d.wf.transition(this.d.wf.get(wf.id)!, "pending", { payload: { posted: [...posted, outcome] }, txid: null });
-            posted.push(outcome);
-            await waitForCoin(this, offerContract(this.d.net.ark, offerTerms).pkScript, txid);
-            await registerOffer(this.d, { marketId: market.id, terms: offerTermsToJson(offerTerms), fundingTxid: txid });
+        for (const outcome of ["yes", "no"] as const) {
+            const price = BigInt(p[`${outcome}Ask`] as string);
+            const tk = `${outcome}Terms`;
+            const fk = `${outcome}FundingTxid`;
+            // Same price band registerOffer enforces: a price it would reject must not fund an offer first.
+            if (price <= 0n || price >= terms.unitSats || p[`${outcome}Registered`]) continue;
+            if (!p[tk]) {
+                p[tk] = offerTermsToJson({
+                    side: "sell", maker: lpKey, makerScript: lp.script, assetId: terms.assets[outcome], priceSats: price,
+                    minFill: 1n, expiresAt: lpExpiry(market.close_at, nowS), reserveSats: 330n, exitDelaySeconds: this.d.net.exitDelaySeconds,
+                });
+                this.mark(wf, { [tk]: p[tk] });
+            }
+            const offerTerms = offerTermsFromJson(p[tk] as OfferTermsJson);
+            if (!p[fk]) {
+                await waitForAsset(lp, offerTerms.assetId, sets);
+                this.mark(wf, { step: fk });
+                const { txid } = await postOffer(ctx, lp, offerTerms, sets);
+                p[fk] = txid;
+                this.mark(wf, { [fk]: txid, step: null, inputs: null, finalCheckpoints: null });
+            }
+            await waitForCoin(this, offerContract(this.d.net.ark, offerTerms).pkScript, p[fk] as string);
+            // registerOffer answers 409 for an offer it already holds, which is exactly what a retry wants.
+            await registerOffer(this.d, { marketId: market.id, terms: p[tk] as OfferTermsJson, fundingTxid: p[fk] as string })
+                .catch((e: unknown) => {
+                    if (!isDuplicate(e)) throw e;
+                });
+            this.mark(wf, { [`${outcome}Registered`]: true });
         }
         return undefined;
     }
@@ -335,8 +403,9 @@ export class Keeper {
         if (!oracleKey) throw new Error("ORACLE_PUBKEYS is empty");
         let p = wf.payload as { genesisTxid?: string; vaultTxid?: string; inputs?: string[] };
         if (!p.genesisTxid) {
+            this.mark(wf, { step: "genesisTxid" });
             const { genesisTxid } = await issueMarketAssets(ctx, operator, market.id, 1n);
-            this.d.wf.transition(this.d.wf.get(wf.id)!, "pending", { payload: { genesisTxid }, txid: null });
+            this.mark(wf, { genesisTxid, step: null, inputs: null, finalCheckpoints: null });
             p = { ...p, genesisTxid };
         }
         const definition: MarketDefinition = {
@@ -356,8 +425,9 @@ export class Keeper {
         };
         if (!p.vaultTxid) {
             await waitForAsset(operator, assets.ctrl, 1n);
+            this.mark(wf, { step: "vaultTxid" });
             const { txid } = await openVault(ctx, operator, terms, 1n, BigInt(this.d.cfg.MARKET_BASE_SATS));
-            this.d.wf.transition(this.d.wf.get(wf.id)!, "pending", { payload: { vaultTxid: txid }, txid: null });
+            this.mark(wf, { vaultTxid: txid, step: null, inputs: null, finalCheckpoints: null });
             p = { ...p, vaultTxid: txid };
         }
         const { baseSats } = await auditGenesis(this.d.net, terms, p.genesisTxid!, p.vaultTxid!);
@@ -379,6 +449,56 @@ export class Keeper {
     get deps(): KeeperDeps {
         return this.d;
     }
+}
+
+const isDuplicate = (e: unknown) =>
+    (e as { code?: string }).code === "duplicate" || /duplicate|identical live offer/i.test(String(e));
+
+/** An LP quote dies with its market. The jitter varies the script so a re-post is not seen as a duplicate. */
+export function lpExpiry(closeAt: number, nowS: number, jitter = Math.random()): bigint {
+    const span = Math.min(3600, Math.max(1, Math.floor((closeAt - nowS) / 2)));
+    return BigInt(closeAt - Math.floor(jitter * span));
+}
+
+interface Bid {
+    id: string;
+    outcome: string;
+    txid: string;
+    price: bigint;
+    minFill: bigint;
+    reserve: bigint;
+    value: bigint;
+    remaining: bigint;
+}
+
+function asBid(o: { id: string; outcome: string; terms: string; coin: string | null; remaining: string }): Bid {
+    const t: OfferTermsJson = JSON.parse(o.terms);
+    const c: CoinJson = JSON.parse(o.coin!);
+    return {
+        id: o.id, outcome: o.outcome, txid: c.txid, price: BigInt(t.priceSats), minFill: BigInt(t.minFill),
+        reserve: BigInt(t.reserveSats), value: BigInt(c.valueSats), remaining: BigInt(o.remaining),
+    };
+}
+
+/** `fill` in buy_offer.ark: the budget left must stay positive, and min fill is waived only for the last fill. */
+function bidTakes(b: Bid, qty: bigint): boolean {
+    const left = b.value - qty * b.price - b.reserve;
+    return qty > 0n && left >= 0n && (qty >= b.minFill || left < b.minFill * b.price);
+}
+
+/** The best-priced pair can be unfillable (min fill above what the other side absorbs), which stalled matching. */
+function bestMintMatch(bids: Bid[], unitSats: bigint, room: bigint): { yes: Bid; no: Bid; qty: bigint } | undefined {
+    const side = (outcome: string) =>
+        bids.filter((b) => b.outcome === outcome && b.remaining > 0n).sort((a, b) => Number(b.price - a.price)).slice(0, MATCH_CANDIDATES);
+    const nos = side("no");
+    for (const yes of side("yes")) {
+        for (const no of nos) {
+            if (yes.price + no.price < unitSats) break;
+            const qty = [yes.remaining, no.remaining, room].reduce((a, b) => (a < b ? a : b));
+            if (bidTakes(yes, qty) && bidTakes(no, qty)) return { yes, no, qty };
+        }
+    }
+    return undefined;
 }
 
 async function waitForAsset(party: Party, assetId: string, amount: bigint, timeoutMs = 60_000): Promise<void> {

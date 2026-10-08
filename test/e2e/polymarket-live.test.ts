@@ -47,7 +47,7 @@ describe.skipIf(!LIVE)("polymarket import and attested settlement (LIVE network)
         });
         const { api } = server;
         const ov = await api<{ wallets: { operator: { address: string } } }>("/api/admin/overview", { admin: true });
-        faucet(ov.body.wallets.operator.address, 200_000);
+        await faucet(ov.body.wallets.operator.address, 200_000);
         await new Promise((r) => setTimeout(r, 3000));
 
         // 1. Discovery imports and activates a live eligible market with no outcome entered by hand.
@@ -73,7 +73,7 @@ describe.skipIf(!LIVE)("polymarket import and attested settlement (LIVE network)
         }, { what: "replay activated", timeoutMs: 180_000, intervalMs: 3000 });
         const terms = termsFromJson(opened.terms!);
         const w = await newWallet();
-        faucet(await w.wallet.getAddress(), 20_000);
+        await faucet(await w.wallet.getAddress(), 20_000);
         await waitFor(async () => (await w.wallet.getBalance()).available >= 20_000, { what: "holder funds" });
         const holder = await walletParty(w.wallet, w.identity);
         const ctx: Ctx = { ark, net: network(ark), indexer: indexerProvider };

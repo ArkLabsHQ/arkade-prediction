@@ -1,11 +1,14 @@
 import type { MarketEvent } from "../shared/api.js";
-import { all, now, run, type Db } from "./db.js";
+import { all, now, one, run, type Db } from "./db.js";
 
 type Listener = (e: MarketEvent) => void;
+
+const TRIM_EVERY = 1000;
 
 /** Persisted event log; SSE clients replay from Last-Event-ID, so a reconnect never misses a wake-up. */
 export class EventBus {
     private readonly listeners = new Set<Listener>();
+    private published = 0;
 
     constructor(private readonly db: Db) {}
 
@@ -14,6 +17,7 @@ export class EventBus {
         const json = JSON.stringify(data, (_k, v) => (typeof v === "bigint" ? v.toString() : v));
         const r = run(this.db, "INSERT INTO events(type, market_id, at, data) VALUES (?, ?, ?, ?)", type, marketId, at, json);
         const event: MarketEvent = { id: Number(r.lastInsertRowid), type, marketId, at, data: JSON.parse(json) };
+        if (++this.published % TRIM_EVERY === 0) this.trim();
         for (const l of this.listeners) l(event);
         return event;
     }
@@ -25,6 +29,10 @@ export class EventBus {
             afterId,
             limit,
         ).map((r) => ({ id: r.id, type: r.type, marketId: r.market_id, at: r.at, data: JSON.parse(r.data) }));
+    }
+
+    lastId(): number {
+        return one<{ id: number | null }>(this.db, "SELECT MAX(id) id FROM events")?.id ?? 0;
     }
 
     subscribe(l: Listener): () => void {

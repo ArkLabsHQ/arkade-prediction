@@ -51,7 +51,8 @@ export async function startServer(opts: { port: number; dataDir?: string; env?: 
         const text = await r.text();
         return { status: r.status, body: text ? JSON.parse(text) : undefined };
     };
-    const deadline = Date.now() + 60_000;
+    // tsx compiles the server on start; on a loaded host that alone has exceeded a minute.
+    const deadline = Date.now() + 180_000;
     for (;;) {
         if (proc.exitCode !== null) throw new Error(`server exited: ${logs.slice(-5).join("\n")}`);
         const ok = await fetch(`${url}/api/config`).then((r) => r.ok, () => false);

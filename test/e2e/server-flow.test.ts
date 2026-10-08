@@ -34,7 +34,7 @@ describe("server API end to end", () => {
         const overview = await api<{ wallets: { operator: { address: string } } }>("/api/admin/overview", { admin: true });
         expect(overview.status).toBe(200);
         expect((await api("/api/admin/overview")).status).toBe(401);
-        faucet(overview.body.wallets.operator.address, 200_000);
+        await faucet(overview.body.wallets.operator.address, 200_000);
         const parties: Record<string, Party> = {};
         const keys: Record<string, Awaited<ReturnType<typeof newWallet>>> = {};
         for (const n of ["alice", "bob", "carol"]) {
@@ -53,21 +53,22 @@ describe("server API end to end", () => {
         const oracleKey = hex.encode(schnorr.getPublicKey(oracleSecret));
         const marketId = hex.encode(randomBytes(16));
         const closeAt = BigInt(Math.floor(Date.now() / 1000) + 90);
+        const timeoutAt = closeAt + 86_400n;
         const definition: MarketDefinition = {
             question: "Will the regtest demo resolve YES?", rules: "Resolves YES if the e2e oracle says so.", outcomes: ["YES", "NO"],
-            category: "test", closeAtUnix: String(closeAt), timeoutAtUnix: "0", source: null,
+            category: "test", closeAtUnix: String(closeAt), timeoutAtUnix: String(timeoutAt), source: null,
         };
         const { assets, genesisTxid } = await issueMarketAssets(ctx, parties.alice!, marketId, 1n);
         await waitFor(async () => (await parties.alice!.coins()).some((c) => c.assets?.some((a) => a.assetId === assets.ctrl)), { what: "genesis" });
         const terms: VaultTerms = {
             assets, unitSats: 1000n, capSats: 1000n + 100_000n, oracleKey: hex.decode(oracleKey),
             binding: bindingOf({ network: "regtest", arkSigner: ark.serverKey, emulatorSigner: ark.emulatorKey!, marketId, definition, unitSats: 1000n, assets, oracleKeys: [oracleKey], oracleEpoch: 1 }),
-            closeAt, timeoutAt: 0n, exitDelaySeconds: 512n,
+            closeAt, timeoutAt, exitDelaySeconds: 512n,
         };
         const { txid: vaultTxid } = await openVault(ctx, parties.alice!, terms, 1n, 1000n);
         const req: CreateMarketRequest = {
             question: definition.question, rules: definition.rules, outcomes: ["YES", "NO"], category: "test",
-            closeAtUnix: String(closeAt), timeoutAtUnix: "0", oracle: { policy: "external-key", key: oracleKey },
+            closeAtUnix: String(closeAt), timeoutAtUnix: String(timeoutAt), oracle: { policy: "external-key", key: oracleKey },
             marketId, genesisTxid, vaultTxid, terms: termsToJson(terms),
         };
         const forged = await api("/api/markets", { method: "POST", body: JSON.stringify({ ...req, question: "Will it resolve NO?" }) });

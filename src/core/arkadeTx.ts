@@ -179,6 +179,7 @@ export async function submitArkadeTx(
     net: Network,
     built: BuiltTx,
     signCheckpoints?: (cp: Transaction, vin: number) => Promise<Transaction>,
+    beforeFinalize?: (pending: { txid: string; checkpoints: string[] }) => void | Promise<void>,
 ): Promise<{ txid: string }> {
     const ark = base64.encode(built.arkTx.toPSBT());
     const cps = built.checkpoints.map((c) => base64.encode(c.toPSBT()));
@@ -193,6 +194,19 @@ export async function submitArkadeTx(
             base64.encode((await signCheckpoints(Transaction.fromPSBT(base64.decode(cp)), i)).toPSBT()),
         ),
     );
-    await net.ark.finalizeTx(res.arkTxid, finalCps);
+    await beforeFinalize?.({ txid: res.arkTxid, checkpoints: finalCps });
+    await finalizeTx(net, res.arkTxid, finalCps);
     return { txid: res.arkTxid };
+}
+
+/** Finalize only: arkd refuses a resubmitted ark tx, but keys finalization by txid so repeating it is safe. */
+async function finalizeTx(net: Network, txid: string, checkpoints: string[], attempts = 3): Promise<void> {
+    for (let i = 1; ; i++) {
+        try {
+            return await net.ark.finalizeTx(txid, checkpoints);
+        } catch (err) {
+            if (i >= attempts || /valid stage|not found|signature|invalid/i.test(String(err))) throw err;
+            await new Promise((r) => setTimeout(r, 500 * i));
+        }
+    }
 }

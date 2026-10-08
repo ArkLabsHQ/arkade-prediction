@@ -120,11 +120,24 @@ export async function renewCovenantVtxos(
     opts.signal?.addEventListener("abort", () => abort.abort());
     try {
         const stream = deps.ark.getEventStream(abort.signal, [sessionKey, ...coins.map((c) => `${c.txid}:${c.vout}`)]);
-        const commitmentTxid = await Batch.join(stream, handler, { abortController: abort });
+        // Batch.join only checks the abort when the next event arrives, so a batch that never starts waits forever.
+        const commitmentTxid = await Promise.race([
+            Batch.join(stream, handler, { abortController: abort }),
+            abandonOn(opts.signal),
+        ]);
         return { commitmentTxid, intentId };
     } finally {
         abort.abort();
     }
+}
+
+function abandonOn(signal: AbortSignal | undefined): Promise<never> {
+    return new Promise((_, reject) => {
+        if (!signal) return;
+        const fail = () => reject(new Error("renewal deadline passed before the batch completed"));
+        if (signal.aborted) fail();
+        else signal.addEventListener("abort", fail, { once: true });
+    });
 }
 
 function covenantBatchHandler(

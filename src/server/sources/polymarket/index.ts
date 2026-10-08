@@ -203,31 +203,40 @@ export function createPolymarketProvider(opts: PolymarketProviderOptions): Marke
     const allow = new Set(opts.resolverAllowlist.map((a) => a.toLowerCase()));
     if (!Number.isInteger(minProviders) || minProviders < 2) throw new Error("minProviders must be an integer >= 2");
     for (const a of allow) if (!ADDRESS.test(a)) throw new Error(`invalid resolver address ${a}`);
+    // RPC URLs often embed API keys: logs, details and evidence name a provider only by "host#n". fetch() quotes
+    // unparsable and user:password URLs in its errors, so those are refused here.
+    const labels = new Map(
+        rpcUrls.map((u, i) => {
+            const url = URL.canParse(u) ? new URL(u) : null;
+            if (!url || url.username || url.password) throw new Error(`RPC URL #${i + 1} must be a valid URL without user:password`);
+            return [u, `${url.host}#${i + 1}`] as const;
+        }),
+    );
+    const label = (u: string) => labels.get(u) ?? "rpc";
 
-    async function getJson(url: string, init: RequestInit = { headers: HEADERS }): Promise<unknown> {
+    async function getJson(url: string, init: RequestInit = { headers: HEADERS }, what = url): Promise<unknown> {
         const res = await doFetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
-        if (!res.ok) throw new HttpError(res.status, url);
+        if (!res.ok) throw new HttpError(res.status, what);
         return res.json();
     }
+
+    const post = (provider: string, body: unknown) =>
+        getJson(provider, { method: "POST", headers: { ...HEADERS, "content-type": "application/json" }, body: JSON.stringify(body) }, label(provider));
 
     async function rpc<T>(log: RpcCall[], provider: string, method: string, params: unknown[], decode: (r: unknown) => T): Promise<T> {
         try {
             const [raw, value] = await withRetry(async () => {
-                const body = await getJson(provider, {
-                    method: "POST",
-                    headers: { ...HEADERS, "content-type": "application/json" },
-                    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-                });
+                const body = await post(provider, { jsonrpc: "2.0", id: 1, method, params });
                 if (!isRec(body) || body.id !== 1) throw new Error("malformed JSON-RPC response");
                 if (body.error !== undefined) throw new Error(`JSON-RPC error ${JSON.stringify(body.error)}`);
                 return [body.result, decode(body.result)] as const;
             });
             // Block bodies are trimmed to identity fields; full tx lists would bloat the evidence digest input.
             const result = isRec(raw) ? { number: raw.number, hash: raw.hash, parentHash: raw.parentHash, timestamp: raw.timestamp } : raw;
-            log.push({ provider, method, params, result });
+            log.push({ provider: label(provider), method, params, result });
             return value;
         } catch (e) {
-            log.push({ provider, method, params, error: errMsg(e) });
+            log.push({ provider: label(provider), method, params, error: errMsg(e) });
             throw e;
         }
     }
@@ -308,7 +317,7 @@ export function createPolymarketProvider(opts: PolymarketProviderOptions): Marke
                 chainId: await call(u, "eth_chainId", [], quantity),
                 number: (await call(u, "eth_getBlockByNumber", ["finalized", false], header)).number,
             }));
-            const offChain = [...heads].filter(([, h]) => h.chainId !== BigInt(POLYGON_CHAIN_ID)).map(([u]) => u);
+            const offChain = [...heads].filter(([, h]) => h.chainId !== BigInt(POLYGON_CHAIN_ID)).map(([u]) => label(u));
             if (offChain.length > 0) return done("inconsistent", `not on chain ${POLYGON_CHAIN_ID}: ${offChain.join(", ")}`);
             const number = quorum(heads, "finalized head")
                 .map((h) => h.number)
@@ -323,13 +332,13 @@ export function createPolymarketProvider(opts: PolymarketProviderOptions): Marke
                 }),
             );
             if (new Set(hashes.values()).size > 1) {
-                return done("inconsistent", `block ${number} hash differs: ${[...hashes].map(([u, h]) => `${u}=${h}`).join(", ")}`);
+                return done("inconsistent", `block ${number} hash differs: ${[...hashes].map(([u, h]) => `${label(u)}=${h}`).join(", ")}`);
             }
             const [blockHash] = quorum(hashes, `block ${number} hash`);
-            const chain = { chainId: POLYGON_CHAIN_ID, blockNumber: number.toString(), blockHash, providers: [...hashes.keys()] };
+            const chain = { chainId: POLYGON_CHAIN_ID, blockNumber: number.toString(), blockHash, providers: [...hashes.keys()].map(label) };
 
             const cond = conditionId.slice(2);
-            const states = await settle(chain.providers, async (u) => {
+            const states = await settle([...hashes.keys()], async (u) => {
                 const read = (data: string) => call(u, "eth_call", [{ to: CTF_ADDRESS, data }, tag], uint256);
                 const den = await read(`0x${SEL_PAYOUT_DENOMINATOR}${cond}`);
                 const n0 = await read(`0x${SEL_PAYOUT_NUMERATORS}${cond}${word(0n)}`);
@@ -340,7 +349,7 @@ export function createPolymarketProvider(opts: PolymarketProviderOptions): Marke
                 return done("inconsistent", `CTF payouts differ across providers at block ${number}`, chain);
             }
             const [[denominator, n0, n1]] = quorum(states, "CTF payout reads");
-            chain.providers = [...states.keys()];
+            chain.providers = [...states.keys()].map(label);
             const payout = { numerators: [n0, n1], denominator };
             const at = `at finalized block ${number} (${blockHash}) on ${chain.providers.length} providers`;
             if (denominator === 0n) {
@@ -353,6 +362,31 @@ export function createPolymarketProvider(opts: PolymarketProviderOptions): Marke
             }
             const winner = n0 === n1 ? "50-50" : market.outcomes[n0 > n1 ? 0 : 1];
             return { ...done("final", `payout [${n0},${n1}]/${denominator} (${winner}) ${at}`, chain, payout), vector: payout };
+        },
+
+        async screenResolved(markets) {
+            const conds = [...new Set(markets.filter((m) => !identityProblem(m, allow)).map((m) => m.protocol.conditionId))];
+            if (conds.length === 0) return [];
+            const batch = conds.map((c, id) => ({ jsonrpc: "2.0", id, method: "eth_call", params: [{ to: CTF_ADDRESS, data: `0x${SEL_PAYOUT_DENOMINATOR}${c.slice(2)}` }, "finalized"] }));
+            const errors: string[] = [];
+            // No retries: one request per provider per pass is the budget; the next pass retries.
+            const answers = await settle(rpcUrls, async (u) => {
+                try {
+                    const body = await post(u, batch);
+                    if (!Array.isArray(body)) throw new Error("JSON-RPC batch not supported");
+                    const byId = new Map(body.filter(isRec).map((r) => [r.id, r]));
+                    return conds.map((_, id) => {
+                        const r = byId.get(id);
+                        if (!r || r.error !== undefined) throw new Error(`batch item ${id}: ${r ? JSON.stringify(r.error).slice(0, 120) : "missing"}`);
+                        return uint256(r.result) !== 0n;
+                    });
+                } catch (e) {
+                    errors.push(`${label(u)}: ${errMsg(e)}`);
+                    throw e;
+                }
+            });
+            if (answers.size < minProviders) throw new Error(`resolution screen: ${answers.size}/${minProviders} providers answered; ${errors.join("; ")}`);
+            return conds.filter((_, i) => [...answers.values()].filter((resolved) => resolved[i]).length >= minProviders);
         },
 
         verifyFinalResolution(market, evidence, profile) {

@@ -30,21 +30,22 @@ export async function registeredMarket(server: TestServer, ctx: Ctx, creator: Tr
     const oracleKey = hex.encode(schnorr.getPublicKey(oracleSecret));
     const marketId = hex.encode(randomBytes(16));
     const closeAt = BigInt(Math.floor(Date.now() / 1000) + closeInSeconds);
+    const timeoutAt = closeAt + 86_400n;
     const definition: MarketDefinition = {
         question: `Fault drill ${marketId.slice(0, 6)}?`, rules: "Resolves by the creator's oracle key.", outcomes: ["YES", "NO"],
-        category: "test", closeAtUnix: String(closeAt), timeoutAtUnix: "0", source: null,
+        category: "test", closeAtUnix: String(closeAt), timeoutAtUnix: String(timeoutAt), source: null,
     };
     const { assets, genesisTxid } = await issueMarketAssets(ctx, creator.party, marketId, 1n);
     await waitFor(async () => (await creator.party.coins()).some((c) => c.assets?.some((a) => a.assetId === assets.ctrl)), { what: "genesis" });
     const terms: VaultTerms = {
         assets, unitSats: 1000n, capSats: 1000n + 100_000n, oracleKey: hex.decode(oracleKey),
         binding: bindingOf({ network: "regtest", arkSigner: ctx.ark.serverKey, emulatorSigner: ctx.ark.emulatorKey!, marketId, definition, unitSats: 1000n, assets, oracleKeys: [oracleKey], oracleEpoch: 1 }),
-        closeAt, timeoutAt: 0n, exitDelaySeconds: 512n,
+        closeAt, timeoutAt, exitDelaySeconds: 512n,
     };
     const { txid: vaultTxid } = await openVault(ctx, creator.party, terms, 1n, 1000n);
     const req: CreateMarketRequest = {
         question: definition.question, rules: definition.rules, outcomes: ["YES", "NO"], category: "test",
-        closeAtUnix: String(closeAt), timeoutAtUnix: "0", oracle: { policy: "external-key", key: oracleKey },
+        closeAtUnix: String(closeAt), timeoutAtUnix: String(timeoutAt), oracle: { policy: "external-key", key: oracleKey },
         marketId, genesisTxid, vaultTxid, terms: termsToJson(terms),
     };
     const r = await server.api("/api/markets", { method: "POST", body: JSON.stringify(req) });

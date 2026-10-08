@@ -18,6 +18,20 @@ export function sourceBinding(m: SourceMarket, profile: string) {
     };
 }
 
+const IDENTITY = ["sourceId", "chainId", "protocolVersion", "settlementContract", "resolver", "conditionId", "questionId", "outcomes"] as const;
+
+/** Why `def` does not follow the live source (null if it does). The binding also signs the top-level labels and question. */
+export function definitionMismatch(def: MarketDefinition, live: SourceMarket, profile: string): string | null {
+    const identity = sourceBinding(live, profile);
+    const bound = (def.source ?? {}) as Record<string, unknown>;
+    for (const k of IDENTITY) {
+        if (JSON.stringify(identity[k]) !== JSON.stringify(bound[k])) return `source ${k} changed since the market was funded`;
+    }
+    if (JSON.stringify(def.outcomes) !== JSON.stringify(live.outcomes)) return "outcome labels differ from the source";
+    if (typeof def.question !== "string" || def.question.trim() !== live.question.trim()) return "question differs from the source";
+    return null;
+}
+
 /** The question and rules text are committed as imported; later source edits are recorded, never applied. */
 export function importedDefinition(m: SourceMarket, profile: string, timeoutDays: number): MarketDefinition {
     if (!m.endDate || m.outcomes.length !== 2) throw new Error("imported market needs an end date and two outcomes");

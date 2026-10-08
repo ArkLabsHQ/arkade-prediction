@@ -2,10 +2,10 @@ import { useCallback, useEffect, useState } from "react";
 import type { MarketJson, MarketStatus } from "../../shared/api.js";
 import { api, enc, useLive } from "../api.js";
 import { useApp } from "../ctx.js";
-import { n, pct, refPct, safeHref, unavailableReason, when } from "../format.js";
+import { isReplay, n, pct, refPct, safeHref, unavailableReason, when } from "../format.js";
 import { ErrorBox, Link, Loading, StatusBadge, Time, useNow } from "../ui.js";
 
-const STATUSES: MarketStatus[] = ["open", "activating", "closed", "resolving", "resolved", "failed"];
+const STATUSES: MarketStatus[] = ["open", "halted", "activating", "closed", "resolving", "resolved", "failed"];
 type Page = { markets: MarketJson[]; next: string | null };
 
 export function Markets() {
@@ -121,7 +121,7 @@ function Row({ m, now }: { m: MarketJson; now: number }) {
             <td data-label="Market" className="mkt">
                 <Link to={`/markets/${enc(m.id)}`} className="q">{m.question}</Link>
                 <div className="meta">
-                    {m.category && <span>{m.category}</span>}
+                    {m.category && <span className={isReplay(m) ? "badge dev" : undefined}>{m.category}</span>}
                     {m.kind === "polymarket"
                         ? <span>Source: {source ? <a href={source} target="_blank" rel="noopener noreferrer">Polymarket</a> : "Polymarket"}</span>
                         : <span>Custom</span>}

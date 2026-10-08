@@ -71,7 +71,7 @@ function upsertSource(d: Deps, m: SourceMarket, v: { eligible: boolean; code?: s
 /** Creates the market row once per source id and enqueues operator genesis, within the activation cap. */
 function activate(d: Deps & { wf: Workflows; timeoutDays: number }, m: SourceMarket, profile: string): string | undefined {
     if (one(d.db, "SELECT 1 FROM markets WHERE source_provider = ? AND source_id = ?", m.provider, m.sourceId)) return undefined;
-    const active = one<{ n: number }>(d.db, "SELECT COUNT(*) n FROM markets WHERE kind = 'polymarket' AND status IN ('activating','open','closed','resolving')")!.n;
+    const active = one<{ n: number }>(d.db, "SELECT COUNT(*) n FROM markets WHERE kind = 'polymarket' AND status IN ('activating','open','halted','closed','resolving')")!.n;
     if (active >= d.cfg.IMPORT_MAX_ACTIVE || !d.cfg.ORACLE_PUBKEYS[0]) return undefined;
     const def = importedDefinition(m, profile, d.timeoutDays);
     const id = randomBytes(16).toString("hex");
@@ -89,7 +89,7 @@ function activate(d: Deps & { wf: Workflows; timeoutDays: number }, m: SourceMar
 
 /**
  * Regtest demo only: imports an already-resolved source market so its real final on-chain result can settle a
- * local market end to end. Identity checks still apply; the market is labelled as a historical replay.
+ * local market end to end. Identity checks still apply; the label is the category, as the attestor checks the question.
  */
 export async function replayHistorical(d: Deps & { wf: Workflows; provider: MarketSourceProvider; timeoutDays: number }, sourceId: string): Promise<string> {
     if (d.cfg.APM_NETWORK !== "regtest") throw new Error("historical replay is regtest-only");
@@ -98,7 +98,7 @@ export async function replayHistorical(d: Deps & { wf: Workflows; provider: Mark
     if (!verdict.eligible && verdict.code !== "closed") throw new Error(`source market not replayable: ${verdict.code} ${verdict.reason}`);
     if (!d.cfg.ORACLE_PUBKEYS[0]) throw new Error("ORACLE_PUBKEYS is empty");
     const closeAt = Math.floor(Date.now() / 1000) + 120;
-    const replay: SourceMarket = { ...m, question: `[Historical replay] ${m.question}`, endDate: new Date(closeAt * 1000).toISOString() };
+    const replay: SourceMarket = { ...m, endDate: new Date(closeAt * 1000).toISOString() };
     const def = { ...importedDefinition(replay, "polymarket-ctf-v1-binary", 1), category: "historical replay" };
     const id = randomBytes(16).toString("hex");
     const t = now();

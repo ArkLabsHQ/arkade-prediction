@@ -23,7 +23,7 @@ describe("market lifecycle through shared actions", () => {
         const names = ["operator", "lp", "alice", "bob", "carol", "dave"] as const;
         const wallets = Object.fromEntries(await Promise.all(names.map(async (n) => [n, await newWallet()] as const)));
         const funding = { operator: 20_000, lp: 60_000, alice: 10_000, bob: 10_000, carol: 10_000, dave: 10_000 };
-        for (const n of names) faucet(await wallets[n]!.wallet.getAddress(), funding[n]);
+        for (const n of names) await faucet(await wallets[n]!.wallet.getAddress(), funding[n]);
         const p = {} as Record<(typeof names)[number], Party>;
         for (const n of names) {
             await waitFor(async () => (await wallets[n]!.wallet.getBalance()).available >= funding[n], { what: `${n} funds` });

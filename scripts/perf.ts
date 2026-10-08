@@ -65,7 +65,7 @@ async function main() {
     const ctx: Ctx = { ark, net: { ...net, indexer, emulator, ark: arkSub as never }, indexer };
 
     const ov = await api<{ wallets: { operator: { address: string } } }>("/api/admin/overview", { admin: true });
-    faucet(ov.body.wallets.operator.address, 400_000);
+    await faucet(ov.body.wallets.operator.address, 400_000);
     const server = { api } as TestServer;
     const maker = await faucetTrader(server, 150_000);
     const m = await registeredMarket(server, ctx, maker, 3600);

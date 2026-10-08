@@ -14,8 +14,8 @@ describe("settlement paths", () => {
         const ctx: Ctx = { ark, net: network(ark), indexer: indexerProvider };
         const aliceW = await newWallet();
         const bobW = await newWallet();
-        faucet(await aliceW.wallet.getAddress(), 60_000);
-        faucet(await bobW.wallet.getAddress(), 5_000);
+        await faucet(await aliceW.wallet.getAddress(), 60_000);
+        await faucet(await bobW.wallet.getAddress(), 5_000);
         await waitFor(async () => (await aliceW.wallet.getBalance()).available >= 60_000, { what: "alice funds" });
         await waitFor(async () => (await bobW.wallet.getBalance()).available >= 5_000, { what: "bob funds" });
         const alice = await walletParty(aliceW.wallet, aliceW.identity);

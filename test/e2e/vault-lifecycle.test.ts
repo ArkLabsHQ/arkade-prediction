@@ -19,8 +19,8 @@ describe("market vault lifecycle", () => {
         const net = network(ark);
         const creator = await newWallet();
         const alice = await newWallet();
-        faucet(await creator.wallet.getAddress(), 50_000);
-        faucet(await alice.wallet.getAddress(), 100_000);
+        await faucet(await creator.wallet.getAddress(), 50_000);
+        await faucet(await alice.wallet.getAddress(), 100_000);
         await waitFor(async () => (await creator.wallet.getBalance()).available >= 50_000, { what: "creator funds" });
         await waitFor(async () => (await alice.wallet.getBalance()).available >= 100_000, { what: "alice funds" });
 

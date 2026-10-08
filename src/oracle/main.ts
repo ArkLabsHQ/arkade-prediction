@@ -9,7 +9,7 @@ import { bindingOf, type MarketDefinition } from "../core/definition.js";
 import type { MarketAssets } from "../core/market.js";
 import type { CertificateJson } from "../shared/api.js";
 import { PROFILE, createPolymarketProvider } from "../server/sources/polymarket/index.js";
-import { sourceBinding } from "../server/sources/definition.js";
+import { definitionMismatch } from "../server/sources/definition.js";
 
 export interface AttestRequest {
     marketId: string;
@@ -61,15 +61,10 @@ app.post("/attest", async (c) => {
         return c.json({ error: "unsupported source profile", code: "profile" }, 400);
     }
     const live = await provider.fetchMarketDefinition(bound.sourceId);
-    const identity = sourceBinding(live, PROFILE);
-    for (const k of ["sourceId", "chainId", "protocolVersion", "settlementContract", "resolver", "conditionId", "questionId"] as const) {
-        if (JSON.stringify(identity[k]) !== JSON.stringify((bound as Record<string, unknown>)[k])) {
-            log("source identity mismatch", { market: req.marketId, field: k });
-            return c.json({ error: `source ${k} changed since the market was funded; quarantined`, code: "identity" }, 409);
-        }
-    }
-    if (JSON.stringify(identity.outcomes) !== JSON.stringify((bound as Record<string, unknown>).outcomes)) {
-        return c.json({ error: "outcome order changed since the market was funded; quarantined", code: "identity" }, 409);
+    const mismatch = definitionMismatch(req.definition, live, PROFILE);
+    if (mismatch) {
+        log("source identity mismatch", { market: req.marketId, reason: mismatch });
+        return c.json({ error: `${mismatch}; quarantined`, code: "identity" }, 409);
     }
     const evidence = await provider.fetchResolutionEvidence(live);
     if (evidence.status !== "final") return c.json({ status: evidence.status, detail: evidence.detail }, 409);

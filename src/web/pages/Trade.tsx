@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react";
 import { CARRIER_SATS, mergeSets, mintSets, redeemAll } from "../../core/actions.js";
 import type { Side } from "../../core/offers.js";
 import { BINARY_VECTORS, redemptionPayout, type BinaryOutcome } from "../../core/payout.js";
-import { termsFromJson, type BoxJson, type CertificateJson, type MarketJson, type OfferJson, type Outcome } from "../../shared/api.js";
+import type { BoxJson, CertificateJson, MarketJson, OfferJson, Outcome } from "../../shared/api.js";
 import { api, refreshOffers } from "../api.js";
 import {
     cancelFresh, ensureBox, fillWithRetry, logged, oracleSecretFor, postOrder, resolveAsOracle, sendCertificate, type Chain, type Session,
@@ -11,6 +11,9 @@ import { useApp } from "../ctx.js";
 import { planFill, type Plan } from "../fills.js";
 import { count, fromUnix, n, pct, sats, short, when } from "../format.js";
 import { ActionStatus, Loading, LockedNotice, Panel, Time, Txid, outcomeName, useAction, useAsync } from "../ui.js";
+import { verifiedTerms } from "../verify.js";
+
+const VERIFYING = "Verifying the market against the Arkade indexer";
 
 interface Live {
     m: MarketJson;
@@ -24,13 +27,15 @@ export function TradePanels({ m, offers, onChanged }: { m: MarketJson; offers?: 
     if (!m.terms) return <Panel title="Trade"><p className="state">No funded vault yet, so this market cannot be traded.</p></Panel>;
     if (!chain || !session) return <Panel title="Trade"><LockedNotice what="trade" /></Panel>;
     const open = m.vault.phase === "open" && m.status !== "failed";
+    const trading = open && m.status !== "halted";
     const live: Live = { m, chain, session, onChanged };
     return (
         <>
-            {open && <Ticket {...live} offers={offers} />}
+            {trading && <Ticket {...live} offers={offers} />}
+            {open && !trading && <Panel title="Trade"><p className="state">Trading is halted until the close. You can still cancel orders and merge complete sets.</p></Panel>}
             <Position {...live} />
-            {open && <Sets {...live} />}
-            {open && <OrderForm {...live} />}
+            {open && <Sets {...live} halted={!trading} />}
+            {trading && <OrderForm {...live} />}
             <MyOrders {...live} offers={offers} />
             {open && oracleSecretFor(session, m) && <Resolve {...live} />}
         </>
@@ -54,7 +59,7 @@ const outcomeOptions = (m: MarketJson) => [["yes", m.outcomes[0]], ["no", m.outc
 const assetOf = (m: MarketJson, o: Outcome) => (o === "yes" ? m.terms!.assets.yes : m.terms!.assets.no);
 
 function Ticket({ m, chain, session, onChanged, offers }: Live & { offers?: OfferJson[] }) {
-    const { holdings, refreshHoldings } = useApp();
+    const { config, holdings, refreshHoldings } = useApp();
     const unit = BigInt(m.terms!.unitSats);
     const [side, setSide] = useState<Side>("buy");
     const [outcome, setOutcome] = useState<Outcome>("yes");
@@ -64,7 +69,8 @@ function Ticket({ m, chain, session, onChanged, offers }: Live & { offers?: Offe
     const act = useAction();
     const label = m.outcomes[outcome === "yes" ? 0 : 1];
     const qty = count(qtyText);
-    const book = (offers ?? []).filter((o) => o.outcome === outcome);
+    // The asset decides what a fill delivers; the server's outcome label is presentation only.
+    const book = (offers ?? []).filter((o) => o.terms.assetId === assetOf(m, outcome));
     const plan = offers && qty ? planFill(book, side, qty, Math.floor(Date.now() / 1000), session.script) : null;
     const bound = boundText === null ? plan?.notional ?? null : count(boundText);
     const held = holdings?.assets.get(assetOf(m, outcome)) ?? 0n;
@@ -83,15 +89,17 @@ function Ticket({ m, chain, session, onChanged, offers }: Live & { offers?: Offe
     } else if (side === "sell" && held < qty) blocker = `You hold ${n(held)} ${label}`;
 
     const submit = () => act.run(async (step) => {
+        step(VERIFYING);
+        const terms = await verifiedTerms(chain, config, m);
         let receiveScript: Uint8Array | undefined;
         if (boxed) {
             step("Registering your auto-claim box with the keeper");
-            receiveScript = await ensureBox(chain, session, m);
+            receiveScript = await ensureBox(chain, session, m, terms);
         }
         step("Signing and submitting the fill");
         const r = await logged(chain, session,
             { kind: side, label: `${side === "buy" ? "Buy" : "Sell"} ${qty} ${label}${boxed ? " (auto-claim)" : ""}`, marketId: m.id, outcome, qty: String(qty) },
-            (ctx) => fillWithRetry(ctx, session.party, book, { side, qty: qty!, bound: bound!, takerScript: session.script, receiveScript }),
+            (ctx) => fillWithRetry(ctx, session.party, book, { side, qty: qty!, bound: bound!, takerScript: session.script, receiveScript, assetId: terms.assets[outcome] }),
             (r) => ({ sats: r.notional.toString(), qty: r.qty.toString() }));
         step("Refreshing the book");
         await refreshOffers(r.touched);
@@ -175,7 +183,7 @@ export const boxShares = (boxes: BoxJson[], assetId: string) =>
     boxes.flatMap((b) => b.coins).flatMap((c) => c.assets).filter((a) => a.assetId === assetId).reduce((s, a) => s + BigInt(a.amount), 0n);
 
 function Position({ m, chain, session, onChanged }: Live) {
-    const { holdings, holdingsError, refreshHoldings } = useApp();
+    const { config, holdings, holdingsError, refreshHoldings } = useApp();
     const act = useAction();
     const t = m.terms!;
     const boxes = useAsync(() => api<{ boxes: BoxJson[] }>(`/api/boxes?ownerScript=${session.script}`).then((r) => r.boxes.filter((b) => b.marketId === m.id)), [session.script, m]);
@@ -192,9 +200,11 @@ function Position({ m, chain, session, onChanged }: Live) {
     const outcome = m.vault.phase === "resolved" ? m.vault.outcome : null;
     const payout = outcome ? redemptionPayout([yes, no], BINARY_VECTORS[outcome], BigInt(t.unitSats)) : 0n;
     const redeem = (o: BinaryOutcome) => act.run(async (step) => {
+        step(VERIFYING);
+        const terms = await verifiedTerms(chain, config, m);
         step("Burning shares against the resolved vault");
         const r = await logged(chain, session, { kind: "redeem", label: `Redeem: ${m.question.slice(0, 60)}`, marketId: m.id, outcome: o },
-            (ctx) => redeemAll(ctx, session.party, termsFromJson(t), o),
+            (ctx) => redeemAll(ctx, session.party, terms, o),
             (r) => ({ sats: r.payout.toString(), qty: String(r.yesBurn + r.noBurn) }));
         void refreshHoldings();
         onChanged();
@@ -234,8 +244,8 @@ function Position({ m, chain, session, onChanged }: Live) {
     );
 }
 
-function Sets({ m, chain, session, onChanged }: Live) {
-    const { holdings, refreshHoldings } = useApp();
+function Sets({ m, chain, session, onChanged, halted }: Live & { halted: boolean }) {
+    const { config, holdings, refreshHoldings } = useApp();
     const t = m.terms!;
     const unit = BigInt(t.unitSats);
     const [text, setText] = useState("1");
@@ -244,14 +254,17 @@ function Sets({ m, chain, session, onChanged }: Live) {
     const yes = holdings?.assets.get(t.assets.yes) ?? 0n;
     const no = holdings?.assets.get(t.assets.no) ?? 0n;
     const room = m.vault.valueSats ? (BigInt(t.capSats) - BigInt(m.vault.valueSats)) / unit : null;
-    const mintBlock = !k ? "enter a whole number of sets"
+    const mintBlock = halted ? "trading is halted until the close"
+        : !k ? "enter a whole number of sets"
         : room !== null && k > room ? `the vault cap allows ${n(room)} more sets`
         : holdings && holdings.plainSats < k * unit + CARRIER_SATS ? `needs ${sats(k * unit + CARRIER_SATS)} in spendable coins` : null;
     const mergeBlock = !k ? "enter a whole number of sets" : yes < k || no < k ? `needs ${n(k)} of each outcome; you hold ${n(yes)} and ${n(no)}` : null;
     const run = (kind: "mint" | "merge") => act.run(async (step) => {
+        step(VERIFYING);
+        const terms = await verifiedTerms(chain, config, m);
         step(kind === "mint" ? "Minting complete sets" : "Merging complete sets");
         const r = await logged(chain, session, { kind, label: `${kind === "mint" ? "Mint" : "Merge"} ${k} sets`, marketId: m.id, qty: String(k), sats: String(k! * unit) },
-            (ctx) => (kind === "mint" ? mintSets : mergeSets)(ctx, session.party, termsFromJson(t), k!));
+            (ctx) => (kind === "mint" ? mintSets : mergeSets)(ctx, session.party, terms, k!));
         void refreshHoldings();
         onChanged();
         return <>{kind === "mint" ? "Minted" : "Merged"} {n(k!)} sets {kind === "mint" ? "for" : "into"} {sats(k! * unit)}. <Txid txid={r.txid} /></>;
@@ -314,8 +327,10 @@ function OrderForm({ m, chain, session, onChanged }: Live) {
     const crosses = !!price && (side === "buy" ? !!quote.ask && price >= BigInt(quote.ask) : !!quote.bid && price <= BigInt(quote.bid));
 
     const submit = () => act.run(async (step) => {
+        step(VERIFYING);
+        const terms = await verifiedTerms(chain, config, m);
         step("Funding the order");
-        const r = await postOrder(chain, session, config, m, { side, outcome, price: price!, size: size!, minFill: minFill!, expiresAt: expiryUnix(expiry, customUnix) });
+        const r = await postOrder(chain, session, config, m, terms, { side, outcome, price: price!, size: size!, minFill: minFill!, expiresAt: expiryUnix(expiry, customUnix) });
         void refreshHoldings();
         onChanged();
         if (r.registerError) throw new Error(`Order funded (tx ${short(r.txid)}) but the server has not registered it yet: ${r.registerError}. Retry it from Portfolio, Pending.`);
@@ -377,6 +392,7 @@ function MyOrders({ m, onChanged, session, offers }: Live & { offers?: OfferJson
     const mine = offers.filter((o) => o.terms.makerScript === session.script && o.status === "open");
     return (
         <Panel title="Your open orders">
+            {m.status === "halted" && mine.length > 0 && <p className="notice warn">Other clients can still fill these orders while trading is halted here. Cancel any you no longer want.</p>}
             {mine.length === 0 ? <p className="state">No open orders in this market.</p> : (
                 <table className="data compact">
                     <thead><tr><th scope="col">Order</th><th scope="col" className="num">Price</th><th scope="col" className="num">Left</th><th scope="col">Expires</th><th scope="col"><span className="sr-only">Action</span></th></tr></thead>
@@ -422,6 +438,7 @@ export function CancelButton({ o, label, onDone }: { o: OfferJson; label: string
 }
 
 function Resolve({ m, chain, session, onChanged }: Live) {
+    const { config } = useApp();
     const [outcome, setOutcome] = useState<BinaryOutcome>("yes");
     const [note, setNote] = useState("");
     const [sure, setSure] = useState(false);
@@ -429,8 +446,10 @@ function Resolve({ m, chain, session, onChanged }: Live) {
     const act = useAction();
     const early = Date.now() < Number(m.terms!.closeAtUnix) * 1000;
     const resolve = () => act.run(async (step) => {
+        step(VERIFYING);
+        const terms = await verifiedTerms(chain, config, m);
         step("Signing the attestation and resolving the vault");
-        const r = await resolveAsOracle(chain, session, m, outcome, note.trim());
+        const r = await resolveAsOracle(chain, session, m, terms, outcome, note.trim());
         onChanged();
         setUnsent(r.postError ? r.certificate : null);
         if (!r.txid && r.postError) throw new Error(`The resolve transaction failed (${r.resolveError}) and the server refused the certificate (${r.postError}).`);

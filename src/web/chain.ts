@@ -15,7 +15,7 @@ import type { ArkadeClient, MarketAssets, VaultTerms } from "../core/market.js";
 import { offerContract, type OfferTerms, type Side } from "../core/offers.js";
 import { BINARY_VECTORS, type BinaryOutcome } from "../core/payout.js";
 import {
-    coinFromJson, offerTermsFromJson, offerTermsToJson, termsFromJson, termsToJson, type BoxJson, type CertificateJson, type CoinJson,
+    coinFromJson, offerTermsFromJson, offerTermsToJson, termsToJson, type BoxJson, type CertificateJson, type CoinJson,
     type ConfigJson, type CreateMarketRequest, type MarketJson, type OfferJson, type Outcome, type PostOfferRequest, type RegisterBoxRequest,
 } from "../shared/api.js";
 import { api, enc } from "./api.js";
@@ -23,6 +23,7 @@ import { planFill, type Plan } from "./fills.js";
 import { errMsg } from "./format.js";
 import type { Keystore } from "./keystore.js";
 import { addLog, readLog, updateLog, type LogEntry } from "./txlog.js";
+import { checkLegs } from "./verify.js";
 
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -184,6 +185,8 @@ export interface FillRequest {
     takerScript: string;
     /** Buy only: deliver the shares to this script (the taker's claim box) instead of the wallet. */
     receiveScript?: Uint8Array;
+    /** The audited claim of the chosen outcome; every leg must trade exactly this asset. */
+    assetId: string;
 }
 
 export function mustPlan(book: OfferJson[], req: FillRequest): Plan {
@@ -204,6 +207,7 @@ export async function fillWithRetry(ctx: Ctx, party: Party, book: OfferJson[], r
         },
     };
     const take = async (plan: Plan) => {
+        checkLegs(ctx.ark, plan.legs.map((l) => l.offer), req.side, req.assetId);
         const legs = plan.legs.map((l) => ({ offer: { terms: offerTermsFromJson(l.offer.terms), coin: coinFromJson(l.offer.coin!) }, qty: l.qty }));
         const limits = req.side === "buy" ? { maxSpendSats: req.bound, receiveScript: req.receiveScript } : { minReceiveSats: req.bound };
         const r = await takeOffers(tracked, party, legs, limits);
@@ -234,12 +238,12 @@ export async function fillWithRetry(ctx: Ctx, party: Party, book: OfferJson[], r
 
 // --- auto-claim boxes -------------------------------------------------------------------------
 
-const boxOf = (ark: ArkadeClient, s: Session, m: MarketJson) =>
-    claimBoxContract(ark, termsFromJson(m.terms!), { owner: hex.decode(s.pubkey), ownerScript: s.party.script });
+const boxOf = (ark: ArkadeClient, s: Session, terms: VaultTerms) =>
+    claimBoxContract(ark, terms, { owner: hex.decode(s.pubkey), ownerScript: s.party.script });
 
 /** Registers the box (idempotent) and refuses to proceed unless the server watches exactly the script we pay into. */
-export async function ensureBox(chain: Chain, s: Session, m: MarketJson): Promise<Uint8Array> {
-    const box = boxOf(chain.ark, s, m);
+export async function ensureBox(chain: Chain, s: Session, m: MarketJson, terms: VaultTerms): Promise<Uint8Array> {
+    const box = boxOf(chain.ark, s, terms);
     const req: RegisterBoxRequest = { marketId: m.id, owner: s.pubkey, ownerScript: s.script };
     const registered = await api<BoxJson>("/api/boxes", { body: req });
     if (registered.script !== hex.encode(box.pkScript)) throw new Error("The server derived a different claim box script; refusing to buy into it");
@@ -247,9 +251,9 @@ export async function ensureBox(chain: Chain, s: Session, m: MarketJson): Promis
 }
 
 /** Owner + operator leaf: moves one box coin, shares and carrier, back into the wallet. */
-export function withdrawBox(ctx: Ctx, s: Session, m: MarketJson, coin: CoinJson) {
+export function withdrawBox(ctx: Ctx, s: Session, terms: VaultTerms, coin: CoinJson) {
     const c = coinFromJson(coin);
-    return execute(ctx, [{ kind: "tapscript", coin: c, contract: boxOf(ctx.ark, s, m), fn: "withdraw" }],
+    return execute(ctx, [{ kind: "tapscript", coin: c, contract: boxOf(ctx.ark, s, terms), fn: "withdraw" }],
         [{ script: s.party.script, amount: BigInt(c.value), assets: c.assets }], s.party);
 }
 
@@ -282,8 +286,7 @@ export interface OrderInput {
     expiresAt: bigint;
 }
 
-export async function postOrder(chain: Chain, s: Session, config: ConfigJson, m: MarketJson, o: OrderInput) {
-    const t = termsFromJson(m.terms!);
+export async function postOrder(chain: Chain, s: Session, config: ConfigJson, m: MarketJson, t: VaultTerms, o: OrderInput) {
     const terms: OfferTerms = {
         side: o.side, maker: await s.identity.xOnlyPublicKey(), makerScript: s.party.script,
         assetId: o.outcome === "yes" ? t.assets.yes : t.assets.no, priceSats: o.price, minFill: o.minFill,
@@ -350,6 +353,9 @@ export async function runCreate(chain: Chain, s: Session, draft: CreateDraft, st
     }
     const assets = d.assets!;
     const terms = draftTerms(chain, d, assets);
+    if (!d.vaultTxid && terms.timeoutAt === 0n) {
+        throw new Error("This unfinished market has no timeout, which listing now requires. Discard it and create it again; its vault was not funded.");
+    }
     if (!d.vaultTxid) {
         step("Waiting for the wallet to see the control asset");
         await waitFor(async () => (await s.party.coins()).some((c) => c.assets?.some((a) => a.assetId === assets.ctrl)), 90_000, "the control asset");
@@ -376,17 +382,16 @@ export function oracleSecretFor(s: Session | null, m: MarketJson): string | unde
 }
 
 /** Signs the attestation, submits the resolve tx directly, then hands the certificate to the server. */
-export async function resolveAsOracle(chain: Chain, s: Session, m: MarketJson, outcome: BinaryOutcome, note: string) {
+export async function resolveAsOracle(chain: Chain, s: Session, m: MarketJson, terms: VaultTerms, outcome: BinaryOutcome, note: string) {
     const secret = oracleSecretFor(s, m);
-    if (!secret || !m.terms) throw new Error("This wallet does not hold the oracle key of this market");
-    const terms = termsFromJson(m.terms);
+    if (!secret) throw new Error("This wallet does not hold the oracle key of this market");
     const issuedAt = new Date().toISOString();
     const evidence = evidenceDigest({ market: m.id, outcome, note, at: issuedAt });
     const vector = BINARY_VECTORS[outcome];
     const signature = signAttestation(hex.decode(secret), attestationMessage(terms.binding, evidence, vector));
     const certificate: CertificateJson = {
         outcome, numerators: vector.numerators.map(String), denominator: String(vector.denominator),
-        evidenceDigest: hex.encode(evidence), signature: hex.encode(signature), signer: m.terms.oracleKey, sourceBlock: null, issuedAt,
+        evidenceDigest: hex.encode(evidence), signature: hex.encode(signature), signer: hex.encode(terms.oracleKey), sourceBlock: null, issuedAt,
     };
     let txid: string | undefined;
     let resolveError: string | undefined;

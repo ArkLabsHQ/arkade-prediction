@@ -63,7 +63,7 @@ export interface ResolutionEvidence {
     detail: string;
     /** Present only when status is "final". */
     vector?: { numerators: bigint[]; denominator: bigint };
-    /** Consistent finalized read used for the decision. */
+    /** Consistent finalized read used for the decision. Providers are labels ("host#n"), never URLs. */
     chain?: { chainId: number; blockNumber: string; blockHash: string; providers: string[] };
     /** Raw reads and identities bound into the attestation evidence digest. */
     reads?: Record<string, unknown>;
@@ -82,6 +82,8 @@ export interface MarketSourceProvider {
     evaluateEligibility(market: SourceMarket, policy: EligibilityPolicy, now: Date): Eligibility;
     /** Reads authoritative settlement state at one finalized block across >= 2 providers. */
     fetchResolutionEvidence(market: SourceMarket): Promise<ResolutionEvidence>;
+    /** Trigger, never evidence: condition ids a quorum reports resolved, from one batch per provider. Confirm each. */
+    screenResolved(markets: SourceMarket[]): Promise<string[]>;
     /** Re-checks evidence against the pinned profile (identity, resolver allowlist, vector shape). */
     verifyFinalResolution(market: SourceMarket, evidence: ResolutionEvidence, profile: string): { ok: true } | { ok: false; reason: string };
 }

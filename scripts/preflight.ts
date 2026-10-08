@@ -42,7 +42,7 @@ async function main() {
     const finalized = await Promise.all(rpcs.map((u) =>
         fetch(u, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_getBlockByNumber", params: ["finalized", false] }), signal: AbortSignal.timeout(10_000) })
             .then((r) => r.json() as Promise<{ result?: { number: string; hash: string } }>).then((j) => j.result, () => undefined)));
-    check("polygon finalized tag on >= 2 providers", finalized.filter(Boolean).length >= 2, finalized.map((b, i) => `${rpcs[i]}: ${b ? parseInt(b.number, 16) : "unavailable"}`).join("; "));
+    check("polygon finalized tag on >= 2 providers", finalized.filter(Boolean).length >= 2, finalized.map((b, i) => `${new URL(rpcs[i]!).host}: ${b ? parseInt(b.number, 16) : "unavailable"}`).join("; "));
 
     const gamma = await fetch(`${env.POLYMARKET_GAMMA_URL ?? "https://gamma-api.polymarket.com"}/markets/keyset?limit=5&closed=false`, { signal: AbortSignal.timeout(10_000) }).then((r) => r.status, () => 0);
     check("gamma discovery reachable", gamma === 200, `HTTP ${gamma}`);

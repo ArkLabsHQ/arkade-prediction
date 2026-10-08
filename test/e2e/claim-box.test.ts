@@ -14,8 +14,8 @@ describe("claim box: owner offline through renewal and payout", () => {
         const ctx: Ctx = { ark, net: network(ark), indexer: indexerProvider };
         const lpW = await newWallet();
         const danaW = await newWallet();
-        faucet(await lpW.wallet.getAddress(), 40_000);
-        faucet(await danaW.wallet.getAddress(), 10_000);
+        await faucet(await lpW.wallet.getAddress(), 40_000);
+        await faucet(await danaW.wallet.getAddress(), 10_000);
         await waitFor(async () => (await lpW.wallet.getBalance()).available >= 40_000, { what: "lp funds" });
         await waitFor(async () => (await danaW.wallet.getBalance()).available >= 10_000, { what: "dana funds" });
         const lp = await walletParty(lpW.wallet, lpW.identity);

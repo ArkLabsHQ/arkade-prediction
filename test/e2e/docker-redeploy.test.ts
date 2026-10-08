@@ -36,7 +36,7 @@ describe.skipIf(process.env.DOCKER_E2E !== "1")("docker image: redeploy, backup 
         const ark = await connectArkade();
         const ctx: Ctx = { ark, net: network(ark), indexer: indexerProvider };
         const ov = await api<{ wallets: { operator: { address: string } } }>("/api/admin/overview", { admin: true });
-        faucet(ov.body.wallets.operator.address, 200_000);
+        await faucet(ov.body.wallets.operator.address, 200_000);
         const alice = await faucetTrader(shim, 40_000);
         const bob = await faucetTrader(shim, 20_000);
         const m = await registeredMarket(shim, ctx, alice, 3600);
@@ -62,9 +62,12 @@ describe.skipIf(process.env.DOCKER_E2E !== "1")("docker image: redeploy, backup 
         await dc("stop", "app");
         expect(await dc("logs", "app")).toContain("shutting down");
         await inVolume(`cp '${backup.body.path}' /data/apm.sqlite && rm -f /data/apm.sqlite-wal /data/apm.sqlite-shm`);
+        const restoredRemaining = (await inVolume(
+            `node -e "const { DatabaseSync } = require('node:sqlite'); console.log(new DatabaseSync('/data/apm.sqlite').prepare('SELECT remaining FROM offers WHERE id = ?').get(process.argv[1]).remaining)" '${bid!.id}'`,
+        )).trim();
+        expect(restoredRemaining).toBe("4");
         await dc("start", "app");
         await ready();
-        const restoredRemaining = (await api<{ offers: OfferJson[] }>(`/api/markets/${m.marketId}/offers`)).body.offers.find((o) => o.id === bid!.id)?.remaining;
         await waitFor(async () => (await api<{ offers: OfferJson[] }>(`/api/markets/${m.marketId}/offers`)).body.offers.find((o) => o.id === bid!.id)?.remaining === "3", { what: "reconciled after restore", timeoutMs: 120_000, intervalMs: 3000 });
         console.log(`restored remaining=${restoredRemaining} reconciled remaining=3 backup=${backup.body.path}`);
     });

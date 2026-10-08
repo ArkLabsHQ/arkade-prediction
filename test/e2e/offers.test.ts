@@ -14,7 +14,7 @@ describe("funded standing offers", () => {
         const net = network(ark);
         const [lp, bob, carol, dave, erin, frank] = await Promise.all([1, 2, 3, 4, 5, 6].map(() => newWallet()));
         const fund: [TestWallet, number][] = [[lp!, 100_000], [bob!, 20_000], [carol!, 20_000], [dave!, 20_000], [erin!, 20_000], [frank!, 20_000]];
-        for (const [w, amount] of fund) faucet(await w.wallet.getAddress(), amount);
+        for (const [w, amount] of fund) await faucet(await w.wallet.getAddress(), amount);
         for (const [w, amount] of fund) await waitFor(async () => (await w.wallet.getBalance()).available >= amount, { what: "funding" });
 
         const m = await createMarket(ark, lp!);

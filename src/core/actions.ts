@@ -23,6 +23,8 @@ export interface Ctx {
     indexer: Pick<IndexerProvider, "getVtxos" | "getVirtualTxs">;
     /** Write-ahead hook: runs with the final txid and spent outpoints after signing, before submission. */
     beforeSubmit?: (pending: { txid: string; inputs: string[] }) => void | Promise<void>;
+    /** Second write-ahead hook, arkd path only: the signed checkpoints, stored before finalization is tried. */
+    beforeFinalize?: (pending: { txid: string; checkpoints: string[] }) => void | Promise<void>;
 }
 
 /** A key-holding party: browser wallet, CLI user, LP or operator. */
@@ -169,7 +171,7 @@ export async function execute(ctx: Ctx, inputs: InputSpec[], outputs: OutputSpec
         await signInputs(built, signer.identity, built.signerInputs);
     }
     await ctx.beforeSubmit?.({ txid: built.arkTx.id, inputs: inputs.map((i) => `${i.coin.txid}:${i.coin.vout}`) });
-    const result = await submitArkadeTx(ctx.net, built, signer ? (cp) => signer.identity.sign(cp, [0]) : undefined);
+    const result = await submitArkadeTx(ctx.net, built, signer ? (cp) => signer.identity.sign(cp, [0]) : undefined, ctx.beforeFinalize);
     noteSpentGlobally(inputs.map((i) => `${i.coin.txid}:${i.coin.vout}`));
     signer?.noteSpent?.(inputs.filter((i) => i.kind === "wallet").map((i) => `${i.coin.txid}:${i.coin.vout}`));
     return result;
@@ -200,7 +202,7 @@ export async function issueMarketAssets(ctx: Ctx, creator: Party, marketId: stri
     const built = await buildArkadeTx(ctx.net, inputs.map((i) => ({ ...i, coin: { ...i.coin, assets: [] } })) as InputSpec[], [{ script: creator.script, amount: value }], { packet });
     await signInputs(built, creator.identity, built.signerInputs);
     await ctx.beforeSubmit?.({ txid: built.arkTx.id, inputs: inputs.map((i) => `${i.coin.txid}:${i.coin.vout}`) });
-    const { txid } = await submitArkadeTx(ctx.net, built, (cp) => creator.identity.sign(cp, [0]));
+    const { txid } = await submitArkadeTx(ctx.net, built, (cp) => creator.identity.sign(cp, [0]), ctx.beforeFinalize);
     creator.noteSpent?.(inputs.map((i) => `${i.coin.txid}:${i.coin.vout}`));
     return { genesisTxid: txid, assets: { ctrl: assetIdOf(txid, 0), yes: assetIdOf(txid, 1), no: assetIdOf(txid, 2) } };
 }

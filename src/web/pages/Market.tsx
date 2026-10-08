@@ -2,7 +2,7 @@ import type { CertificateJson, MarketJson, OfferJson, OraclePolicy, SourceJson, 
 import { api, enc, useLive } from "../api.js";
 import { useApp } from "../ctx.js";
 import { fillable } from "../fills.js";
-import { fromUnix, n, pct, refPct, safeHref, sats, unavailableReason, when } from "../format.js";
+import { fromUnix, isReplay, n, pct, refPct, safeHref, sats, unavailableReason, when } from "../format.js";
 import { ErrorBox, Link, Loading, Panel, StatusBadge, Time, Txid, outcomeName, useAsync, useNow } from "../ui.js";
 import { TradePanels } from "./Trade.js";
 
@@ -42,8 +42,18 @@ export function MarketPage({ id }: { id: string }) {
                     <span>Closes <Time t={m.closeAt} now={now} /> · {when(m.closeAt)}</span>
                     <span>Collateral BTC: a winning share pays {n(unit)} sats</span>
                     {m.oracle.policy === "dev-oracle" && <span className="badge dev">dev oracle</span>}
+                    {isReplay(m) && <span className="badge dev">historical replay</span>}
                 </div>
                 {reason && <p className="notice danger">{reason}</p>}
+                {m.status === "halted" && (
+                    <p className="notice warn" role="status">
+                        {m.resolution.status === "certified"
+                            ? `The oracle certified the outcome before the close${m.resolution.detail ? `: ${m.resolution.detail}` : ""}`
+                            : m.resolution.detail || "The source market resolved early"}
+                        . Trading is halted; payouts open after the close.
+                    </p>
+                )}
+                {isReplay(m) && <p className="notice">Historical replay: this mirrors a Polymarket market that has already resolved, to exercise settlement on a test network. Its outcome is public.</p>}
                 {awaiting && (
                     <p className="notice warn">
                         Closed, awaiting resolution: {m.resolution.status}{m.resolution.detail ? `. ${m.resolution.detail}` : ""}.

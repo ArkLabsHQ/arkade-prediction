@@ -94,7 +94,7 @@ async function main(): Promise<void> {
         process: { rssBytes: process.memoryUsage().rss, heapUsedBytes: process.memoryUsage().heapUsed, cpu: process.cpuUsage(), uptimeSeconds: Math.round(process.uptime()) },
         health: await health(),
         importLag: { lastRun: getMeta(db, "import.lastRun") ?? null, lastError: getMeta(db, "import.lastError") ?? null },
-        oracleLag: all(db, "SELECT id, question, close_at FROM markets WHERE status IN ('closed','resolving') AND close_at < ? ORDER BY close_at LIMIT 50", Math.floor(Date.now() / 1000)),
+        oracleLag: all(db, "SELECT id, question, close_at FROM markets WHERE status IN ('halted','closed','resolving') AND close_at < ? ORDER BY close_at LIMIT 50", Math.floor(Date.now() / 1000)),
         workflows: { failed: wf.list({ state: "failed", limit: 50 }), inFlight: wf.list({ state: "submitting", limit: 50 }), pending: wf.list({ state: "pending", limit: 50 }) },
         liquidity: all(db, "SELECT market_id, outcome, side, COUNT(*) offers, SUM(CAST(remaining AS INTEGER)) units FROM offers WHERE status = 'open' GROUP BY market_id, outcome, side"),
         expiries: all(db, "SELECT id, vault_expires_at FROM markets WHERE vault_expires_at IS NOT NULL ORDER BY vault_expires_at LIMIT 20"),
@@ -123,6 +123,7 @@ async function main(): Promise<void> {
             if (!lease.held && lease.tryAcquire()) log("writer lease acquired", { token: lease.token });
         }, 5000);
         if (lease.tryAcquire()) log("writer lease acquired", { token: lease.token });
+        const stopHeartbeat = lease.keepAlive();
         let ticking: Promise<void> | undefined;
         const loop = setInterval(() => {
             if (shuttingDown || !lease.held || ticking) return;
@@ -139,6 +140,7 @@ async function main(): Promise<void> {
             clearInterval(acquire);
             clearInterval(loop);
             await Promise.race([ticking, new Promise((r) => setTimeout(r, 20_000))]);
+            stopHeartbeat();
             lease.release();
         });
     }

@@ -128,7 +128,7 @@ pre.json { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; max-height
 .badge.s-open { color: var(--bid); border-color: #1f5c3d; }
 .badge.s-resolved { color: var(--btc); border-color: #6b4310; }
 .badge.s-failed, .badge.s-hidden { color: var(--ask); border-color: #6b2229; }
-.badge.s-closed, .badge.s-resolving, .badge.s-activating, .badge.dev { color: var(--warn); border-color: #5c4e14; }
+.badge.s-closed, .badge.s-halted, .badge.s-resolving, .badge.s-activating, .badge.dev { color: var(--warn); border-color: #5c4e14; }
 .badge.mine { margin-left: 6px; color: var(--btc); border-color: #6b4310; }
 
 /* --- markets list --------------------------------------------------------------------------- */

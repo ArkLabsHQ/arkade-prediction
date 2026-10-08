@@ -32,7 +32,10 @@ interface Row {
     txid: string | null;
     error: string | null;
     next_at: number;
+    updated_at: string;
 }
+
+const PER_ATTEMPT = new Set(["inputs", "step", "finalCheckpoints"]);
 
 const toWorkflow = (r: Row): Workflow => ({
     id: r.id, kind: r.kind, marketId: r.market_id, state: r.state, attempts: r.attempts,
@@ -46,12 +49,21 @@ const toWorkflow = (r: Row): Workflow => ({
 export class Workflows {
     constructor(private readonly db: Db, private readonly lease: WriterLease) {}
 
-    /** Inserts once per id; re-enqueueing an existing id returns the stored row unchanged. */
-    enqueue(id: string, kind: string, marketId: string | null, payload: Record<string, unknown>): Workflow {
+    /** Ids are deterministic, so a failed row would never run again: past the cooldown it returns to `pending`. */
+    enqueue(id: string, kind: string, marketId: string | null, payload: Record<string, unknown>, at = Date.now()): Workflow {
         const t = now();
         run(this.db, "INSERT OR IGNORE INTO workflows(id, kind, market_id, state, payload, created_at, updated_at) VALUES (?, ?, ?, 'pending', ?, ?, ?)",
             id, kind, marketId, JSON.stringify(payload), t, t);
-        return this.get(id)!;
+        const row = one<Row>(this.db, "SELECT * FROM workflows WHERE id = ?", id)!;
+        const wf = toWorkflow(row);
+        if (wf.state !== "failed" || !this.lease.held) return wf;
+        const rearms = Number(wf.payload.rearms ?? 0);
+        if (Date.parse(row.updated_at) + rearmCooldownMs(rearms) > at) return wf;
+        // Progress survives (a re-armed activation must not issue a second genesis); per-attempt fields do not.
+        const progress = Object.fromEntries(Object.entries(wf.payload).filter(([k]) => !PER_ATTEMPT.has(k)));
+        return this.transition({ ...wf, payload: {} }, "pending", {
+            payload: { ...progress, ...payload, rearms: rearms + 1 }, txid: null, error: null, nextAt: at, resetAttempts: true,
+        });
     }
 
     get(id: string): Workflow | undefined {
@@ -69,15 +81,16 @@ export class Workflows {
             filter.state ?? null, filter.state ?? null, filter.marketId ?? null, filter.marketId ?? null, filter.limit ?? 100).map(toWorkflow);
     }
 
-    transition(wf: Workflow, to: WorkflowState, patch: { payload?: Record<string, unknown>; txid?: string | null; error?: string | null; nextAt?: number; attempt?: boolean } = {}): Workflow {
+    transition(wf: Workflow, to: WorkflowState, patch: { payload?: Record<string, unknown>; txid?: string | null; error?: string | null; nextAt?: number; attempt?: boolean; resetAttempts?: boolean } = {}): Workflow {
         if (!LEGAL[wf.state].includes(to)) throw new Error(`illegal workflow transition ${wf.state} -> ${to} (${wf.id})`);
         const token = this.lease.assertHeld();
         const payload = patch.payload ? { ...wf.payload, ...patch.payload } : wf.payload;
         const r = run(this.db,
-            `UPDATE workflows SET state = ?, payload = ?, txid = ?, error = ?, next_at = ?, attempts = attempts + ?, updated_at = ?
+            `UPDATE workflows SET state = ?, payload = ?, txid = ?, error = ?, next_at = ?,
+             attempts = CASE WHEN ? = 1 THEN 0 ELSE attempts + ? END, updated_at = ?
              WHERE id = ? AND state = ? AND EXISTS (SELECT 1 FROM writer_lease WHERE id = 1 AND token = ?)`,
             to, JSON.stringify(payload), patch.txid === undefined ? wf.txid : patch.txid, patch.error === undefined ? wf.error : patch.error,
-            patch.nextAt ?? wf.nextAt, patch.attempt ? 1 : 0, now(), wf.id, wf.state, token);
+            patch.nextAt ?? wf.nextAt, patch.resetAttempts ? 1 : 0, patch.attempt ? 1 : 0, now(), wf.id, wf.state, token);
         if (Number(r.changes) !== 1) throw new Error(`workflow ${wf.id} changed concurrently`);
         return this.get(wf.id)!;
     }
@@ -86,4 +99,9 @@ export class Workflows {
 /** Exponential backoff with full jitter, capped. */
 export function backoffMs(attempts: number, baseMs = 2000, capMs = 5 * 60_000): number {
     return Math.floor(Math.random() * Math.min(capMs, baseMs * 2 ** Math.min(attempts, 10)));
+}
+
+/** Widens per re-arm so a doomed row stops churning. */
+export function rearmCooldownMs(rearms: number, baseMs = 2 * 60_000, capMs = 60 * 60_000): number {
+    return Math.min(capMs, baseMs * 2 ** Math.min(rearms, 6));
 }

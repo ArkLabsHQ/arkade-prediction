@@ -51,6 +51,9 @@ export function count(s: string): bigint | null {
 /** Source reference prices are decimal strings in [0, 1]; display only, never executable. */
 export const refPct = (price: string) => `${(Number(price) * 100).toFixed(1)}%`;
 
+/** Regtest demo markets that mirror an already-resolved source; the importer marks them by category. */
+export const isReplay = (m: MarketJson) => m.kind === "polymarket" && m.category === "historical replay";
+
 export function unavailableReason(m: MarketJson): string | null {
     if (m.status === "failed") return m.resolution.detail || "Activation failed";
     if (m.status === "activating") return m.resolution.detail || "Activating: the vault is not confirmed yet";

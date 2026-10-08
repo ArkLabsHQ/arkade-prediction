@@ -31,6 +31,15 @@ export class WriterLease {
         return this.token !== undefined;
     }
 
+    /** Own timer, because a tick longer than the ttl would let a second writer take over mid-submission. */
+    keepAlive(): () => void {
+        const timer = setInterval(() => {
+            if (this.token !== undefined) this.heartbeat();
+        }, Math.ceil(this.ttlMs / 6));
+        timer.unref?.();
+        return () => clearInterval(timer);
+    }
+
     get held(): boolean {
         return this.token !== undefined;
     }

@@ -25,7 +25,7 @@ describe("compiler artifact pipeline", () => {
             exit: 512n,
         });
 
-        faucet(await owner.wallet.getAddress(), 30_000);
+        await faucet(await owner.wallet.getAddress(), 30_000);
         await waitFor(async () => (await owner.wallet.getBalance()).available >= 30_000, { what: "faucet" });
         await owner.wallet.send({ address: contract.address, amount: 20_000 });
         const [coin] = await waitFor(async () => {

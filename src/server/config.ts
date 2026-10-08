@@ -18,6 +18,8 @@ const bool = z
     .default("false")
     .transform((v) => v === "true" || v === "1");
 const int = (def: number) => z.coerce.number().int().nonnegative().default(def);
+// fetch() refuses user:password URLs with an error that quotes them, and the resolver publishes that error.
+const noCredentials = z.url().refine((u) => !URL.canParse(u) || (!new URL(u).username && !new URL(u).password), "must not embed credentials");
 const hexKey = (bytes: number) => z.string().regex(new RegExp(`^[0-9a-f]{${bytes * 2}}$`));
 
 const schema = z.object({
@@ -36,7 +38,7 @@ const schema = z.object({
     ARK_SIGNER_PUBKEY: hexKey(33).optional(),
     EMULATOR_PUBKEY: hexKey(33).optional(),
     DATA_DIR: z.string().default("/data"),
-    ORACLE_URL: z.url().optional(),
+    ORACLE_URL: noCredentials.optional(),
     ORACLE_PUBKEYS: csv,
     ORACLE_EPOCH: int(1),
     POLYMARKET_ENABLED: bool,
@@ -99,8 +101,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     };
 }
 
-/** Config fields safe to log or expose. */
+/** Config fields safe to log or expose. URL settings keep only scheme://host: keys hide in userinfo, path and query. */
 export function redacted(c: Config): Record<string, unknown> {
     const { OPERATOR_MNEMONIC, LP_MNEMONIC, ADMIN_TOKEN, DEV_ORACLE_SECRET, ...rest } = c;
-    return { ...rest, OPERATOR_MNEMONIC: !!OPERATOR_MNEMONIC, LP_MNEMONIC: !!LP_MNEMONIC, ADMIN_TOKEN: !!ADMIN_TOKEN, DEV_ORACLE_SECRET: !!DEV_ORACLE_SECRET };
+    const origin = (u: string) => (URL.canParse(u) ? `${new URL(u).protocol}//${new URL(u).host}` : "[invalid url]");
+    const urls = Object.entries(rest)
+        .filter(([k, v]) => /_URLS?$/.test(k) && v !== undefined)
+        .map(([k, v]) => [k, Array.isArray(v) ? v.map(String).map(origin) : origin(String(v))]);
+    return { ...rest, ...Object.fromEntries(urls), OPERATOR_MNEMONIC: !!OPERATOR_MNEMONIC, LP_MNEMONIC: !!LP_MNEMONIC, ADMIN_TOKEN: !!ADMIN_TOKEN, DEV_ORACLE_SECRET: !!DEV_ORACLE_SECRET };
 }

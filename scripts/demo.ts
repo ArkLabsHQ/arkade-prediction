@@ -37,8 +37,8 @@ async function main() {
     const ctx: Ctx = { ark, net: network(ark), indexer: indexerProvider };
     const ov = await api<{ wallets: { operator: { address: string }; lp: { address: string } } }>("/api/admin/overview", { admin: true });
     if (ov.status !== 200) throw new Error(`admin overview failed (${ov.status}); is ${envFile} the app's env?`);
-    faucet(ov.body.wallets.operator.address, 300_000);
-    faucet(ov.body.wallets.lp.address, 300_000);
+    await faucet(ov.body.wallets.operator.address, 300_000);
+    await faucet(ov.body.wallets.lp.address, 300_000);
     step("funded operator (faucet) and LP wallets from the regtest node");
 
     const [alice, bob, carol, dana] = [await faucetTrader(server, 60_000), await faucetTrader(server, 30_000), await faucetTrader(server, 30_000), await faucetTrader(server, 30_000)];

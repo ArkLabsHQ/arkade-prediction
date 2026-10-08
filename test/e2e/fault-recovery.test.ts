@@ -36,7 +36,7 @@ describe("crash recovery at workflow boundaries", () => {
         const s1 = await startServer({ port: 37404, env: { APM_FAULT: "after-submit:mint-match" } });
         servers.push(s1);
         const ov = await s1.api<{ wallets: { operator: { address: string } } }>("/api/admin/overview", { admin: true });
-        faucet(ov.body.wallets.operator.address, 200_000);
+        await faucet(ov.body.wallets.operator.address, 200_000);
         const [alice, bob, carol] = [await faucetTrader(s1, 40_000), await faucetTrader(s1, 20_000), await faucetTrader(s1, 20_000)];
         const m = await registeredMarket(s1, ctx, alice, 75);
         const { vault, resolved } = marketContracts(ark, m.terms);

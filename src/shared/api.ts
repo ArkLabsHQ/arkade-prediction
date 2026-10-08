@@ -8,7 +8,7 @@ import type { OfferTerms, Side } from "../core/offers.js";
 
 export type Outcome = "yes" | "no";
 export type MarketKind = "polymarket" | "custom";
-export type MarketStatus = "activating" | "open" | "closed" | "resolving" | "resolved" | "failed" | "hidden";
+export type MarketStatus = "activating" | "open" | "halted" | "closed" | "resolving" | "resolved" | "failed" | "hidden";
 export type OraclePolicy = "platform-attestor" | "external-key" | "dev-oracle";
 
 export interface ConfigJson {
@@ -52,6 +52,8 @@ export interface SourceJson {
     referencePrices: { outcome: string; price: string; asOf: string }[] | null;
     sourceStatus: string | null;
     clarifications: { observedAt: string; note: string }[];
+    /** Source identity exactly as committed in the market binding. */
+    binding: Record<string, unknown> | null;
 }
 
 export interface CertificateJson {
@@ -78,6 +80,8 @@ export interface MarketJson {
     source: SourceJson | null;
     oracle: { policy: OraclePolicy; keys: string[]; threshold: number; epoch: number; label: string };
     terms: MarketTermsJson | null;
+    genesisTxid: string | null;
+    vaultTxid: string | null;
     vault: { phase: "open" | "resolved"; outcome: "yes" | "no" | "invalid" | null; valueSats: string | null; outpoint: string | null; expiresAt: string | null };
     resolution: { status: string; detail: string; certificate: CertificateJson | null };
     book: { yes: { bid: string | null; ask: string | null }; no: { bid: string | null; ask: string | null } };
@@ -141,6 +145,8 @@ export interface MarketEvent {
     at: string;
     data: unknown;
 }
+
+export const MAX_TIMEOUT_AFTER_CLOSE_SECONDS = 365 * 86_400;
 
 export interface CreateMarketRequest {
     question: string;

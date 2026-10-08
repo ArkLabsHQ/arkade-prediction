@@ -1,6 +1,7 @@
 import { hex } from "@scure/base";
 import { useState } from "react";
 import { CARRIER_SATS } from "../../core/actions.js";
+import { MAX_TIMEOUT_AFTER_CLOSE_SECONDS } from "../../shared/api.js";
 import { enc } from "../api.js";
 import { MAX_SETS, VAULT_BASE_SATS, clearDraft, loadDraft, runCreate, saveDraft, type Chain, type CreateDraft, type Session } from "../chain.js";
 import { useApp } from "../ctx.js";
@@ -15,6 +16,7 @@ const MAX_LABEL = 40;
 const MIN_LEAD_SECONDS = 300;
 // ponytail: mirrors the server default IMPORT_MAX_HORIZON_SECONDS; expose it in ConfigJson if deployments change it.
 const MAX_HORIZON_SECONDS = 30 * 86400;
+const DEFAULT_TIMEOUT_DAYS = 30;
 const CATEGORIES = ["Crypto", "Politics", "Sports", "Economics", "Science", "Culture"];
 
 const pad = (x: number) => String(x).padStart(2, "0");
@@ -87,7 +89,7 @@ function Form({ session, onStart }: { session: Session; onStart(d: CreateDraft):
     const [labelB, setLabelB] = useState("NO");
     const [category, setCategory] = useState("");
     const [closeAt, setCloseAt] = useState(() => localInput(new Date(Math.ceil(Date.now() / 3_600_000) * 3_600_000 + 7 * 86_400_000)));
-    const [timeoutAt, setTimeoutAt] = useState("");
+    const [timeoutText, setTimeoutText] = useState<string | null>(null);
     const [mode, setMode] = useState<"self" | "paste">("self");
     const [pasted, setPasted] = useState("");
     const [generated, setGenerated] = useState<{ publicKey: string; secretKey: string } | null>(null);
@@ -97,7 +99,8 @@ function Form({ session, onStart }: { session: Session; onStart(d: CreateDraft):
     const lock = VAULT_BASE_SATS + unit;
     const now = Date.now() / 1000;
     const closeUnix = unixOf(closeAt);
-    const timeoutUnix = timeoutAt ? unixOf(timeoutAt) : 0;
+    const timeoutAt = timeoutText ?? (Number.isFinite(closeUnix) ? localInput(new Date((closeUnix + DEFAULT_TIMEOUT_DAYS * 86400) * 1000)) : "");
+    const timeoutUnix = unixOf(timeoutAt);
     const oracleKey = mode === "self" ? generated?.publicKey ?? "" : pasted.trim().toLowerCase();
     const a = labelA.trim();
     const b = labelB.trim();
@@ -108,7 +111,7 @@ function Form({ session, onStart }: { session: Session; onStart(d: CreateDraft):
     if (!a || !b || a.length > MAX_LABEL || b.length > MAX_LABEL || a.toLowerCase() === b.toLowerCase()) problems.push(`Outcomes: two different labels of 1 to ${MAX_LABEL} characters`);
     if (category.trim().length > MAX_LABEL) problems.push(`Category: at most ${MAX_LABEL} characters`);
     if (!(closeUnix >= now + MIN_LEAD_SECONDS && closeUnix <= now + MAX_HORIZON_SECONDS)) problems.push("Close time: between 5 minutes and 30 days from now");
-    if (timeoutAt && !(timeoutUnix > closeUnix)) problems.push("Timeout: must be after the close time");
+    if (!(timeoutUnix > closeUnix && timeoutUnix <= closeUnix + MAX_TIMEOUT_AFTER_CLOSE_SECONDS)) problems.push("Timeout: after the close time and at most 365 days after it");
     if (mode === "self" && !(generated && saved)) problems.push("Oracle: generate your key and confirm you saved its secret");
     if (mode === "paste" && !isXOnlyKey(oracleKey)) problems.push("Oracle: paste a valid 32-byte x-only public key (64 hex characters)");
     if (holdings && holdings.plainSats < lock + CARRIER_SATS) problems.push(`Funds: needs ${sats(lock + CARRIER_SATS)} in spendable coins; you have ${sats(holdings.plainSats)}`);
@@ -153,11 +156,16 @@ function Form({ session, onStart }: { session: Session; onStart(d: CreateDraft):
                         <input type="datetime-local" value={closeAt} onChange={(e) => setCloseAt(e.target.value)} />
                     </label>
                     <label className="field">
-                        <span>Timeout (optional)</span>
-                        <input type="datetime-local" value={timeoutAt} onChange={(e) => setTimeoutAt(e.target.value)} />
+                        <span>Timeout (local)</span>
+                        <input type="datetime-local" value={timeoutAt} onChange={(e) => setTimeoutText(e.target.value)} />
+                        <small className="muted">
+                            {timeoutText === null
+                                ? `${DEFAULT_TIMEOUT_DAYS} days after the close until you change it`
+                                : <button type="button" className="linklike" onClick={() => setTimeoutText(null)}>Reset to {DEFAULT_TIMEOUT_DAYS} days after the close</button>}
+                        </small>
                     </label>
                 </div>
-                <p className="muted small">The oracle can resolve only after close. If a timeout is set and nobody has resolved by then, anyone can settle the market as invalid: every complete set pays 50/50.</p>
+                <p className="muted small">The oracle can resolve only after close. If nobody has resolved it by the timeout, anyone can settle the market as invalid: every complete set pays 50/50.</p>
             </Panel>
             <Panel title="Oracle">
                 <fieldset className="choices">
@@ -171,7 +179,7 @@ function Form({ session, onStart }: { session: Session; onStart(d: CreateDraft):
                             <dt>Public key</dt><dd className="mono break">{generated.publicKey}</dd>
                             <dt>Secret key</dt><dd><span className="mono break secret">{generated.secretKey}</span> <Copy text={generated.secretKey} label="Copy secret" /></dd>
                         </dl>
-                        <p className="notice warn">Stored encrypted with this wallet, but your recovery phrase does not restore it. Without this secret the market can end only through its timeout, if you set one.</p>
+                        <p className="notice warn">Stored encrypted with this wallet, but your recovery phrase does not restore it. Without this secret the market can end only through its timeout.</p>
                         <label className="check"><input type="checkbox" checked={saved} onChange={(e) => setSaved(e.target.checked)} /> I saved the secret key somewhere safe.</label>
                     </div>
                 ) : (

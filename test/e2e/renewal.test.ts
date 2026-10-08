@@ -10,7 +10,7 @@ describe("offline covenant renewal", () => {
     it("re-anchors an asset-bearing vault through a batch with no owner key", { timeout: 600_000 }, async () => {
         const ark = await connectArkade();
         const creator = await newWallet();
-        faucet(await creator.wallet.getAddress(), 30_000);
+        await faucet(await creator.wallet.getAddress(), 30_000);
         await waitFor(async () => (await creator.wallet.getBalance()).available >= 30_000, { what: "creator funds" });
         const m = await createMarket(ark, creator);
         const before = (await indexerProvider.getVtxos({ outpoints: [{ txid: m.vaultCoin.txid, vout: m.vaultCoin.vout }] })).vtxos[0]!;
