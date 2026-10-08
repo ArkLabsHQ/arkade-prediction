@@ -84,7 +84,8 @@ Each entry: decision, reason, rejected alternatives. Newest last.
     completion. Rejected: terminal failure (a contended resolve left markets unresolvable).
 27. **Interrupted arkd submissions are finalized, not resubmitted.** arkd v0.9.16 marks inputs spent on accept,
     creates outputs on finalize, and refuses a duplicate submission; finalization is keyed by txid and repeatable.
-    The keeper stores signed checkpoints before finalizing and repeats finalization on recovery.
+    The keeper stores signed checkpoints before finalizing and repeats finalization on recovery
+    (finalize-recovery.test.ts crashes between accept and finalize and observes exactly this).
 28. **Clients audit markets themselves.** `src/core/audit.ts` (shared by server and browser) checks genesis and
     vault from indexer data; the browser also recomputes the binding from the text it displays and checks every
     offer leg's asset and script. This protects users of an independently served UI; a compromised server that

@@ -21,7 +21,7 @@ The attestation message, binding, vector checks and finality policy were found s
 
 | Finding | Severity | Disposition | Evidence |
 |---|---|---|---|
-| Source resolving before its end date was never detected; LP and resting orders stayed exposed | medium | fixed: batched early-resolution screen, `halted` status, LP cancel, LP expiry <= close | `test/unit/server/resolver.test.ts`, `keeper-liquidity.test.ts`; live batch check against Polygon (2758339 flagged, 593972 not) |
+| Source resolving before its end date was never detected; LP and resting orders stayed exposed | medium | fixed: batched early-resolution screen, `halted` status, LP cancel, LP expiry <= close | `test/unit/server/resolver.test.ts`, `keeper-liquidity.test.ts`, `test/e2e/halted-market.test.ts` (LP quotes cancelled on-contract); live batch check against Polygon (2758339 flagged, 593972 not) |
 | Server or Gamma can force INVALID by withholding the certificate | medium | documented (design limit) | `docs/threat-model.md` §2a, §3 |
 | Keeper resolution was one-shot; a contended vault left markets unresolvable | medium | fixed with the durability item below | `test/unit/server/keeper.test.ts` |
 | Body cap checked only `Content-Length`; negative `limit` unbounded | medium | fixed | `test/unit/server/api.test.ts` |
@@ -50,9 +50,9 @@ from the items below.
 |---|---|---|---|
 | Failed workflows never ran again (resolve, renew, match, activate) | high | fixed: re-arm with growing cooldown, keeps progress; `lost` rebuilds | `keeper.test.ts` |
 | Multi-step workflows (activate, LP) marked done when one sub-transaction landed | high | fixed: step recorded, progress resumed; LP offer terms stored before funding | `keeper.test.ts`, `keeper-liquidity.test.ts` |
-| Interrupted submit/finalize never finalized | medium | fixed: checkpoints stored before finalize, finalize retried on recovery (arkd semantics confirmed in source) | `keeper.test.ts`; not driven on regtest |
+| Interrupted submit/finalize never finalized | medium | fixed: checkpoints stored before finalize, finalize repeated on recovery | `test/e2e/finalize-recovery.test.ts` (crash after arkd accepted: inputs spent, outputs absent; finalized on restart) |
 | Restore misses everything first recorded after the backup | medium | documented; SSE id rewind handled | `docs/operations.md`, `api.test.ts` |
-| Renewal had no deadline | medium | fixed: 10 min deadline | not driven against a hung batch |
+| Renewal had no deadline | medium | fixed: 10 min deadline | `test/unit/core/renewal.test.ts` (stalled event stream; hangs on the pre-fix code) |
 | Lease heartbeat only at tick start | medium | fixed: own 5 s timer | `keeper.test.ts` |
 | SSE replay gaps and unbounded queues | low | fixed | `api.test.ts` |
 | Concurrent refresh double-counted trades | low | fixed by lineage + conditional update | `offers-refresh.test.ts` |
@@ -61,3 +61,6 @@ from the items below.
 Found during integration: re-arming dropped a workflow's progress (a re-armed activation would issue a second
 genesis) — fixed, `keeper.test.ts`. Added `POST /api/admin/workflows/:id/retry` for workflows the keeper does
 not re-plan.
+
+Found while closing the gaps: the keeper planned resolutions before the close (the covenant refuses them, so
+attempts and backoff were wasted); resolutions are now planned only after the close (`keeper.test.ts`).

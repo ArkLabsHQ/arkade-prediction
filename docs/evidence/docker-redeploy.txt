@@ -1,11 +1,11 @@
-# node scripts/regtest.mjs up && DOCKER_E2E=1 pnpm exec vitest run --config vitest.e2e.config.ts test/e2e/docker-redeploy.test.ts  (2026-10-08T05:15Z)
+# node scripts/regtest.mjs up && DOCKER_E2E=1 pnpm exec vitest run --config vitest.e2e.config.ts test/e2e/docker-redeploy.test.ts  (2026-10-08T06:26Z)
  RUN  v3.2.7 C:/Git/arkade-prediction
 stdout | test/e2e/docker-redeploy.test.ts > docker image: redeploy, backup and restore on one volume > persists state across recreation and reconciles a restored backup from the indexer
-restored remaining=4 reconciled remaining=3 backup=/data/backups/apm-2026-10-08T05-10-42-906Z.sqlite
- ✓ test/e2e/docker-redeploy.test.ts (1 test) 117418ms
-   ✓ docker image: redeploy, backup and restore on one volume > persists state across recreation and reconciles a restored backup from the indexer  117414ms
+restored remaining=4 reconciled remaining=3 backup=/data/backups/apm-2026-10-08T06-23-03-012Z.sqlite
+ ✓ test/e2e/docker-redeploy.test.ts (1 test) 39705ms
+   ✓ docker image: redeploy, backup and restore on one volume > persists state across recreation and reconciles a restored backup from the indexer  39702ms
  Test Files  1 passed (1)
       Tests  1 passed (1)
-   Start at  07:10:15
-   Duration  127.59s (transform 1.35s, setup 0ms, collect 2.28s, tests 117.42s, environment 0ms, prepare 309ms)
+   Start at  08:22:49
+   Duration  47.46s (transform 369ms, setup 0ms, collect 1.41s, tests 39.70s, environment 0ms, prepare 489ms)
 EXIT=0

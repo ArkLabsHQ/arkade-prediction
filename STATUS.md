@@ -17,14 +17,15 @@ Updated: 2026-10-08 (session 1). Branch `main`, local commits only (nothing push
   `ARKADEC=<path> node contracts/build.mjs --check` passes (artifacts match sources).
 
 ## Last gate (2026-10-08, final code; evidence in `docs/evidence/`)
-- `pnpm exec tsc --noEmit -p .` exit 0; unit 88/88 (baseline before reviews: 21/21); `contracts/build.mjs --check`,
+- `pnpm exec tsc --noEmit -p .` exit 0; unit 90/90 (baseline before reviews: 21/21); `contracts/build.mjs --check`,
   `src/web/fills.check.ts`, `pnpm run web:build` pass.
-- Regtest e2e 10 passed, 2 opt-in skipped (`e2e-regtest.txt`); live Polymarket e2e pass; Docker redeploy/backup/
+- Regtest e2e 12 passed, 2 opt-in skipped (`e2e-regtest.txt`), incl. halted-market and finalize-recovery; live Polymarket e2e pass; Docker redeploy/backup/
   restore pass (stale backup remaining=4 reconciled to 3); `node scripts/regtest.mjs up` + `demo` → DEMO OK.
 - Mutinynet read-only preflight 18/18; live early-resolution screen check pass.
 - Flakes named and fixed in test infrastructure (not app code): emulator log latency in the covenant-refusal
   check, test-server start deadline on a loaded host, faucet coins inheriting an old batch expiry, and arkd
-  liquidity drained by unswept batches on a stack that mines only on demand (DECISIONS 31).
+  liquidity drained by unswept batches on a stack that mines only on demand (DECISIONS 31), and a body-limit unit
+  test that read a reset instead of the 413 under CPU contention (reproduced 2/8, fixed, 16/16).
 
 ## Not done (needs authorization or is out of scope)
 - Mutinynet transactions (funded test wallets + authorization), hosted Dokploy deployment.

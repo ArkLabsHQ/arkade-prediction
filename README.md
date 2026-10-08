@@ -49,15 +49,15 @@ the full-suite log is `docs/evidence/e2e-regtest.txt`.
 | 8 | Attested redemption | PASS | `vault-lifecycle.test.ts`, `server-flow.test.ts` (forged certificate refused) | same files |
 | 9 | YES, NO, INVALID and timeout settlement | PASS | YES: `vault-lifecycle.test.ts`; NO: replay of Polymarket 2758339 in `docs/evidence/polymarket-live.txt`; INVALID + timeout + early attestation refused: `settlement-paths.test.ts` | same files |
 | 10 | Renewal while owners are offline | PASS | `test/e2e/renewal.test.ts`, `claim-box.test.ts`, `offers.test.ts` | same files |
-| 11 | Kill and restart at submission boundaries | PASS | `test/e2e/fault-recovery.test.ts` | `fault-recovery.test.ts` |
+| 11 | Kill and restart at submission boundaries | PASS | `test/e2e/fault-recovery.test.ts` (before/after submit), `test/e2e/finalize-recovery.test.ts` (between arkd accept and finalize) | same files |
 | 12 | Redeploy, backup and restore on one volume | PASS | `docs/evidence/docker-redeploy.txt` | `DOCKER_E2E=1` + `test/e2e/docker-redeploy.test.ts` |
 | 13a | Collaborative offboard and unilateral exit of BTC | PASS | `test/e2e/withdrawal.test.ts` | `withdrawal.test.ts` |
 | 13b | Unilateral exit carrying claims or vault collateral | UNSUPPORTED | SDK: exits handle BTC value only; vault exit leaf is NUMS (`DECISIONS.md` 11) | — |
 | 14 | Browser UI against regtest | PASS | `docs/evidence/ui/README.md` + screenshots | manual (Playwright-driven) |
 | 15 | Performance measured | PASS | `docs/evidence/perf.json`, `docs/performance.md` | `node --import tsx scripts/perf.ts` |
-| 16 | Unit and property tests (88) | PASS | `docs/evidence/unit.txt` | `pnpm exec vitest run test/unit` |
+| 16 | Unit and property tests (90) | PASS | `docs/evidence/unit.txt` | `pnpm exec vitest run test/unit` |
 | 17 | Mutinynet readiness (read-only) | PASS | `docs/evidence/mutinynet-preflight.txt` | `node --env-file=.env.mutinynet.example --import tsx scripts/preflight.ts` |
-| 17a | Early source resolution detected (batched finalized reads) and trading halted | PASS | `docs/evidence/early-resolution-screen.txt` (live), `test/unit/server/resolver.test.ts`, `keeper-liquidity.test.ts` | `node --import tsx scripts/live/early-resolution-check.ts` |
+| 17a | Early source resolution detected (batched finalized reads) and trading halted | PASS | `docs/evidence/early-resolution-screen.txt` (live), `test/e2e/halted-market.test.ts`, `test/unit/server/resolver.test.ts` | `node --import tsx scripts/live/early-resolution-check.ts` |
 | 17b | Independent reviews: collateral, oracle, orders, durability | DONE | `docs/reviews.md` (3 high, 11 medium, 9 low: each fixed or documented) | — |
 | 18 | Mutinynet transactions | NOT RUN | needs funded test wallets and authorization | `docs/operations.md` |
 | 19 | Hosted Dokploy deployment | NOT RUN | image and compose tested locally (#12) | `docs/operations.md` |
