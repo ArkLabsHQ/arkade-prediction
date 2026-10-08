@@ -44,3 +44,21 @@ describe("config redaction", () => {
         });
     });
 });
+
+describe("endpoint and pin defaults", () => {
+    it("needs neither endpoints nor pins on mutinynet", () => {
+        const cfg = loadConfig({ APM_NETWORK: "mutinynet", APM_DEPLOYMENT_ID: "t", PUBLIC_BASE_URL: "https://app.example" });
+        expect(cfg).toMatchObject({
+            ARK_SERVER_URL: "https://mutinynet.arkade.sh",
+            EMULATOR_URL: "https://emulator.mutinynet.arkade.sh",
+            ESPLORA_URL: "https://mempool.mutinynet.arkade.sh/api",
+        });
+        expect(cfg.ARK_SIGNER_PUBKEY).toBeUndefined();
+        expect(cfg.EMULATOR_PUBKEY).toBeUndefined();
+        expect(loadConfig({ APM_NETWORK: "mutinynet", APM_DEPLOYMENT_ID: "t", PUBLIC_BASE_URL: "https://app.example", ARK_SERVER_URL: "https://ark.example" }).ARK_SERVER_URL).toBe("https://ark.example");
+    });
+
+    it("still requires explicit endpoints on regtest", () => {
+        expect(() => loadConfig({ APM_NETWORK: "regtest", APM_DEPLOYMENT_ID: "t", PUBLIC_BASE_URL: "http://app" })).toThrow(/ARK_SERVER_URL is required on regtest/);
+    });
+});

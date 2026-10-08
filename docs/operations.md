@@ -52,12 +52,18 @@ Secrets are runtime-only (environment or `*_FILE`); there are no build arguments
 node --env-file=.env.mutinynet.example --import tsx scripts/preflight.ts
 ```
 
-Checks the live operator and emulator keys against the pins, the exit delay, fees and tx limits, template sizes,
+Checks the live operator and emulator keys (against pins if you set any, else the emulator against the SDK's
+network pin), the exit delay, fees and tx limits, template sizes,
 Esplora, two Polygon `finalized` providers and the Polymarket Gamma API. Exit code 0 only when every check passes.
 Last run: `docs/evidence/mutinynet-preflight.txt` (18/18 PASS, 2026-10-08). Re-run before every deployment:
 a changed operator or emulator key means new contract scripts.
 
 ## Deploy on Dokploy
+
+On Mutinynet no endpoint or key settings are needed: the Ark server and emulator URLs default to Arkade's published
+hosts, Esplora to the SDK's, the operator key is read from the Ark server and the emulator key is the SDK's network
+pin. Set `ARK_SERVER_URL`/`EMULATOR_URL`/`ESPLORA_URL` or `ARK_SIGNER_PUBKEY`/`EMULATOR_PUBKEY` only to override
+or pin them. The first start records the keys in the volume and refuses to start if they later change.
 
 1. **Generate secrets on your machine** (never on the server, never in the repository):
    ```sh
@@ -96,7 +102,7 @@ One Application per process, all built from the same repository and `Dockerfile`
   a named volume at `/data`, and file mounts at `/run/secrets/<name>` for the `*_FILE` secrets. Domain on
   container port `37400`. One replica: a second one only waits for the writer lease.
 - **attestor** (one Application per attestor key): command override `node dist/oracle/main.js`, its own volume
-  at `/data`, `ORACLE_SECRET_KEY_FILE`, `ORACLE_PORT=37410`, `APM_NETWORK`, `ARK_SIGNER_XONLY`, `EMULATOR_PUBKEY`,
+  at `/data`, `ORACLE_SECRET_KEY_FILE`, `ORACLE_PORT=37410`, `APM_NETWORK`,
   `POLYGON_RPC_URLS`, `POLYMARKET_RESOLVERS`. No public domain needed; set the app's `ORACLE_URLS` to the
   attestors' internal addresses, `ORACLE_PUBKEYS` to their keys and `ORACLE_THRESHOLD` (2 with three attestors).
 

@@ -1,6 +1,7 @@
 // Read-only deployment preflight. Usage: node --env-file=<env> --import tsx scripts/preflight.ts
 // Compares live endpoints with the configured pins and checks that our templates fit the advertised limits.
 import { RestArkProvider, RestEmulatorProvider, networks, resolveEmulatorPubkey } from "@arkade-os/sdk";
+import { defaultEndpoints } from "../src/core/endpoints.js";
 import { TEMPLATE, PROGRAMS } from "../src/core/market.js";
 import { OFFER_PROGRAMS } from "../src/core/offers.js";
 import { CLAIM_BOX_PROGRAM } from "../src/core/claimBox.js";
@@ -12,7 +13,8 @@ const check = (name: string, ok: boolean, detail: string) => checks.push({ check
 
 async function main() {
     const network = env.APM_NETWORK as "regtest" | "mutinynet";
-    const ark = new RestArkProvider(env.ARK_SERVER_URL!);
+    const urls = defaultEndpoints(network);
+    const ark = new RestArkProvider(env.ARK_SERVER_URL || urls.arkServer!);
     const info = await ark.getInfo();
     check("arkd network", info.network === network, `arkd says ${info.network}, configured ${network}`);
     check("arkd signer pin", !env.ARK_SIGNER_PUBKEY || info.signerPubkey === env.ARK_SIGNER_PUBKEY, `live ${info.signerPubkey}`);
@@ -22,14 +24,14 @@ async function main() {
     check("intent fees", true, j(info.fees));
     check("tx limits", Number(info.maxTxWeight) >= 20_000, `maxTxWeight ${info.maxTxWeight}, maxOpReturnOutputs ${info.maxOpReturnOutputs}, dust ${info.dust}`);
 
-    const emu = new RestEmulatorProvider(env.EMULATOR_URL!);
+    const emu = new RestEmulatorProvider(env.EMULATOR_URL || urls.emulator!);
     const emuInfo = await emu.getInfo();
-    const pinned = resolveEmulatorPubkey(networks[network], env.EMULATOR_PUBKEY);
+    const pinned = resolveEmulatorPubkey(networks[network], env.EMULATOR_PUBKEY || undefined);
     check("emulator key == pin", emuInfo.signerPubkey === pinned, `live ${emuInfo.signerPubkey}, pinned ${pinned}`);
     check("emulator version", true, `${(emuInfo as { version?: string }).version ?? "unknown"} (regtest-verified: v0.0.9-rc.1)`);
     check("emulator deprecated keys", true, JSON.stringify((emuInfo as { deprecatedSignerPubkeys?: string[] }).deprecatedSignerPubkeys ?? []));
 
-    const tip = await fetch(`${env.ESPLORA_URL}/blocks/tip/height`, { signal: AbortSignal.timeout(10_000) }).then((r) => r.text(), (e) => `error ${e}`);
+    const tip = await fetch(`${env.ESPLORA_URL || urls.esplora}/blocks/tip/height`, { signal: AbortSignal.timeout(10_000) }).then((r) => r.text(), (e) => `error ${e}`);
     check("esplora reachable", /^\d+$/.test(tip), `tip ${tip}`);
 
     for (const [name, program] of Object.entries({ ...PROGRAMS, ...OFFER_PROGRAMS, claimBox: CLAIM_BOX_PROGRAM })) {

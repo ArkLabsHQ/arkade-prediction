@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { hex } from "@scure/base";
+import { defaultEndpoints } from "../core/endpoints.js";
 import { oracleSlots } from "../core/market.js";
 import { join } from "node:path";
 import { z } from "zod";
@@ -30,9 +31,9 @@ const schema = z.object({
     PUBLIC_BASE_URL: z.url(),
     HOST: z.string().default("0.0.0.0"),
     PORT: int(37400),
-    ARK_SERVER_URL: z.url(),
-    EMULATOR_URL: z.url(),
-    ESPLORA_URL: z.url(),
+    ARK_SERVER_URL: z.url().optional(),
+    EMULATOR_URL: z.url().optional(),
+    ESPLORA_URL: z.url().optional(),
     EXPLORER_URL: z.url().optional(),
     PUBLIC_ARK_SERVER_URL: z.url().optional(),
     PUBLIC_EMULATOR_URL: z.url().optional(),
@@ -71,7 +72,10 @@ const schema = z.object({
     LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
 });
 
-export type Config = z.infer<typeof schema> & {
+export type Config = Omit<z.infer<typeof schema>, "ARK_SERVER_URL" | "EMULATOR_URL" | "ESPLORA_URL"> & {
+    ARK_SERVER_URL: string;
+    EMULATOR_URL: string;
+    ESPLORA_URL: string;
     OPERATOR_MNEMONIC: string | undefined;
     LP_MNEMONIC: string | undefined;
     ADMIN_TOKEN: string | undefined;
@@ -89,15 +93,22 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     const c = parsed.data;
     if (c.APM_NETWORK !== "regtest") {
         if (c.DEV_ENDPOINTS) throw new Error("DEV_ENDPOINTS is only allowed on regtest");
-        if (!c.ARK_SIGNER_PUBKEY || !c.EMULATOR_PUBKEY) throw new Error("ARK_SIGNER_PUBKEY and EMULATOR_PUBKEY pins are required outside regtest");
     }
     if (c.POLYMARKET_ENABLED && c.POLYGON_RPC_URLS.length < 2) throw new Error("POLYGON_RPC_URLS needs at least two providers");
     if (c.MARKET_UNIT_SATS % 2 !== 0) throw new Error("MARKET_UNIT_SATS must be even");
     if (c.ORACLE_PUBKEYS.length > 0) oracleSlots(c.ORACLE_PUBKEYS.map((k) => hex.decode(k)), c.ORACLE_THRESHOLD);
     const adminToken = secret(env, "ADMIN_TOKEN");
     if (adminToken !== undefined && adminToken.length < 24) throw new Error("ADMIN_TOKEN must be at least 24 characters");
+    const defaults = defaultEndpoints(c.APM_NETWORK);
+    const endpoint = (name: string, value: string | undefined) => {
+        if (!value) throw new Error(`${name} is required on ${c.APM_NETWORK} (no published default)`);
+        return value;
+    };
     return {
         ...c,
+        ARK_SERVER_URL: endpoint("ARK_SERVER_URL", c.ARK_SERVER_URL ?? defaults.arkServer),
+        EMULATOR_URL: endpoint("EMULATOR_URL", c.EMULATOR_URL ?? defaults.emulator),
+        ESPLORA_URL: endpoint("ESPLORA_URL", c.ESPLORA_URL ?? defaults.esplora),
         ORACLE_URLS: [...new Set([...c.ORACLE_URLS, ...(c.ORACLE_URL ? [c.ORACLE_URL] : [])])],
         OPERATOR_MNEMONIC: secret(env, "OPERATOR_MNEMONIC"),
         LP_MNEMONIC: secret(env, "LP_MNEMONIC"),

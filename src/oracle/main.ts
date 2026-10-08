@@ -4,6 +4,8 @@ import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { schnorr } from "@noble/curves/secp256k1.js";
 import { hex } from "@scure/base";
+import { RestArkProvider, networks, resolveEmulatorPubkey } from "@arkade-os/sdk";
+import { defaultEndpoints } from "../core/endpoints.js";
 import { attestationMessage, evidenceDigest, outcomeOfVector, signAttestation } from "../core/attestation.js";
 import { bindingOf, type MarketDefinition } from "../core/definition.js";
 import type { MarketAssets } from "../core/market.js";
@@ -29,10 +31,20 @@ const env = process.env;
 const fileOr = (name: string) => (env[`${name}_FILE`] ? readFileSync(env[`${name}_FILE`]!, "utf8").trim() : env[name]?.trim());
 const secret = fileOr("ORACLE_SECRET_KEY");
 if (!secret || !/^[0-9a-f]{64}$/.test(secret)) throw new Error("ORACLE_SECRET_KEY(_FILE) must be 32-byte hex");
-const pins = { network: env.APM_NETWORK ?? "", arkSigner: env.ARK_SIGNER_XONLY ?? "", emulatorSigner: env.EMULATOR_PUBKEY ?? "" };
-if (!pins.network || !/^[0-9a-f]{64}$/.test(pins.arkSigner) || !/^[0-9a-f]{66}$/.test(pins.emulatorSigner)) {
-    throw new Error("APM_NETWORK, ARK_SIGNER_XONLY (32-byte) and EMULATOR_PUBKEY (33-byte) pins are required");
+const network = env.APM_NETWORK ?? "";
+if (!(network in networks)) throw new Error("APM_NETWORK must name an Arkade network");
+// Pins are optional: the operator key is read from the Ark server, the emulator key is the SDK's network pin.
+const arkServer = env.ARK_SERVER_URL || defaultEndpoints(network).arkServer;
+const liveSigner = arkServer ? (await new RestArkProvider(arkServer).getInfo()).signerPubkey.slice(-64) : undefined;
+if (env.ARK_SIGNER_XONLY && liveSigner && env.ARK_SIGNER_XONLY !== liveSigner) {
+    throw new Error(`Ark server reports signer ${liveSigner}, pinned ${env.ARK_SIGNER_XONLY}`);
 }
+const pins = {
+    network,
+    arkSigner: env.ARK_SIGNER_XONLY || liveSigner || "",
+    emulatorSigner: resolveEmulatorPubkey(networks[network as keyof typeof networks], env.EMULATOR_PUBKEY || undefined),
+};
+if (!/^[0-9a-f]{64}$/.test(pins.arkSigner)) throw new Error("set ARK_SERVER_URL (or ARK_SIGNER_XONLY) so the attestor knows the operator key");
 const epoch = Number(env.ORACLE_EPOCH ?? 1);
 const pubkey = hex.encode(schnorr.getPublicKey(hex.decode(secret)));
 const dataDir = env.ORACLE_DATA_DIR ?? "/data/oracle";
@@ -101,4 +113,4 @@ app.post("/attest", async (c) => {
 });
 
 const port = Number(env.ORACLE_PORT ?? 37410);
-serve({ fetch: app.fetch, hostname: env.ORACLE_HOST ?? "0.0.0.0", port }, () => log("listening", { port, pubkey, epoch }));
+serve({ fetch: app.fetch, hostname: env.ORACLE_HOST ?? "0.0.0.0", port }, () => log("listening", { port, pubkey, epoch, deployment: pins }));

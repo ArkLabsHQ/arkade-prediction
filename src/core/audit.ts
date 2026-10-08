@@ -56,8 +56,13 @@ export async function auditGenesis(src: AuditSource, terms: VaultTerms, genesisT
     const seed = outSum(yes);
     if (seed <= 0n || outSum(no) !== seed) throw new AuditError("genesis-seed", "YES and NO seed supplies must match");
     const ctrlVout = ctrl.outputs[0]!.vout;
-    const { vtxos } = await src.indexer.getVtxos({ outpoints: [{ txid: genesisTxid, vout: ctrlVout }] });
-    if (vtxos[0]?.arkTxId !== vaultTxid) throw new AuditError("genesis-ctrl-path", "CTRL did not move directly from genesis into the vault tx");
+    // Registration follows the vault tx immediately; give the indexer a moment to record the spend.
+    let spender: string | undefined;
+    for (let i = 0; i < 20 && !spender; i++) {
+        if (i > 0) await new Promise((resolve) => setTimeout(resolve, 500));
+        spender = (await src.indexer.getVtxos({ outpoints: [{ txid: genesisTxid, vout: ctrlVout }] })).vtxos[0]?.arkTxId || undefined;
+    }
+    if (spender !== vaultTxid) throw new AuditError("genesis-ctrl-path", "CTRL did not move directly from genesis into the vault tx");
 
     const t1tx = await fetchTx(src.indexer, vaultTxid);
     const t1 = packetOf(t1tx);

@@ -17,7 +17,7 @@ Updated: 2026-10-08 (session 1). Branch `main`, local commits only (nothing push
   `ARKADEC=<path> node contracts/build.mjs --check` passes (artifacts match sources).
 
 ## Last gate (2026-10-08, final code; evidence in `docs/evidence/`)
-- `pnpm exec tsc --noEmit -p .` exit 0; unit 101/101 (baseline before reviews: 21/21); `contracts/build.mjs --check`,
+- `pnpm exec tsc --noEmit -p .` exit 0; unit 104/104 (baseline before reviews: 21/21); `contracts/build.mjs --check`,
   `src/web/fills.check.ts`, `pnpm run web:build` pass.
 - Regtest e2e 13 files (incl. threshold-oracle), 2 opt-in skipped (`e2e-regtest.txt`), incl. halted-market and finalize-recovery; live Polymarket e2e pass; Docker redeploy/backup/
   restore pass (stale backup remaining=4 reconciled to 3); `node scripts/regtest.mjs up` + `demo` → DEMO OK.

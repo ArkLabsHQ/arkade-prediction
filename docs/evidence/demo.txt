@@ -1,9 +1,9 @@
-# node scripts/regtest.mjs demo (2026-10-08T12:09Z)
+# node scripts/regtest.mjs demo (2026-10-08T12:50Z)
 - funded operator (faucet) and LP wallets from the regtest node
 - 4 traders funded through POST /api/dev/faucet
-- alice created custom market d58aa81b14a0391d88675a9942336880 (creator-held oracle key, closes in 120 s)
+- alice created custom market eb2e54d2c400291672bfac5c1ad915fc (creator-held oracle key, closes in 120 s)
 - LP keeper workflow minted 10 sets and posted asks YES@620 / NO@420; LP is now offline
-- dana bought 3 YES for 1,860 sats into her auto-claim box (ad087da517a5f07a) and went offline
+- dana bought 3 YES for 1,860 sats into her auto-claim box (a949eff99cb27321) and went offline
 - carol bid YES@560, bob bid NO@470 (both offline); keeper minted 4 sets between them
 - after close alice's oracle key certified YES; keeper resolved the vault (collateral 16000 sats)
 - keeper auto-claimed dana's box while she was offline (status claimed): 3 YES -> 3,000 sats

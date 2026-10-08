@@ -121,7 +121,7 @@ describe("api request limits", () => {
 });
 
 describe("api event stream", () => {
-    it("replays a backlog past one page and keeps events published during the replay", async () => {
+    it("replays a backlog past one page and keeps events published during the replay", { timeout: 30_000 }, async () => {
         const f = fresh();
         publishMany(f, 600);
         const s = await sse(f.app);

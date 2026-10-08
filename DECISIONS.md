@@ -111,3 +111,7 @@ Each entry: decision, reason, rejected alternatives. Newest last.
     Attestors sign evidence for a block the resolver pins, so their messages match. Markets on the retired
     single-key template are marked failed by migration 3. Rejected: per-pair leaves (9 resolve leaves) and
     MuSig/FROST aggregation (one signature would hide which attestors agreed and needs interactive signing).
+33. **Pins and endpoints are optional.** On Mutinynet the server and attestor default to Arkade's published Ark
+    server and emulator hosts and the SDK's Esplora URL, read the operator key from `/v1/info`, and use the SDK's
+    per-network emulator pin (never the emulator's self-report). Explicit pins remain as overrides. Safety against
+    a silent key change comes from the volume identity guard. Regtest keeps explicit endpoints (local ports).

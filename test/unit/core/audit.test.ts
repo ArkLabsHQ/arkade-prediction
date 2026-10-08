@@ -25,6 +25,20 @@ describe("genesis audit (core, shared by server and browser)", () => {
         expect(await scenario()()).toEqual({ seed: 2n, baseSats: BASE });
     });
 
+    it("waits for an indexer that records the CTRL spend a moment after registration", async () => {
+        const f = fundedMarket(ark);
+        let reads = 0;
+        const lagging = {
+            ...f.indexer,
+            getVtxos: async (q: never) => {
+                const r = await f.indexer.getVtxos(q);
+                return ++reads < 3 ? { vtxos: r.vtxos.map((v) => ({ ...v, arkTxId: "" })) } : r;
+            },
+        } as typeof f.indexer;
+        expect(await auditGenesis({ ark, indexer: lagging }, f.terms, f.genesisTxid, f.vaultTxid)).toEqual({ seed: 2n, baseSats: BASE });
+        expect(reads).toBe(3);
+    });
+
     it("refuses a forged CTRL next to the real YES/NO", async () => {
         const attacker = txWith([{ script: p2tr(), amount: 330n }], genesisPacket("x", 0, 1n).groups);
         await refusal(scenario({ served: (t) => ({ ...t, assets: { ...t.assets, ctrl: assetIdOf(attacker.id, 0) } }) }), "asset-ids");
