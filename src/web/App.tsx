@@ -11,7 +11,7 @@ import { Markets } from "./pages/Markets.js";
 import { Operator } from "./pages/Operator.js";
 import { Portfolio } from "./pages/Portfolio.js";
 import { WalletPage } from "./pages/Wallet.js";
-import { ErrorBox, Link, Loading, navigate, usePath } from "./ui.js";
+import { ErrorBox, Link, Loading, Logo, navigate, usePath } from "./ui.js";
 
 export function App() {
     const [config, setConfig] = useState<ConfigJson | null>(null);
@@ -30,7 +30,7 @@ export function App() {
     if (!config) {
         return (
             <div className="boot">
-                <p className="brand-line"><span className="mark">APM</span> Arkade Prediction Markets</p>
+                <p className="brand-line"><Logo /> Arkade Prediction Markets</p>
                 {error ? <ErrorBox error={error} onRetry={boot} /> : <Loading what="deployment config" />}
             </div>
         );
@@ -102,6 +102,7 @@ function Shell({ config }: { config: ConfigJson }) {
             <Header path={path} admin={config.admin} />
             <main className="page">{route(path, config.admin)}</main>
             <footer className="foot">
+                <Logo />
                 <span>Network {config.network}</span>
                 <span>Deployment <span className="mono">{short(config.deploymentId)}</span></span>
                 <span>1 winning share pays {n(config.unitSats)} sats</span>
@@ -130,7 +131,7 @@ function Header({ path, admin }: { path: string; admin: boolean }) {
     const wallet = session ? (holdings ? `${n(holdings.balance.available)} sats` : "Wallet…") : hasKeystore() ? "Locked" : "No wallet";
     return (
         <header className="topbar">
-            <Link to="/" className="brand"><span className="mark">APM</span><span className="brand-name">Arkade Prediction Markets</span></Link>
+            <Link to="/" className="brand"><Logo /><span className="brand-name">Arkade <b>Prediction Markets</b></span></Link>
             <nav aria-label="Main">
                 {[...NAV, ...(admin ? [["/operator", "Operator"] as const] : [])].map(([to, label]) => <Link key={to} to={to} current={active(to)}>{label}</Link>)}
             </nav>

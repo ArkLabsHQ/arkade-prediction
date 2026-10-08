@@ -177,3 +177,43 @@ export function LockedNotice({ what }: { what: string }) {
     if (!chain) return <p className="state">{chainError ? "The Arkade service is unreachable, so" : "Connecting to Arkade;"} you cannot {what} yet.</p>;
     return <p className="state">Unlock your wallet to {what}. <Link to="/wallet">Open wallet</Link></p>;
 }
+
+/** Arkade's pixel "A" from the brand kit, on its native 4x4 grid. */
+export function Logo({ className = "logo", color = "var(--orange)" }: { className?: string; color?: string }) {
+    const cells = [[1, 0], [2, 0], [0, 1], [3, 1], [1, 2], [2, 2], [0, 3], [3, 3]];
+    return (
+        <svg className={className} viewBox="0 0 4 4" aria-hidden="true" shapeRendering="crispEdges">
+            <path d="M1 0V1H0Z" fill={color} />
+            <path d="M3 0L4 1H3Z" fill={color} />
+            {cells.map(([x, y]) => <rect key={`${x}${y}`} x={x} y={y} width="1" height="1" fill={color} />)}
+        </svg>
+    );
+}
+
+/** 20-cell bar: outcome A cells first, outcome B the rest; empty when there is no price. */
+export function PixBar({ p }: { p: number | null }) {
+    const on = p === null ? 0 : Math.round(p * 20);
+    return (
+        <div className={`pixbar${p === null ? " empty" : ""}`} aria-hidden="true">
+            {Array.from({ length: 20 }, (_, k) => <i key={k} className={k < on ? "on" : undefined} style={{ ["--k" as string]: k }} />)}
+        </div>
+    );
+}
+
+/** Ring of 20 pixel cells around the chance of outcome A. */
+export function Gauge({ p, label }: { p: number | null; label: string }) {
+    const on = p === null ? 0 : Math.round(p * 20);
+    return (
+        <div className="gauge" role="img" aria-label={p === null ? "No price yet" : `${Math.round(p * 100)}% ${label}`}>
+            <svg viewBox="-32 -32 64 64" aria-hidden="true">
+                {Array.from({ length: 20 }, (_, k) => {
+                    const a = (k / 20) * 2 * Math.PI - Math.PI / 2;
+                    return <rect key={k} x={Math.cos(a) * 26 - 3} y={Math.sin(a) * 26 - 3} width="6" height="6"
+                        transform={`rotate(${(k / 20) * 360} ${Math.cos(a) * 26} ${Math.sin(a) * 26})`}
+                        fill={k < on ? "var(--a)" : "var(--bg-3)"} />;
+                })}
+            </svg>
+            <div><b>{p === null ? "—" : `${Math.round(p * 100)}%`}</b><small>chance</small></div>
+        </div>
+    );
+}

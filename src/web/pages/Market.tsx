@@ -2,8 +2,8 @@ import type { CertificateJson, MarketJson, OfferJson, OraclePolicy, SourceJson, 
 import { api, enc, useLive } from "../api.js";
 import { useApp } from "../ctx.js";
 import { fillable } from "../fills.js";
-import { fromUnix, isReplay, n, pct, refPct, safeHref, sats, unavailableReason, when } from "../format.js";
-import { ErrorBox, Link, Loading, Panel, StatusBadge, Time, Txid, outcomeName, useAsync, useNow } from "../ui.js";
+import { chanceOf, fromUnix, isReplay, n, pct, refPct, safeHref, sats, unavailableReason, when } from "../format.js";
+import { ErrorBox, Link, Loading, Panel, PixBar, StatusBadge, Time, Txid, outcomeName, useAsync, useNow } from "../ui.js";
 import { TradePanels } from "./Trade.js";
 
 const POLICY: Record<OraclePolicy, string> = {
@@ -93,20 +93,30 @@ export function MarketPage({ id }: { id: string }) {
 }
 
 function Quotes({ m, unit }: { m: MarketJson; unit: string }) {
+    const chance = chanceOf(m);
+    const share = (o: 0 | 1) => (chance ? Math.round((o === 0 ? chance.p : 1 - chance.p) * 100) : null);
     return (
-        <div className="quotes">
-            {(["yes", "no"] as const).map((o, i) => {
-                const q = m.book[o];
-                return (
-                    <div key={o} className="quote-card">
-                        <div className="olabel">{m.outcomes[i]}</div>
-                        <div className="qline"><span className="muted">Bid</span> <span className="bid num">{q.bid ? n(q.bid) : "—"}</span> <span className="muted small">{pct(q.bid, unit)}</span></div>
-                        <div className="qline"><span className="muted">Ask</span> <span className="ask num">{q.ask ? n(q.ask) : "—"}</span> <span className="muted small">{pct(q.ask, unit)}</span></div>
-                        {!q.bid && !q.ask && <div className="muted small">No liquidity</div>}
-                    </div>
-                );
-            })}
-        </div>
+        <section className="scoreboard" aria-label="Prices">
+            <div className="quotes">
+                {(["yes", "no"] as const).map((o, i) => {
+                    const q = m.book[o];
+                    const s = share(i as 0 | 1);
+                    return (
+                        <div key={o} className={`quote-card ${i === 0 ? "a" : "b"}`}>
+                            <div className="olabel">{m.outcomes[i]}</div>
+                            <div className="big">{s === null ? "—" : `${s}%`}</div>
+                            <div className="qline"><span className="muted">Bid</span> <span className="bid num">{q.bid ? n(q.bid) : "—"}</span> <span className="muted">Ask</span> <span className="ask num">{q.ask ? n(q.ask) : "—"}</span></div>
+                            {!q.bid && !q.ask && <div className="muted small">No liquidity</div>}
+                        </div>
+                    );
+                })}
+            </div>
+            <PixBar p={chance?.p ?? null} />
+            <p className="muted small">
+                {chance?.from === "resolved" ? "Resolved." : chance?.from === "reference" ? "Polymarket's odds for reference; nothing is executable here until someone posts an order."
+                    : chance ? `Midpoint of the best ${m.outcomes[0]} bid and ask, in sats per ${n(unit)}-sat share.` : "No orders yet."}
+            </p>
+        </section>
     );
 }
 

@@ -70,3 +70,14 @@ export function safeHref(u: string | null | undefined): string | undefined {
         return undefined;
     }
 }
+
+/** Display-only chance of outcome A: resolved outcome, else book midpoint (or one side), else the source reference. */
+export function chanceOf(m: MarketJson): { p: number; from: "resolved" | "book" | "reference" } | null {
+    if (m.vault.outcome === "yes" || m.vault.outcome === "no") return { p: m.vault.outcome === "yes" ? 1 : 0, from: "resolved" };
+    const unit = Number(m.terms?.unitSats ?? 0);
+    const { bid, ask } = m.book.yes;
+    const sides = [bid, ask].filter((x): x is string => !!x).map(Number);
+    if (unit > 0 && sides.length) return { p: Math.min(1, sides.reduce((a, b) => a + b, 0) / sides.length / unit), from: "book" };
+    const ref = m.source?.referencePrices?.find((r) => r.outcome === m.outcomes[0]) ?? m.source?.referencePrices?.[0];
+    return ref ? { p: Math.min(1, Math.max(0, Number(ref.price))), from: "reference" } : null;
+}
