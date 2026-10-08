@@ -404,3 +404,7 @@ ul.hints { gap: 2px; }
 .qwrap { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .event { font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--purple-hi); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .title-row { display: flex; align-items: center; gap: var(--s4); }
+.seg label.on.o-yes { background: var(--purple); }
+.seg label.on.o-no { background: var(--orange); color: #fff; }
+.seg label.on.o-buy { background: rgb(63 208 138 / 0.16); color: var(--bid); }
+.seg label.on.o-sell { background: rgb(255 92 108 / 0.16); color: var(--ask); }

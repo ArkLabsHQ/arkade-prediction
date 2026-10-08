@@ -46,7 +46,7 @@ function Seg<T extends string>(props: { name: string; value: T; options: readonl
     return (
         <div className="seg" role="radiogroup" aria-label={props.name}>
             {props.options.map(([v, label]) => (
-                <label key={v} className={v === props.value ? "on" : ""}>
+                <label key={v} className={`o-${v}${v === props.value ? " on" : ""}`}>
                     <input type="radio" name={props.name} value={v} checked={v === props.value} onChange={() => props.onChange(v)} />
                     {label}
                 </label>

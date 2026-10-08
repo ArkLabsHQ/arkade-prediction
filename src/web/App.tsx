@@ -128,7 +128,7 @@ function Header({ path, admin }: { path: string; admin: boolean }) {
     const { session, holdings } = useApp();
     const live = useLiveState();
     const active = (to: string) => (to === "/" ? path === "/" || path.startsWith("/markets") : path === to);
-    const wallet = session ? (holdings ? `${n(holdings.balance.available)} sats` : "Wallet…") : hasKeystore() ? "Locked" : "No wallet";
+    const wallet = session ? (holdings ? `${n(holdings.balance.available)} sats` : "Wallet…") : hasKeystore() ? (isOpenKeystore() ? "Opening…" : "Locked") : "No wallet";
     return (
         <header className="topbar">
             <Link to="/" className="brand"><Logo /><span className="brand-name">Arkade <b>Prediction Markets</b></span></Link>

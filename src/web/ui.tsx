@@ -3,6 +3,7 @@ import type { MarketJson } from "../shared/api.js";
 import { ApiError } from "./api.js";
 import { useApp } from "./ctx.js";
 import { errMsg, rel, safeHref, short, when } from "./format.js";
+import { isOpenKeystore } from "./keystore.js";
 
 // --- routing ----------------------------------------------------------------------------------
 
@@ -175,6 +176,7 @@ export const outcomeName = (m: MarketJson, o: "yes" | "no" | "invalid") => (o ==
 export function LockedNotice({ what }: { what: string }) {
     const { chain, chainError } = useApp();
     if (!chain) return <p className="state">{chainError ? "The Arkade service is unreachable, so" : "Connecting to Arkade;"} you cannot {what} yet.</p>;
+    if (isOpenKeystore()) return <p className="state">Opening your wallet…</p>;
     return <p className="state">Unlock your wallet to {what}. <Link to="/wallet">Open wallet</Link></p>;
 }
 
