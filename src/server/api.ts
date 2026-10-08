@@ -78,6 +78,7 @@ export function createApi(d: ApiDeps): Hono {
             exitDelaySeconds: d.net.exitDelaySeconds.toString(),
             devFaucet: d.cfg.DEV_ENDPOINTS && !!d.faucet,
             testNetwork: true,
+            admin: !!d.adminRoutes,
             maxCloseHorizonSeconds: String(d.cfg.IMPORT_MAX_HORIZON_SECONDS),
         };
         return c.json(cfg);

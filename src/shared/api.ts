@@ -24,6 +24,8 @@ export interface ConfigJson {
     exitDelaySeconds: string;
     devFaucet: boolean;
     testNetwork: boolean;
+    /** Served by the admin listener (ADMIN_PORT). */
+    admin: boolean;
     /** Latest close time the server admits for new markets, relative to now. */
     maxCloseHorizonSeconds: string;
 }

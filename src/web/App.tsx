@@ -11,7 +11,7 @@ import { Markets } from "./pages/Markets.js";
 import { Operator } from "./pages/Operator.js";
 import { Portfolio } from "./pages/Portfolio.js";
 import { WalletPage } from "./pages/Wallet.js";
-import { ErrorBox, Link, Loading, usePath } from "./ui.js";
+import { ErrorBox, Link, Loading, navigate, usePath } from "./ui.js";
 
 export function App() {
     const [config, setConfig] = useState<ConfigJson | null>(null);
@@ -76,6 +76,8 @@ function Shell({ config }: { config: ConfigJson }) {
         [config, chain, chainError, reconnect, session, lock, holdings, holdingsError, refreshHoldings],
     );
     const path = usePath();
+    // The admin domain opens on the console; the public one has no console at all.
+    useEffect(() => void (config.admin && location.pathname === "/" && navigate("/operator")), [config.admin]);
     return (
         <AppCtx.Provider value={app}>
             {config.testNetwork && (
@@ -90,32 +92,31 @@ function Shell({ config }: { config: ConfigJson }) {
                     <button type="button" className="btn small" onClick={reconnect}>Retry</button>
                 </div>
             )}
-            <Header path={path} />
-            <main className="page">{route(path)}</main>
+            <Header path={path} admin={config.admin} />
+            <main className="page">{route(path, config.admin)}</main>
             <footer className="foot">
                 <span>Network {config.network}</span>
                 <span>Deployment <span className="mono">{short(config.deploymentId)}</span></span>
                 <span>1 winning share pays {n(config.unitSats)} sats</span>
-                <Link to="/operator">Operator</Link>
             </footer>
         </AppCtx.Provider>
     );
 }
 
-function route(path: string) {
+function route(path: string, admin: boolean) {
     if (path === "/" || path === "/markets") return <Markets />;
     const m = /^\/markets\/([^/]+)$/.exec(path);
     if (m) return <MarketPage key={m[1]} id={decodeURIComponent(m[1]!)} />;
     if (path === "/portfolio") return <Portfolio />;
     if (path === "/create") return <CreatePage />;
     if (path === "/wallet") return <WalletPage />;
-    if (path === "/operator") return <Operator />;
+    if (admin && path === "/operator") return <Operator />;
     return <p className="state">No page at {path}. <Link to="/">Back to markets</Link></p>;
 }
 
 const NAV = [["/", "Markets"], ["/portfolio", "Portfolio"], ["/create", "Create"], ["/wallet", "Wallet"]] as const;
 
-function Header({ path }: { path: string }) {
+function Header({ path, admin }: { path: string; admin: boolean }) {
     const { session, holdings } = useApp();
     const live = useLiveState();
     const active = (to: string) => (to === "/" ? path === "/" || path.startsWith("/markets") : path === to);
@@ -124,7 +125,7 @@ function Header({ path }: { path: string }) {
         <header className="topbar">
             <Link to="/" className="brand"><span className="mark">APM</span><span className="brand-name">Arkade Prediction Markets</span></Link>
             <nav aria-label="Main">
-                {NAV.map(([to, label]) => <Link key={to} to={to} current={active(to)}>{label}</Link>)}
+                {[...NAV, ...(admin ? [["/operator", "Operator"] as const] : [])].map(([to, label]) => <Link key={to} to={to} current={active(to)}>{label}</Link>)}
             </nav>
             <div className="top-right">
                 <span className={`live ${live}`} role="status">{live === "live" ? "Live" : live === "down" ? "Reconnecting" : "Connecting"}</span>
