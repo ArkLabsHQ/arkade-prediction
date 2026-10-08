@@ -58,7 +58,7 @@ export async function importOnce(d: Deps & { wf: Workflows; provider: MarketSour
     return result;
 }
 
-function upsertSource(d: Deps, m: SourceMarket, v: { eligible: boolean; code?: string; reason?: string; profile?: string }): void {
+export function upsertSource(d: Deps, m: SourceMarket, v: { eligible: boolean; code?: string; reason?: string; profile?: string }): void {
     const snapshot = JSON.stringify(m);
     tx(d.db, () => {
         run(d.db, `INSERT INTO source_markets(provider, source_id, version_hash, snapshot, eligible, code, reason, profile, end_date, first_seen, last_seen)
@@ -69,6 +69,10 @@ function upsertSource(d: Deps, m: SourceMarket, v: { eligible: boolean; code?: s
             m.provider, m.sourceId, m.versionHash, snapshot, v.eligible ? 1 : 0, v.code ?? null, v.reason ?? null, v.profile ?? null, m.endDate, now(), now());
         run(d.db, "INSERT OR IGNORE INTO source_versions(provider, source_id, version_hash, snapshot, observed_at) VALUES (?, ?, ?, ?, ?)",
             m.provider, m.sourceId, m.versionHash, snapshot, now());
+        // Display fields only, and only while the definition is the one the market was funded on.
+        run(d.db, `UPDATE markets SET source_snapshot = json_set(source_snapshot, '$.referencePrices', json(?), '$.fetchedAt', ?, '$.image', ?, '$.event', json(?))
+                   WHERE source_provider = ? AND source_id = ? AND source_version = ?`,
+            JSON.stringify(m.referencePrices), m.fetchedAt, m.image, JSON.stringify(m.event), m.provider, m.sourceId, m.versionHash);
     });
 }
 

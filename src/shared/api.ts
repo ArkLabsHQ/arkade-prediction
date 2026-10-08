@@ -55,6 +55,8 @@ export interface SourceJson {
     resolutionSource: string;
     referencePrices: { outcome: string; price: string; asOf: string }[] | null;
     sourceStatus: string | null;
+    image: string | null;
+    event: { title: string; slug: string } | null;
     clarifications: { observedAt: string; note: string }[];
     /** Source identity exactly as committed in the market binding. */
     binding: Record<string, unknown> | null;

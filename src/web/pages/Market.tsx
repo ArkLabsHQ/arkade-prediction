@@ -34,8 +34,11 @@ export function MarketPage({ id }: { id: string }) {
     return (
         <div className="stack">
             <header className="mhead">
-                <div className="crumbs"><Link to="/">Markets</Link> / {m.category ?? "Uncategorised"}</div>
-                <h1>{m.question}</h1>
+                <div className="crumbs"><Link to="/">Markets</Link> / {m.source?.event?.title ?? m.category ?? "Uncategorised"}</div>
+                <div className="title-row">
+                    {safeHref(m.source?.image)?.startsWith("https://") && <img className="thumb big" src={m.source!.image!} alt="" referrerPolicy="no-referrer" />}
+                    <h1>{m.question}</h1>
+                </div>
                 <div className="meta-row">
                     <StatusBadge m={m} />
                     <span>{m.kind === "polymarket" ? "Polymarket mirror" : "Custom market"}</span>

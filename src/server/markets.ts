@@ -190,6 +190,8 @@ export function marketJson(db: Db, row: MarketRow): MarketJson {
             resolutionSource: snapshot.resolutionSource ?? "",
             referencePrices: snapshot.referencePrices?.map((p: { outcome: string; price: string }) => ({ ...p, asOf: snapshot.fetchedAt })) ?? null,
             sourceStatus: snapshot.sourceStatus ?? null,
+            image: snapshot.image ?? null,
+            event: snapshot.event ?? null,
             clarifications: all<{ observed_at: string; version_hash: string }>(db,
                 "SELECT observed_at, version_hash FROM source_versions WHERE provider = ? AND source_id = ? AND version_hash != ? ORDER BY observed_at",
                 row.source_provider, row.source_id, row.source_version).map((v) => ({ observedAt: v.observed_at, note: `source definition changed (version ${v.version_hash.slice(0, 12)}); funded terms unchanged` })),

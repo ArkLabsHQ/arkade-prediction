@@ -182,6 +182,17 @@ describe("polymarket eligibility", () => {
         expect(deriveConditionId(negRisk.resolvedBy.toLowerCase(), negRisk.questionID)).not.toBe(negRisk.conditionId.toLowerCase());
     });
 
+    it("keeps images only from Polymarket's bucket, reads the event, and leaves them out of versionHash", async () => {
+        const raw = gamma.keyset.response.markets[0];
+        const ok = "https://polymarket-upload.s3.us-east-2.amazonaws.com/x.png";
+        const page = (image: string) => setup({ keyset: { markets: [{ ...raw, image, events: [{ title: "Big event", slug: "big-event" }] }] } }).p.discoverMarkets(null, 5);
+        const [good] = (await page(ok)).markets;
+        expect(good).toMatchObject({ image: ok, event: { title: "Big event", slug: "big-event" } });
+        expect((await page("https://evil.example/pixel.png")).markets[0]!.image).toBeNull();
+        expect((await page(ok.replace("https:", "http:"))).markets[0]!.image).toBeNull();
+        expect((await page("https://evil.example/pixel.png")).markets[0]!.versionHash).toBe(good!.versionHash);
+    });
+
     it("returns machine-readable codes", async () => {
         const { p } = setup();
         const [open, negRisk] = (await p.discoverMarkets(null, 5)).markets as [SourceMarket, SourceMarket];

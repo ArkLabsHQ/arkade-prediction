@@ -35,6 +35,9 @@ export interface SourceMarket {
     protocol: SourceProtocol;
     /** Source prices as decimal strings in [0,1]. Reference only: never executable here. */
     referencePrices: { outcome: string; price: string }[] | null;
+    /** Display only, outside versionHash: Polymarket's image (its upload bucket only) and parent event. */
+    image: string | null;
+    event: { title: string; slug: string } | null;
     /** sha256 of the canonical normalized snapshot; changes when any field above changes. */
     versionHash: string;
     fetchedAt: string;

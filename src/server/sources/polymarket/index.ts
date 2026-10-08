@@ -108,6 +108,19 @@ function isoDate(v: unknown): string | null {
     return Number.isFinite(t) ? new Date(t).toISOString() : null;
 }
 
+const IMAGE_HOST = "polymarket-upload.s3.us-east-2.amazonaws.com";
+
+function imageOf(v: unknown): string | null {
+    if (typeof v !== "string" || v.length > 500 || !URL.canParse(v)) return null;
+    const u = new URL(v);
+    return u.protocol === "https:" && u.host === IMAGE_HOST ? u.href : null;
+}
+
+function eventOf(v: unknown): { title: string; slug: string } | null {
+    const e = Array.isArray(v) ? v[0] : null;
+    return isRec(e) && typeof e.title === "string" && e.title.trim() ? { title: str(e.title, 200), slug: str(e.slug, 200) } : null;
+}
+
 function normalize(raw: unknown, fetchedAt: string): SourceMarket {
     if (!isRec(raw)) throw new Error("gamma market is not an object");
     const sourceId = typeof raw.id === "number" ? String(raw.id) : raw.id;
@@ -148,7 +161,7 @@ function normalize(raw: unknown, fetchedAt: string): SourceMarket {
         prices && outcomes.length > 0 && prices.length === outcomes.length && prices.every((p) => PRICE.test(p))
             ? outcomes.map((outcome, i) => ({ outcome, price: prices[i] ?? "" }))
             : null;
-    return { ...core, referencePrices, versionHash: sha256Hex(canonicalJson(core)), fetchedAt };
+    return { ...core, referencePrices, image: imageOf(raw.image), event: eventOf(raw.events), versionHash: sha256Hex(canonicalJson(core)), fetchedAt };
 }
 
 function identityProblem(m: SourceMarket, allow: ReadonlySet<string>): Problem | null {

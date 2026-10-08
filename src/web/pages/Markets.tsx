@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { MarketJson, MarketStatus } from "../../shared/api.js";
 import { api, enc, useLive } from "../api.js";
 import { useApp } from "../ctx.js";
-import { chanceOf, isReplay, n, pct, unavailableReason } from "../format.js";
+import { chanceOf, isReplay, n, pct, safeHref, unavailableReason } from "../format.js";
 import { ErrorBox, Gauge, Link, Logo, PixBar, StatusBadge, Time, useNow } from "../ui.js";
 
 const STATUSES: MarketStatus[] = ["open", "halted", "activating", "closed", "resolving", "resolved", "failed"];
@@ -109,10 +109,15 @@ function Card({ m, now, i }: { m: MarketJson; now: number; i: number }) {
     const reason = unavailableReason(m);
     const chance = chanceOf(m);
     const href = `/markets/${enc(m.id)}`;
+    const img = safeHref(m.source?.image)?.startsWith("https://") ? m.source!.image! : undefined;
     return (
         <article className="card" style={{ ["--i" as string]: Math.min(i, 12) }}>
             <div className="card-top">
-                <Link to={href} className="q">{m.question}</Link>
+                {img && <img className="thumb" src={img} alt="" loading="lazy" referrerPolicy="no-referrer" />}
+                <div className="qwrap">
+                    {m.source?.event && m.source.event.title !== m.question && <div className="event">{m.source.event.title}</div>}
+                    <Link to={href} className="q">{m.question}</Link>
+                </div>
                 <Gauge p={chance?.p ?? null} label={m.outcomes[0]} />
             </div>
             <div className="tags">
