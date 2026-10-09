@@ -45,7 +45,7 @@ function served(mirror = false) {
     const f = fundedMarket(ark, { terms });
     const m: MarketJson = {
         id, kind: mirror ? "polymarket" : "custom", status: "open", question: definition.question, rules: definition.rules,
-        outcomes: ["YES", "NO"], category: "test", closeAt: new Date(CLOSE * 1000).toISOString(), createdAt: new Date().toISOString(),
+        outcomes: ["YES", "NO"], category: "test", section: "Other", closeAt: new Date(CLOSE * 1000).toISOString(), createdAt: new Date().toISOString(),
         source: mirror ? {
             provider: "polymarket", sourceId: "123", url: "https://polymarket.com/event/x", slug: "x", protocol: "v1", conditionId: "0x01",
             questionId: "0x02", resolver: "0xbe", resolutionSource: "", referencePrices: null, sourceStatus: null, image: null, event: null, clarifications: [], binding: SOURCE,

@@ -1,5 +1,10 @@
 /** Source-market adapter contract. Implementations must never infer settlement from titles or prices. */
 
+export type ProviderName = "polymarket" | "kalshi" | "manifold";
+export const PROVIDER_LABEL: Record<ProviderName, string> = { polymarket: "Polymarket", kalshi: "Kalshi", manifold: "Manifold" };
+
+
+/** API sources (Kalshi, Manifold) use chainId 0, their API as settlementContract and their market key as conditionId. */
 export interface SourceProtocol {
     /** Source-reported position-system version, e.g. Polymarket "v1" (legacy CTF) or "v2". */
     version: string;
@@ -16,7 +21,7 @@ export interface SourceProtocol {
 }
 
 export interface SourceMarket {
-    provider: "polymarket";
+    provider: ProviderName;
     sourceId: string;
     slug: string;
     url: string;
@@ -83,10 +88,15 @@ export interface Page {
 }
 
 export interface MarketSourceProvider {
-    readonly name: "polymarket";
-    discoverMarkets(cursor: string | null, limit: number): Promise<Page>;
+    readonly name: ProviderName;
+    /** The one eligibility profile this provider admits; it is bound into each market it imports. */
+    readonly profile: string;
+    /** `tag` narrows discovery to one source category (a Polymarket tag slug, a Kalshi category, ...). */
+    discoverMarkets(cursor: string | null, limit: number, opts?: { tag?: string }): Promise<Page>;
     fetchMarketDefinition(sourceId: string): Promise<SourceMarket>;
-    fetchMarketsBySlug(slugs: string[]): Promise<SourceMarket[]>;
+    fetchMarketsBySlug?(slugs: string[]): Promise<SourceMarket[]>;
+    /** The document an attestor hashes into its certificate's evidence digest. */
+    evidenceRecord(market: SourceMarket, evidence: ResolutionEvidence): unknown;
     evaluateEligibility(market: SourceMarket, policy: EligibilityPolicy, now: Date): Eligibility;
     /** Reads authoritative settlement state at one finalized block across >= 2 providers. */
     /** `atBlock` pins the read so independent attestors sign identical evidence; it must already be finalized. */

@@ -4,9 +4,10 @@ import type { CertificateJson } from "../shared/api.js";
 import { acceptCertificate, quorums } from "./certificates.js";
 import { all, now, run } from "./db.js";
 import { marketTerms, type Deps, type MarketRow } from "./markets.js";
-import type { MarketSourceProvider, SourceMarket } from "./sources/types.js";
+import { PROVIDER_LABEL, type MarketSourceProvider, type SourceMarket } from "./sources/types.js";
 
-type SourceDeps = Deps & { provider: MarketSourceProvider; log: (m: string, e?: Record<string, unknown>) => void };
+type SourceDeps = Deps & { providers: MarketSourceProvider[]; log: (m: string, e?: Record<string, unknown>) => void };
+const providerOf = (d: SourceDeps, m: MarketRow) => d.providers.find((p) => p.name === m.source_provider);
 type Snapshot = SourceMarket & { binding: MarketDefinition["source"] };
 
 const lastPoll = new Map<string, number>();
@@ -26,10 +27,12 @@ export async function resolutionTick(d: SourceDeps): Promise<void> {
         if (Date.now() - (lastPoll.get(m.id) ?? 0) < d.cfg.RESOLUTION_INTERVAL_SECONDS * 1000) continue;
         lastPoll.set(m.id, Date.now());
         const snapshot = JSON.parse(m.source_snapshot!) as Snapshot;
+        const provider = providerOf(d, m);
+        if (!provider) continue;
         try {
-            const evidence = await d.provider.fetchResolutionEvidence(snapshot);
+            const evidence = await provider.fetchResolutionEvidence(snapshot);
             run(d.db, "UPDATE markets SET resolution_status = ?, resolution_detail = ?, updated_at = ? WHERE id = ?", evidence.status, evidence.detail.slice(0, 500), now(), m.id);
-            if (evidence.status === "final") await requestCertificates(d, m, snapshot, evidence.chain!.blockNumber);
+            if (evidence.status === "final") await requestCertificates(d, m, snapshot, evidence.chain?.blockNumber);
         } catch (err) {
             d.log("resolution check failed", { market: m.id, error: String(err) });
             run(d.db, "UPDATE markets SET resolution_status = 'source-unavailable', resolution_detail = ?, updated_at = ? WHERE id = ?", String(err).slice(0, 300), now(), m.id);
@@ -47,23 +50,27 @@ async function screenOpenMarkets(d: SourceDeps): Promise<void> {
          AND NOT EXISTS (SELECT 1 FROM certificates c WHERE c.market_id = markets.id)`, Math.floor(Date.now() / 1000));
     if (open.length === 0) return;
     lastScreen = Date.now();
-    const snapshots = open.map((m) => JSON.parse(m.source_snapshot!) as Snapshot);
-    const resolved = new Set(await d.provider.screenResolved(snapshots));
-    for (const [i, m] of open.entries()) {
-        const snapshot = snapshots[i]!;
-        if (!resolved.has(snapshot.protocol.conditionId)) continue;
+    const resolved = new Set<string>();
+    for (const provider of d.providers) {
+        const mine = open.filter((m) => m.source_provider === provider.name).map((m) => JSON.parse(m.source_snapshot!) as Snapshot);
+        if (mine.length > 0) for (const id of await provider.screenResolved(mine)) resolved.add(`${provider.name}:${id}`);
+    }
+    for (const m of open) {
+        const snapshot = JSON.parse(m.source_snapshot!) as Snapshot;
+        const provider = providerOf(d, m);
+        if (!provider || !resolved.has(`${provider.name}:${snapshot.protocol.conditionId}`)) continue;
         try {
-            const evidence = await d.provider.fetchResolutionEvidence(snapshot);
-            const verified = d.provider.verifyFinalResolution(snapshot, evidence, m.profile ?? "");
+            const evidence = await provider.fetchResolutionEvidence(snapshot);
+            const verified = provider.verifyFinalResolution(snapshot, evidence, m.profile ?? "");
             if (!verified.ok) {
                 d.log("early resolution not confirmed", { market: m.id, reason: verified.reason });
                 continue;
             }
             const [n0, n1] = evidence.vector!.numerators;
             const outcome = n0 === n1 ? "50-50" : (JSON.parse(m.outcomes) as string[])[n0! > n1! ? 0 : 1];
-            const block = { number: evidence.chain!.blockNumber, hash: evidence.chain!.blockHash };
+            const block = evidence.chain ? { number: evidence.chain.blockNumber, hash: evidence.chain.blockHash } : null;
             run(d.db, "UPDATE markets SET resolution_status = 'source-final', resolution_detail = ?, updated_at = ? WHERE id = ?",
-                `Polymarket resolved early: ${outcome} at Polygon block ${block.number}`, now(), m.id);
+                `${PROVIDER_LABEL[provider.name]} resolved early: ${outcome}${block ? ` at Polygon block ${block.number}` : ""}`, now(), m.id);
             d.bus.publish("market", m.id, { resolution: "source-final", outcome, sourceBlock: block });
         } catch (err) {
             d.log("early resolution check failed", { market: m.id, error: String(err) });
@@ -72,7 +79,7 @@ async function screenOpenMarkets(d: SourceDeps): Promise<void> {
 }
 
 /** Asks every configured attestor to sign at `atBlock`; returns how many certificates were accepted. */
-export async function requestCertificates(d: Deps & { log: (m: string, e?: Record<string, unknown>) => void }, m: MarketRow, snapshot: { binding: MarketDefinition["source"] }, atBlock: string): Promise<number> {
+export async function requestCertificates(d: Deps & { log: (m: string, e?: Record<string, unknown>) => void }, m: MarketRow, snapshot: { binding: MarketDefinition["source"] }, atBlock?: string): Promise<number> {
     const terms = marketTerms(m)!;
     if (d.cfg.ORACLE_URLS.length === 0) throw new Error("no attestor URL configured (ORACLE_URLS)");
     const definition: MarketDefinition = {

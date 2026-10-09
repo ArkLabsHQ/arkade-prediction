@@ -1,3 +1,4 @@
+import { sectionOf } from "../shared/sections.js";
 import { isAttestorKeyHex } from "../core/attestation.js";
 import { hex } from "@scure/base";
 import { AuditError, auditGenesis as auditMarketGenesis } from "../core/audit.js";
@@ -182,10 +183,11 @@ export function marketJson(db: Db, row: MarketRow): MarketJson {
         rules: row.rules,
         outcomes: JSON.parse(row.outcomes),
         category: row.category,
+        section: sectionOf([...(snapshot?.tags ?? []), ...(row.category ? [row.category] : [])], row.question),
         closeAt: new Date(row.close_at * 1000).toISOString(),
         createdAt: row.created_at,
         source: snapshot && {
-            provider: "polymarket", sourceId: snapshot.sourceId, url: snapshot.url, slug: snapshot.slug,
+            provider: snapshot.provider ?? "polymarket", sourceId: snapshot.sourceId, url: snapshot.url, slug: snapshot.slug,
             protocol: snapshot.protocol?.version ?? "unknown", conditionId: snapshot.protocol?.conditionId,
             questionId: snapshot.protocol?.questionId, resolver: snapshot.protocol?.resolver ?? null,
             resolutionSource: snapshot.resolutionSource ?? "",

@@ -5,6 +5,7 @@
 import { hex } from "@scure/base";
 import type { PriceTerms, VaultTerms } from "../core/market.js";
 import type { OfferTerms, Side } from "../core/offers.js";
+import type { Section } from "./sections.js";
 
 export type Outcome = "yes" | "no";
 export type MarketKind = "polymarket" | "custom";
@@ -51,7 +52,7 @@ export type PriceTermsJson = { feedId: string; signers: string[]; quorum: number
 );
 
 export interface SourceJson {
-    provider: "polymarket";
+    provider: "polymarket" | "kalshi" | "manifold";
     sourceId: string;
     url: string;
     slug: string;
@@ -88,6 +89,8 @@ export interface MarketJson {
     rules: string;
     outcomes: [string, string];
     category: string | null;
+    /** Browse section derived from the source tags or the category (see shared/sections.ts). */
+    section: Section;
     closeAt: string;
     createdAt: string;
     source: SourceJson | null;

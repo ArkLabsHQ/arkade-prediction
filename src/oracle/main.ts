@@ -10,7 +10,8 @@ import { bindingOf, type MarketDefinition } from "../core/definition.js";
 import type { MarketAssets } from "../core/market.js";
 import { attestorSetProblem } from "./request.js";
 import type { CertificateJson } from "../shared/api.js";
-import { PROFILE, createPolymarketProvider, evidenceRecord } from "../server/sources/polymarket/index.js";
+import { createPolymarketProvider } from "../server/sources/polymarket/index.js";
+import type { MarketSourceProvider } from "../server/sources/types.js";
 import { definitionMismatch } from "../server/sources/definition.js";
 
 export interface AttestRequest {
@@ -52,15 +53,17 @@ const dataDir = env.ORACLE_DATA_DIR ?? "/data/oracle";
 mkdirSync(dataDir, { recursive: true });
 const rpcUrls = (env.POLYGON_RPC_URLS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 if (rpcUrls.length < 2) throw new Error("POLYGON_RPC_URLS needs at least two providers");
-const provider = createPolymarketProvider({
-    gammaUrl: env.POLYMARKET_GAMMA_URL ?? "https://gamma-api.polymarket.com",
-    rpcUrls,
-    resolverAllowlist: (env.POLYMARKET_RESOLVERS ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean),
-});
+const providers: MarketSourceProvider[] = [
+    createPolymarketProvider({
+        gammaUrl: env.POLYMARKET_GAMMA_URL ?? "https://gamma-api.polymarket.com",
+        rpcUrls,
+        resolverAllowlist: (env.POLYMARKET_RESOLVERS ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean),
+    }),
+];
 const log = (msg: string, extra: Record<string, unknown> = {}) => console.log(JSON.stringify({ ts: new Date().toISOString(), service: "attestor", msg, ...extra }));
 
 const app = new Hono();
-app.get("/info", (c) => c.json({ pubkey, epoch, profile: PROFILE, deployment: pins }));
+app.get("/info", (c) => c.json({ pubkey, epoch, profile: providers[0]!.profile, profiles: providers.map((p) => p.profile), deployment: pins }));
 app.get("/health", (c) => c.json({ ok: true }));
 
 /**
@@ -78,18 +81,19 @@ app.post("/attest", async (c) => {
     if (refused) return c.json(refused, 400);
     const keys = req.oracle.keys;
     const bound = req.definition.source as { provider?: string; profile?: string; sourceId?: string } | null | undefined;
-    if (!bound || bound.provider !== "polymarket" || bound.profile !== PROFILE || !bound.sourceId) {
+    const provider = providers.find((p) => p.name === bound?.provider);
+    if (!bound || !provider || bound.profile !== provider.profile || !bound.sourceId) {
         return c.json({ error: "unsupported source profile", code: "profile" }, 400);
     }
     const live = await provider.fetchMarketDefinition(bound.sourceId);
-    const mismatch = definitionMismatch(req.definition, live, PROFILE);
+    const mismatch = definitionMismatch(req.definition, live, provider.profile);
     if (mismatch) {
         log("source identity mismatch", { market: req.marketId, reason: mismatch });
         return c.json({ error: `${mismatch}; quarantined`, code: "identity" }, 409);
     }
     const evidence = await provider.fetchResolutionEvidence(live, { atBlock: req.atBlock === undefined ? undefined : BigInt(req.atBlock) });
     if (evidence.status !== "final") return c.json({ status: evidence.status, detail: evidence.detail }, 409);
-    const verified = provider.verifyFinalResolution(live, evidence, PROFILE);
+    const verified = provider.verifyFinalResolution(live, evidence, provider.profile);
     if (!verified.ok) return c.json({ error: verified.reason, code: "verification" }, 409);
     const vector = { numerators: evidence.vector!.numerators, denominator: evidence.vector!.denominator };
     const outcome = outcomeOfVector(vector);
@@ -98,7 +102,7 @@ app.post("/attest", async (c) => {
         marketId: req.marketId, definition: req.definition, unitSats: BigInt(req.unitSats), assets: req.assets,
         oracleKeys: keys, oracleThreshold: req.oracle.threshold, oracleEpoch: epoch,
     });
-    const evidenceDoc = evidenceRecord(live, evidence);
+    const evidenceDoc = provider.evidenceRecord(live, evidence);
     const digest = evidenceDigest(evidenceDoc);
     const signature = signAttestation(hex.decode(secret), attestationMessage(binding, digest, vector), scheme);
     const cert: CertificateJson = {

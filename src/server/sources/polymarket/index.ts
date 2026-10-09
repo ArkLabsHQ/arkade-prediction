@@ -280,11 +280,43 @@ export function createPolymarketProvider(opts: PolymarketProviderOptions): Marke
         }
     }
 
+    const tagIds = new Map<string, string>();
+    async function tagId(slug: string): Promise<string> {
+        if (!/^[a-z0-9-]{1,60}$/.test(slug)) throw new Error(`invalid Polymarket tag ${JSON.stringify(slug.slice(0, 40))}`);
+        let id = tagIds.get(slug);
+        if (!id) {
+            const body = await withRetry(() => getJson(`${gammaUrl}/tags/slug/${slug}`));
+            if (!isRec(body) || !/^[0-9]{1,12}$/.test(String(body.id))) throw new Error(`unknown Polymarket tag ${slug}`);
+            tagIds.set(slug, (id = String(body.id)));
+        }
+        return id;
+    }
+
     return {
         name: "polymarket",
+        profile: PROFILE,
+        evidenceRecord,
 
-        async discoverMarkets(cursor, limit) {
-            const q = new URLSearchParams({ closed: "false", include_tag: "true", order: "volume24hr", ascending: "false", limit: String(Math.min(100, Math.max(1, Math.trunc(limit) || 1))) });
+        async discoverMarkets(cursor, limit, opts = {}) {
+            const size = Math.min(100, Math.max(1, Math.trunc(limit) || 1));
+            const q = new URLSearchParams({ closed: "false", include_tag: "true", order: "volume24hr", ascending: "false", limit: String(size) });
+            // The keyset endpoint ignores tags, so a tag pass pages /markets by offset instead.
+            if (opts.tag) {
+                const offset = Number(cursor ?? 0);
+                q.set("tag_id", await tagId(opts.tag));
+                q.set("offset", String(offset));
+                const body = await withRetry(() => getJson(`${gammaUrl}/markets?${q}`));
+                if (!Array.isArray(body)) throw new Error("unexpected /markets response");
+                const fetchedAt = new Date().toISOString();
+                const markets = body.flatMap((m: unknown) => {
+                    try {
+                        return [normalize(m, fetchedAt)];
+                    } catch {
+                        return [];
+                    }
+                });
+                return { markets, next: body.length === size ? String(offset + size) : null };
+            }
             if (cursor) q.set("after_cursor", cursor);
             const body = await withRetry(() => getJson(`${gammaUrl}/markets/keyset?${q}`));
             if (!isRec(body) || !Array.isArray(body.markets)) throw new Error("unexpected /markets/keyset response");

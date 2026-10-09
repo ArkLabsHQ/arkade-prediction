@@ -447,11 +447,11 @@ describe("crypto Up/Down markets on the CTF path", () => {
     it("finds the oracle from the conditionId when gamma omits resolvedBy, and takes the window start as the start", async () => {
         const upcoming = raw(new Date(NOW.getTime() + 3600_000));
         const { p } = setup({ allowlist: [...ALLOWLIST, UPDOWN_RESOLVER], markets: { "": [upcoming] } });
-        const [m] = await p.fetchMarketsBySlug(["btc-updown-4h-1791532800"]);
+        const [m] = await p.fetchMarketsBySlug!(["btc-updown-4h-1791532800"]);
         expect(m!.gameStartTime).toBe(upcoming.eventStartTime);
         expect(code(p, m!)).toBe("eligible");
         expect(code(setup().p, m!)).toBe("unknown-resolver");
-        const live = (await setup({ allowlist: [...ALLOWLIST, UPDOWN_RESOLVER], markets: { "": [raw(new Date(NOW.getTime() - 60_000))] } }).p.fetchMarketsBySlug(["x"]))[0]!;
+        const live = (await setup({ allowlist: [...ALLOWLIST, UPDOWN_RESOLVER], markets: { "": [raw(new Date(NOW.getTime() - 60_000))] } }).p.fetchMarketsBySlug!(["x"]))[0]!;
         expect(code(p, live)).toBe("started");
     });
 });

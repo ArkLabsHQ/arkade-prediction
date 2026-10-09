@@ -57,8 +57,16 @@ const schema = z.object({
     POLYMARKET_GAMMA_URL: z.url().default("https://gamma-api.polymarket.com"),
     POLYGON_RPC_URLS: csv,
     POLYMARKET_RESOLVERS: csv,
+    KALSHI_ENABLED: bool,
+    KALSHI_API_URL: z.url().default("https://api.elections.kalshi.com/trade-api/v2"),
+    MANIFOLD_ENABLED: bool,
+    MANIFOLD_API_URL: z.url().default("https://api.manifold.markets/v0"),
+    // Polymarket tag slugs: each gets its own discovery pass, and imports must carry one of them.
     IMPORT_TAGS: csv,
+    // Per provider.
     IMPORT_MAX_ACTIVE: int(5),
+    // Per browse section (Sports, Crypto, ...) across providers; 0 = no cap.
+    IMPORT_MAX_PER_SECTION: int(0),
     // Polymarket crypto Up/Down mirrors settled on RedStone's signed rounds (off unless enabled).
     UPDOWN_ENABLED: bool,
     // polymarket: mirror through the CTF path and settle on Polymarket's own on-chain result (via our attestor);

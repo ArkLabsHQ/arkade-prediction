@@ -36,12 +36,13 @@ describe("source refresh", () => {
         run(db, "UPDATE markets SET kind = 'polymarket', source_provider = 'polymarket', source_id = '42', source_version = 'v1', source_snapshot = ? WHERE id = 'm'",
             JSON.stringify(market("v1", "0.1")));
         const provider = {
+            name: "polymarket", profile: "polymarket-ctf-v1-binary",
             discoverMarkets: async () => ({ markets: [], next: null }),
             fetchMarketDefinition: async () => market("v1", "0.7"),
             evaluateEligibility: () => ({ eligible: false, code: "horizon", reason: "" }),
         };
         const cfg = { IMPORT_MAX_PAGES: 1, IMPORT_PAGE_LIMIT: 100, IMPORT_TAGS: [], IMPORT_MAX_HORIZON_SECONDS: 1, IMPORT_MIN_HORIZON_SECONDS: 0 };
-        await importOnce({ db, cfg, provider } as never);
+        await importOnce({ db, cfg, providers: [provider] } as never);
         expect(JSON.parse(one<{ s: string }>(db, "SELECT source_snapshot s FROM markets WHERE id = 'm'")!.s).referencePrices[0].price).toBe("0.7");
     });
 });

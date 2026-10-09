@@ -7,6 +7,7 @@ import type { Deps } from "./markets.js";
 import { importedDefinition } from "./sources/definition.js";
 import type { MarketSourceProvider, SourceMarket } from "./sources/types.js";
 import type { Workflows } from "./workflows.js";
+import { sectionOf } from "../shared/sections.js";
 
 export interface ImportResult {
     pages: number;
@@ -22,67 +23,70 @@ export interface ImportResult {
  */
 const attestorSlots = (cfg: Deps["cfg"]) => oracleSlots(cfg.ORACLE_PUBKEYS.map((k) => hex.decode(k)), cfg.ORACLE_THRESHOLD).map((k) => hex.encode(k));
 
-export async function importOnce(d: Deps & { wf: Workflows; provider: MarketSourceProvider; timeoutDays: number }, upcoming: SourceMarket[] = []): Promise<ImportResult> {
-    const { cfg, db } = d;
+type ImportDeps = Deps & { wf: Workflows; providers: MarketSourceProvider[]; timeoutDays: number };
+
+export async function importOnce(d: ImportDeps, upcoming: SourceMarket[] = []): Promise<ImportResult> {
+    const { db } = d;
     const result: ImportResult = { pages: 0, seen: 0, eligible: 0, activated: [], ineligibleByCode: {} };
+    const errors: string[] = [];
+    for (const provider of d.providers) {
+        try {
+            await importFrom(d, provider, upcoming.filter((m) => m.provider === provider.name), result);
+        } catch (err) {
+            errors.push(`${provider.name}: ${String(err).slice(0, 200)}`);
+        }
+    }
+    setMeta(db, "import.lastRun", now());
+    setMeta(db, "import.lastError", errors.length ? `${now()} ${errors.join("; ")}` : "");
+    if (errors.length === d.providers.length && errors.length > 0) throw new Error(errors.join("; "));
+    return result;
+}
+
+async function importFrom(d: ImportDeps, provider: MarketSourceProvider, upcoming: SourceMarket[], result: ImportResult): Promise<void> {
+    const { cfg, db } = d;
+    const tags = provider.name === "polymarket" ? cfg.IMPORT_TAGS : [];
     const policy = {
-        profiles: ["polymarket-ctf-v1-binary"], tags: cfg.IMPORT_TAGS,
+        profiles: [provider.profile], tags,
         maxHorizonSeconds: cfg.IMPORT_MAX_HORIZON_SECONDS, minHorizonSeconds: cfg.IMPORT_MIN_HORIZON_SECONDS,
     };
+    const seen = new Set<string>();
     const record = (m: SourceMarket) => {
-        const verdict = d.provider.evaluateEligibility(m, policy, new Date());
+        const verdict = provider.evaluateEligibility(m, policy, new Date());
         upsertSource(d, m, verdict.eligible ? { eligible: true, profile: verdict.profile } : { eligible: false, code: verdict.code, reason: verdict.reason });
         return verdict;
     };
-    const seen = new Set<string>();
-    // Discovery is ordered by 24h volume, so every pass starts from the busiest markets.
-    let cursor: string | null = null;
-    try {
-        // Markets named ahead of time (crypto Up/Down) go first: by volume they would rank too low before they start.
-        for (const m of upcoming) {
-            result.seen++;
-            seen.add(m.sourceId);
-            const verdict = record(m);
-            if (!verdict.eligible) {
-                result.ineligibleByCode[verdict.code] = (result.ineligibleByCode[verdict.code] ?? 0) + 1;
-                continue;
-            }
-            result.eligible++;
-            const id = activate(d, m, verdict.profile);
-            if (id) result.activated.push(id);
+    const consider = (m: SourceMarket) => {
+        result.seen++;
+        seen.add(m.sourceId);
+        const verdict = record(m);
+        if (!verdict.eligible) {
+            result.ineligibleByCode[verdict.code] = (result.ineligibleByCode[verdict.code] ?? 0) + 1;
+            return;
         }
+        result.eligible++;
+        const id = activate(d, m, verdict.profile);
+        if (id) result.activated.push(id);
+    };
+    // Markets named ahead of time (crypto Up/Down) go first: by volume they would rank too low before they start.
+    upcoming.forEach(consider);
+    // Discovery is ordered by 24h volume, so every pass starts from the busiest markets; one pass per tag when set.
+    for (const tag of tags.length ? tags : [undefined]) {
+        let cursor: string | null = null;
         for (let page = 0; page < cfg.IMPORT_MAX_PAGES; page++) {
-            const { markets, next } = await d.provider.discoverMarkets(cursor, Math.min(cfg.IMPORT_PAGE_LIMIT, 100));
+            const { markets, next } = await provider.discoverMarkets(cursor, Math.min(cfg.IMPORT_PAGE_LIMIT, 100), tag ? { tag } : {});
             result.pages++;
-            for (const m of markets) {
-                result.seen++;
-                seen.add(m.sourceId);
-                const verdict = record(m);
-                if (!verdict.eligible) {
-                    result.ineligibleByCode[verdict.code] = (result.ineligibleByCode[verdict.code] ?? 0) + 1;
-                    continue;
-                }
-                result.eligible++;
-                const id = activate(d, m, verdict.profile);
-                if (id) result.activated.push(id);
-            }
+            markets.forEach(consider);
             cursor = next;
             if (!next) break;
         }
-        // Funded markets outside the pages read still get fresh reference odds.
-        const funded = all<{ source_id: string }>(db, "SELECT source_id FROM markets WHERE kind = 'polymarket' AND oracle_policy != 'redstone' AND status IN ('open','halted','closed','resolving') AND source_id NOT LIKE '%#%'");
-        for (const { source_id } of funded) {
-            if (seen.has(source_id)) continue;
-            const m = await d.provider.fetchMarketDefinition(source_id).catch(() => null);
-            if (m) record(m);
-        }
-        setMeta(db, "import.lastRun", now());
-        setMeta(db, "import.lastError", "");
-    } catch (err) {
-        setMeta(db, "import.lastError", `${now()} ${String(err).slice(0, 300)}`);
-        throw err;
     }
-    return result;
+    // Funded markets outside the pages read still get fresh reference odds.
+    const funded = all<{ source_id: string }>(db, "SELECT source_id FROM markets WHERE kind = 'polymarket' AND source_provider = ? AND oracle_policy != 'redstone' AND status IN ('open','halted','closed','resolving') AND source_id NOT LIKE '%#%'", provider.name);
+    for (const { source_id } of funded) {
+        if (seen.has(source_id)) continue;
+        const m = await provider.fetchMarketDefinition(source_id).catch(() => null);
+        if (m) record(m);
+    }
 }
 
 export function upsertSource(d: Deps, m: SourceMarket, v: { eligible: boolean; code?: string; reason?: string; profile?: string }): void {
@@ -108,8 +112,14 @@ export function upsertSource(d: Deps, m: SourceMarket, v: { eligible: boolean; c
 /** Creates the market row once per source id and enqueues operator genesis, within the activation cap. */
 function activate(d: Deps & { wf: Workflows; timeoutDays: number }, m: SourceMarket, profile: string): string | undefined {
     if (one(d.db, "SELECT 1 FROM markets WHERE source_provider = ? AND source_id = ?", m.provider, m.sourceId)) return undefined;
-    const active = one<{ n: number }>(d.db, "SELECT COUNT(*) n FROM markets WHERE kind = 'polymarket' AND oracle_policy != 'redstone' AND status IN ('activating','open','halted','closed','resolving')")!.n;
-    if (active >= d.cfg.IMPORT_MAX_ACTIVE || !d.cfg.ORACLE_PUBKEYS[0]) return undefined;
+    const live = all<{ source_provider: string; source_snapshot: string; question: string }>(d.db,
+        "SELECT source_provider, source_snapshot, question FROM markets WHERE kind = 'polymarket' AND oracle_policy != 'redstone' AND status IN ('activating','open','halted','closed','resolving')");
+    if (live.filter((r) => r.source_provider === m.provider).length >= d.cfg.IMPORT_MAX_ACTIVE || !d.cfg.ORACLE_PUBKEYS[0]) return undefined;
+    if (d.cfg.IMPORT_MAX_PER_SECTION > 0) {
+        const section = sectionOf(m.tags, m.question);
+        const inSection = live.filter((r) => sectionOf((JSON.parse(r.source_snapshot) as SourceMarket).tags ?? [], r.question) === section).length;
+        if (inSection >= d.cfg.IMPORT_MAX_PER_SECTION) return undefined;
+    }
     const def = importedDefinition(m, profile, d.timeoutDays);
     const id = randomBytes(16).toString("hex");
     const t = now();
@@ -128,10 +138,12 @@ function activate(d: Deps & { wf: Workflows; timeoutDays: number }, m: SourceMar
  * Regtest demo only: imports an already-resolved source market so its real final on-chain result can settle a
  * local market end to end. Identity checks still apply; the label is the category, as the attestor checks the question.
  */
-export async function replayHistorical(d: Deps & { wf: Workflows; provider: MarketSourceProvider; timeoutDays: number }, sourceId: string): Promise<string> {
+export async function replayHistorical(d: ImportDeps, sourceId: string): Promise<string> {
     if (d.cfg.APM_NETWORK !== "regtest") throw new Error("historical replay is regtest-only");
-    const m = await d.provider.fetchMarketDefinition(sourceId);
-    const verdict = d.provider.evaluateEligibility(m, { profiles: ["polymarket-ctf-v1-binary"], tags: [], maxHorizonSeconds: 1e10, minHorizonSeconds: -1e10 }, new Date());
+    const provider = d.providers.find((p) => p.name === "polymarket");
+    if (!provider) throw new Error("historical replay needs the Polymarket provider");
+    const m = await provider.fetchMarketDefinition(sourceId);
+    const verdict = provider.evaluateEligibility(m, { profiles: ["polymarket-ctf-v1-binary"], tags: [], maxHorizonSeconds: 1e10, minHorizonSeconds: -1e10 }, new Date());
     if (!verdict.eligible && verdict.code !== "closed") throw new Error(`source market not replayable: ${verdict.code} ${verdict.reason}`);
     if (!d.cfg.ORACLE_PUBKEYS[0]) throw new Error("ORACLE_PUBKEYS is empty");
     const closeAt = Math.floor(Date.now() / 1000) + 120;

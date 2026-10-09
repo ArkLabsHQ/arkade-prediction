@@ -19,6 +19,7 @@ import { Workflows } from "./workflows.js";
 import { importOnce, replayHistorical } from "./importer.js";
 import { resolutionTick } from "./resolver.js";
 import { createPolymarketProvider } from "./sources/polymarket/index.js";
+import type { MarketSourceProvider } from "./sources/types.js";
 import { captureTick } from "./rounds.js";
 import { discoverUpDown, importUpDown, upcomingSlugs } from "./updown.js";
 
@@ -128,10 +129,13 @@ async function main(): Promise<void> {
     const faucet = cfg.DEV_ENDPOINTS && operator
         ? async (address: string, amount: number) => operator.wallet.send({ address, amount })
         : undefined;
-    const provider = cfg.POLYMARKET_ENABLED
-        ? createPolymarketProvider({ gammaUrl: cfg.POLYMARKET_GAMMA_URL, rpcUrls: cfg.POLYGON_RPC_URLS, resolverAllowlist: cfg.POLYMARKET_RESOLVERS.map((r) => r.toLowerCase()) })
-        : undefined;
-    const sourceDeps = provider && { ...deps, wf, provider, timeoutDays: cfg.IMPORT_TIMEOUT_DAYS, log };
+    const providers: MarketSourceProvider[] = [
+        ...(cfg.POLYMARKET_ENABLED
+            ? [createPolymarketProvider({ gammaUrl: cfg.POLYMARKET_GAMMA_URL, rpcUrls: cfg.POLYGON_RPC_URLS, resolverAllowlist: cfg.POLYMARKET_RESOLVERS.map((r) => r.toLowerCase()) })]
+            : []),
+    ];
+    const polymarket = providers.find((p) => p.name === "polymarket");
+    const sourceDeps = providers.length > 0 ? { ...deps, wf, providers, timeoutDays: cfg.IMPORT_TIMEOUT_DAYS, log } : undefined;
     const importNow = sourceDeps && (async () => {
         if (!lease.held) throw new Error("not the writer");
         return importOnce(sourceDeps);
@@ -167,8 +171,8 @@ async function main(): Promise<void> {
               ]
             : [];
         // With UPDOWN_SETTLEMENT=polymarket, upcoming Up/Down markets join each import pass as ordinary CTF mirrors.
-        const upcomingCtfUpDown = async () => (cfg.UPDOWN_ENABLED && cfg.UPDOWN_SETTLEMENT === "polymarket" && provider
-            ? provider.fetchMarketsBySlug(upcomingSlugs(cfg.UPDOWN_WINDOWS, cfg.UPDOWN_ASSETS, cfg.UPDOWN_LEAD_SECONDS))
+        const upcomingCtfUpDown = async () => (cfg.UPDOWN_ENABLED && cfg.UPDOWN_SETTLEMENT === "polymarket" && polymarket?.fetchMarketsBySlug
+            ? polymarket.fetchMarketsBySlug(upcomingSlugs(cfg.UPDOWN_WINDOWS, cfg.UPDOWN_ASSETS, cfg.UPDOWN_LEAD_SECONDS))
             : []);
         const sourceLoops = sourceDeps
             ? [

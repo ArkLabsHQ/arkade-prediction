@@ -51,7 +51,7 @@ function setup() {
     const logs: string[] = [];
     const d = {
         cfg: { APM_NETWORK: "regtest", RESOLUTION_INTERVAL_SECONDS: 0, ORACLE_URLS: [] } as never,
-        db, bus: new EventBus(db), net: {} as never, provider,
+        db, bus: new EventBus(db), net: {} as never, providers: [provider],
         log: (msg: string, e?: Record<string, unknown>) => void logs.push(JSON.stringify({ msg, ...e })),
     };
     const addMarket = async (sourceId: string) => {
