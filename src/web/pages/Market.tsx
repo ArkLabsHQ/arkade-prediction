@@ -2,7 +2,7 @@ import type { CertificateJson, MarketJson, OfferJson, OraclePolicy, SourceJson, 
 import { api, enc, useLive } from "../api.js";
 import { useApp } from "../ctx.js";
 import { fillable } from "../fills.js";
-import { chanceOf, fromUnix, isReplay, n, pct, refPct, safeHref, sats, unavailableReason, when } from "../format.js";
+import { chanceOf, fromUnix, isReplay, n, pct, providerName, refPct, safeHref, sats, sectionFor, unavailableReason, when } from "../format.js";
 import { ErrorBox, Link, Loading, Panel, PixBar, StatusBadge, Time, Txid, outcomeName, useAsync, useNow } from "../ui.js";
 import { TradePanels } from "./Trade.js";
 
@@ -35,14 +35,17 @@ export function MarketPage({ id }: { id: string }) {
     return (
         <div className="stack">
             <header className="mhead">
-                <div className="crumbs"><Link to="/">Markets</Link> / {m.source?.event?.title ?? m.category ?? "Uncategorised"}</div>
+                <div className="crumbs">
+                    <Link to="/">Markets</Link> / <Link to={`/?s=${sectionFor(m)}`}>{sectionFor(m)}</Link>
+                    {(m.source?.event?.title ?? m.category) && <> / {m.source?.event?.title ?? m.category}</>}
+                </div>
                 <div className="title-row">
                     {safeHref(m.source?.image)?.startsWith("https://") && <img className="thumb big" src={m.source!.image!} alt="" referrerPolicy="no-referrer" />}
                     <h1>{m.question}</h1>
                 </div>
                 <div className="meta-row">
                     <StatusBadge m={m} />
-                    <span>{m.kind === "polymarket" ? "Polymarket mirror" : "Custom market"}</span>
+                    <span className={`src p-${m.source?.provider ?? "custom"}`}>{providerName(m) ? `${providerName(m)} mirror` : "Custom market"}</span>
                     <span>Closes <Time t={m.closeAt} now={now} /> · {when(m.closeAt)}</span>
                     <span>Collateral BTC: a winning share pays {n(unit)} sats</span>
                     {m.oracle.policy === "dev-oracle" && <span className="badge dev">dev oracle</span>}
@@ -117,7 +120,7 @@ function Quotes({ m, unit }: { m: MarketJson; unit: string }) {
             </div>
             <PixBar p={chance?.p ?? null} />
             <p className="muted small">
-                {chance?.from === "resolved" ? "Resolved." : chance?.from === "reference" ? "Polymarket's odds for reference; nothing is executable here until someone posts an order."
+                {chance?.from === "resolved" ? "Resolved." : chance?.from === "reference" ? `${providerName(m) ?? "The source"}'s odds for reference; nothing is executable here until someone posts an order.`
                     : chance ? `Midpoint of the best ${m.outcomes[0]} bid and ask, in sats per ${n(unit)}-sat share.` : "No orders yet."}
             </p>
         </section>

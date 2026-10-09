@@ -240,29 +240,67 @@ pre.json { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; max-height
 .card .foot-line { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px var(--s3); font-size: 12.5px; color: var(--fg-3); border-top: 1px dashed var(--line-2); padding-top: var(--s2); }
 .card .reason { font-size: 12.5px; color: var(--ask); }
 
-/* Chance gauge: a pixel ring of 20 cells, filled to the implied probability of outcome A. */
-.gauge { position: relative; flex: none; width: 76px; height: 76px; display: grid; place-items: center; }
-.gauge svg { position: absolute; inset: 0; }
-.gauge b { display: block; text-align: center; font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; line-height: 1; }
-.gauge small { display: block; font-size: 8.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--fg-3); text-align: center; }
-
 .pixbar { display: grid; grid-template-columns: repeat(20, 1fr); gap: 2px; height: 8px; }
 .pixbar i { background: var(--b); opacity: 0.85; animation: fill 0.4s var(--ease) both; animation-delay: calc(var(--k) * 18ms); }
 .pixbar i.on { background: var(--a); opacity: 1; }
 .pixbar.empty i { background: var(--bg-3); opacity: 1; }
 @keyframes fill { from { transform: scaleY(0.2); } }
 
-.outs { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s2); position: relative; z-index: 1; }
-.out {
-    display: flex; align-items: center; justify-content: space-between; gap: var(--s2); padding: 9px 12px; min-width: 0;
-    font-weight: 600; text-decoration: none; clip-path: var(--notch); transition: background 0.15s, color 0.15s;
+.card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px var(--s3); font-size: 11.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--fg-3); }
+.sect-chip { color: var(--fg-2); }
+.src { display: inline-flex; align-items: center; gap: 6px; }
+.src::before { content: ""; width: 6px; height: 6px; background: var(--line-2); }
+.src.p-polymarket::before { background: var(--purple-hi); }
+.src.p-kalshi::before { background: var(--bid); }
+.src.p-manifold::before { background: var(--warn); }
+.card-meta .cd { margin-left: auto; letter-spacing: 0.04em; text-transform: none; font-weight: 500; font-variant-numeric: tabular-nums; }
+.card-meta .cd.soon { color: var(--warn); }
+.live-tag { display: inline-flex; align-items: center; gap: 6px; color: var(--bid); }
+.live-tag::before { content: ""; width: 7px; height: 7px; background: var(--bid); animation: blip 2s infinite; }
+
+.odds { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s2); position: relative; z-index: 1; }
+.odd {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "lbl price" "sub price"; align-items: center; gap: 0 var(--s2);
+    min-width: 0; min-height: 58px; padding: 8px 12px; text-decoration: none; color: var(--fg); clip-path: var(--notch); transition: background 0.15s, color 0.15s;
 }
-.out .lbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.out .num { font-weight: 700; }
-.out.a { color: var(--a); background: rgb(155 125 255 / 0.12); }
-.out.b { color: var(--b); background: rgb(255 106 66 / 0.12); }
-.out.a:hover { color: var(--fg); background: var(--purple); }
-.out.b:hover { color: var(--ink); background: var(--orange-hi); }
+.odd .lbl { grid-area: lbl; font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.odd .sub { grid-area: sub; font-size: 12px; color: var(--fg-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.odd .price { grid-area: price; font-size: 24px; font-weight: 800; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+.odd.a { background: rgb(155 125 255 / 0.12); box-shadow: inset 0 0 0 1px rgb(155 125 255 / 0.28); }
+.odd.b { background: rgb(255 106 66 / 0.1); box-shadow: inset 0 0 0 1px rgb(255 106 66 / 0.26); }
+.odd.a .price { color: var(--a); }
+.odd.b .price { color: var(--b); }
+.odd.dry .price { opacity: 0.55; }
+.odd.a:hover { color: var(--fg); background: var(--purple); }
+.odd.b:hover { color: var(--ink); background: var(--orange-hi); }
+.odd:hover .price, .odd:hover .sub { color: inherit; opacity: 1; }
+
+/* Category rail: sticky under the topbar, scrolls sideways when the sections outgrow the width. */
+.rail {
+    position: sticky; top: 60px; z-index: 5; margin: 0 calc(-1 * var(--s5)); padding: var(--s2) var(--s5);
+    background: rgb(13 12 16 / 0.86); backdrop-filter: blur(14px) saturate(1.4); border-bottom: 1px solid var(--line);
+}
+.rail-row { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; }
+.rail-row::-webkit-scrollbar { display: none; }
+.tab {
+    flex: none; display: inline-flex; align-items: center; gap: var(--s2); font: inherit; font-size: 14px; font-weight: 600; color: var(--fg-2);
+    background: transparent; border: 0; padding: 9px 14px; cursor: pointer; clip-path: var(--notch); transition: color 0.15s, background 0.15s;
+}
+.tab:hover { color: var(--fg); background: var(--bg-2); }
+.tab[aria-pressed="true"] { color: var(--fg); background: var(--purple); }
+.tab:focus-visible, .toolbar .pill:focus-visible { outline-offset: -2px; }
+.count { font-size: 11.5px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--fg-3); }
+.tab[aria-pressed="true"] .count { color: #d9d2f5; }
+.toolbar .pill { display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; font-size: 13px; font-weight: 600; text-transform: none; letter-spacing: 0; }
+.toolbar .pill[aria-pressed="true"] .count { color: var(--ink); }
+.toolbar .pill.q-live::before { content: ""; width: 7px; height: 7px; background: var(--bid); }
+
+.sect { display: flex; flex-direction: column; gap: var(--s3); }
+.sect + .sect { margin-top: var(--s3); }
+.sect-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s3); padding-bottom: var(--s2); border-bottom: 1px solid var(--line); }
+.sect-head h2 { display: inline-flex; align-items: center; gap: var(--s2); font-size: 15px; color: var(--fg); }
+.sect-head h2::before { content: ""; width: 8px; height: 8px; background: var(--orange); }
+.sect-head .linklike { font-size: 13px; }
 
 /* --- markets list (legacy table classes still used elsewhere) ------------------------------- */
 .filters { display: flex; flex-wrap: wrap; align-items: end; gap: var(--s3); }
@@ -380,6 +418,8 @@ ul.hints { gap: 2px; }
     .brand-name { display: none; }
     .topbar nav { order: 3; width: 100%; overflow-x: auto; padding-bottom: var(--s2); }
     .page { padding: var(--s3); }
+    /* 97px = the wrapped two-row topbar at this width. */
+    .rail { top: 97px; margin: 0 calc(-1 * var(--s3)); padding: var(--s2) var(--s3); }
     .hero { grid-template-columns: minmax(0, 1fr); padding: var(--s5) var(--s4); }
     .hero .art { display: none; }
     table.data.markets thead { display: none; }

@@ -62,7 +62,7 @@ function Ticket({ m, chain, session, onChanged, offers }: Live & { offers?: Offe
     const { config, holdings, refreshHoldings } = useApp();
     const unit = BigInt(m.terms!.unitSats);
     const [side, setSide] = useState<Side>("buy");
-    const [outcome, setOutcome] = useState<Outcome>("yes");
+    const [outcome, setOutcome] = useState<Outcome>(() => (new URLSearchParams(location.search).get("o") === "no" ? "no" : "yes"));
     const [qtyText, setQtyText] = useState("1");
     const [boundText, setBoundText] = useState<string | null>(null);
     const [autoClaim, setAutoClaim] = useState(false);

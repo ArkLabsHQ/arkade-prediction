@@ -11,30 +11,30 @@ const navListeners = new Set<() => void>();
 const notify = () => navListeners.forEach((l) => l());
 window.addEventListener("popstate", notify);
 
-export function navigate(to: string) {
+export function navigate(to: string, scroll = true) {
     if (to !== location.pathname + location.search) history.pushState(null, "", to);
     notify();
-    window.scrollTo(0, 0);
+    if (scroll) window.scrollTo(0, 0);
 }
 
-export function usePath(): string {
-    return useSyncExternalStore(
-        (cb) => {
-            navListeners.add(cb);
-            return () => {
-                navListeners.delete(cb);
-            };
-        },
-        () => location.pathname,
-    );
-}
+const subscribeNav = (cb: () => void) => {
+    navListeners.add(cb);
+    return () => {
+        navListeners.delete(cb);
+    };
+};
 
-export function Link(props: { to: string; className?: string; children: ReactNode; current?: boolean }) {
+export const usePath = () => useSyncExternalStore(subscribeNav, () => location.pathname);
+export const useSearch = () => useSyncExternalStore(subscribeNav, () => location.search);
+
+export function Link(props: { to: string; className?: string; children: ReactNode; current?: boolean; label?: string }) {
     return (
         <a
             href={props.to}
             className={props.className}
             aria-current={props.current ? "page" : undefined}
+            aria-label={props.label}
+            title={props.label}
             onClick={(e) => {
                 if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
                 e.preventDefault();
@@ -198,24 +198,6 @@ export function PixBar({ p }: { p: number | null }) {
     return (
         <div className={`pixbar${p === null ? " empty" : ""}`} aria-hidden="true">
             {Array.from({ length: 20 }, (_, k) => <i key={k} className={k < on ? "on" : undefined} style={{ ["--k" as string]: k }} />)}
-        </div>
-    );
-}
-
-/** Ring of 20 pixel cells around the chance of outcome A. */
-export function Gauge({ p, label }: { p: number | null; label: string }) {
-    const on = p === null ? 0 : Math.round(p * 20);
-    return (
-        <div className="gauge" role="img" aria-label={p === null ? "No price yet" : `${Math.round(p * 100)}% ${label}`}>
-            <svg viewBox="-32 -32 64 64" aria-hidden="true">
-                {Array.from({ length: 20 }, (_, k) => {
-                    const a = (k / 20) * 2 * Math.PI - Math.PI / 2;
-                    return <rect key={k} x={Math.cos(a) * 26 - 3} y={Math.sin(a) * 26 - 3} width="6" height="6"
-                        transform={`rotate(${(k / 20) * 360} ${Math.cos(a) * 26} ${Math.sin(a) * 26})`}
-                        fill={k < on ? "var(--a)" : "var(--bg-3)"} />;
-                })}
-            </svg>
-            <div><b>{p === null ? "—" : `${Math.round(p * 100)}%`}</b><small>chance</small></div>
         </div>
     );
 }
