@@ -1,0 +1,8 @@
+[package]
+name = "spike-outer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+sp1-zkvm = { version = "6.8.1", features = ["verify"] }
+sha2 = "0.10"

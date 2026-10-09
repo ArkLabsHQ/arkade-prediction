@@ -1,0 +1,3 @@
+[workspace]
+members = ["inner", "outer", "script"]
+resolver = "2"

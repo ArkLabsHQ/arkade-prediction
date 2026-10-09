@@ -21,6 +21,8 @@ const succinct = {
 };
 // Our zk/ctf-payout proof of the Buccaneers vs. Cowboys CTF payout, on circuit v6.1.0.
 const ours = { ...(JSON.parse(fixture("ctf-payout-groth16.json")) as Omit<typeof succinct, "K">), K: vk(fixture("Groth16Verifier.v6.1.0.sol")) };
+// zk/spike-recursion: an outer SP1 program that verifies an inner compressed SP1 proof, wrapped in Groth16 v6.1.0.
+const recursion = { ...(JSON.parse(fixture("recursion-groth16.json")) as Omit<typeof succinct, "K">), K: ours.K };
 
 const point = (P: { toAffine(): { x: bigint; y: bigint } }, name: string) => ({ [`${name}.x`]: P.toAffine().x, [`${name}.y`]: P.toAffine().y });
 const g2 = (name: string, x1: bigint, x0: bigint, y1: bigint, y0: bigint) => ({ [`${name}.xC1`]: x1, [`${name}.xC0`]: x0, [`${name}.yC1`]: y1, [`${name}.yC0`]: y0 });
@@ -30,6 +32,7 @@ describe("SP1 Groth16 proof verified in an Arkade covenant", () => {
     it.each([
         ["Succinct's v6.0.0 fixture proof", succinct],
         ["our CTF payout proof", ours],
+        ["a recursive (proof-of-proof) SP1 proof", recursion],
     ])("spends on %s and refuses other public values and a tampered proof", { timeout: 600_000 }, async (label, f) => {
         const K = f.K;
         const pub = (i: number) => bn254.G1.Point.fromAffine({ x: K(`PUB_${i}_X`), y: K(`PUB_${i}_Y`) });
