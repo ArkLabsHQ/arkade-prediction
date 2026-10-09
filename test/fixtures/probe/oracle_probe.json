@@ -1,0 +1,145 @@
+{
+  "formatVersion": 1,
+  "contractName": "OracleProbe",
+  "constructorInputs": [
+    {
+      "name": "evmSigner",
+      "type": "bytes"
+    },
+    {
+      "name": "p256Signer",
+      "type": "bytes"
+    },
+    {
+      "name": "threshold",
+      "type": "int"
+    }
+  ],
+  "functions": [
+    {
+      "name": "evm",
+      "arkade": {
+        "inputs": [
+          {
+            "name": "payload",
+            "type": "bytes"
+          },
+          {
+            "name": "sig",
+            "type": "signature"
+          }
+        ],
+        "asm": [
+          "<threshold>",
+          "<evmSigner>",
+          "OP_2",
+          "OP_PICK",
+          "4",
+          "OP_DIGEST",
+          "OP_4",
+          "OP_ROLL",
+          "OP_SWAP",
+          "OP_ROT",
+          "OP_CHECKSIGFROMSTACK",
+          "OP_VERIFY",
+          "OP_SWAP",
+          "0",
+          "4",
+          "OP_SUBSTR",
+          "OP_BIN2NUM",
+          "OP_SWAP",
+          "OP_GREATERTHANOREQUAL"
+        ]
+      },
+      "leaves": [
+        {
+          "name": "evm",
+          "witness": [
+            {
+              "name": "serverSig",
+              "type": "signature",
+              "encoding": "schnorr-64",
+              "injected": true
+            },
+            {
+              "name": "emulatorSig",
+              "type": "signature",
+              "encoding": "schnorr-64",
+              "injected": true
+            }
+          ],
+          "asm": [
+            "<SERVER_KEY>",
+            "OP_CHECKSIGVERIFY",
+            "<EMULATOR_KEY:evm>",
+            "OP_CHECKSIG"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "p256",
+      "arkade": {
+        "inputs": [
+          {
+            "name": "payload",
+            "type": "bytes"
+          },
+          {
+            "name": "sig",
+            "type": "signature"
+          }
+        ],
+        "asm": [
+          "<p256Signer>",
+          "OP_SWAP",
+          "OP_SHA256",
+          "OP_ROT",
+          "OP_SWAP",
+          "OP_ROT",
+          "OP_CHECKSIGFROMSTACK"
+        ]
+      },
+      "leaves": [
+        {
+          "name": "p256",
+          "witness": [
+            {
+              "name": "serverSig",
+              "type": "signature",
+              "encoding": "schnorr-64",
+              "injected": true
+            },
+            {
+              "name": "emulatorSig",
+              "type": "signature",
+              "encoding": "schnorr-64",
+              "injected": true
+            }
+          ],
+          "asm": [
+            "<SERVER_KEY>",
+            "OP_CHECKSIGVERIFY",
+            "<EMULATOR_KEY:p256>",
+            "OP_CHECKSIG"
+          ]
+        }
+      ]
+    }
+  ],
+  "source": {
+    "entry": "oracle_probe.ark",
+    "files": {
+      "oracle_probe.ark": "pragma arkade ^0.1.0;\n\n// Feasibility probe: settle from signatures made by other-chain oracles.\ncontract OracleProbe(bytes evmSigner, bytes p256Signer, int threshold) {\n  // EVM-style oracle: ECDSA/secp256k1 over keccak256(payload); the payload's first 4 bytes carry the value.\n  function evm(bytes payload, signature sig) {\n    bytes msg = digest(payload, 4);\n    require(checkSigFromStack(sig, evmSigner, msg), \"evm sig\");\n    require(bin2num(substr(payload, 0, 4)) >= threshold, \"value\");\n  }\n\n  // HSM / KMS / passkey attestor: ECDSA/P-256 over a SHA-256 digest.\n  function p256(bytes payload, signature sig) {\n    bytes32 h = sha256(payload);\n    require(checkSigFromStack(sig, p256Signer, h), \"p256 sig\");\n  }\n}\n"
+    }
+  },
+  "compiler": {
+    "name": "arkadec",
+    "version": "0.1.0",
+    "options": {
+      "optimize": true
+    }
+  },
+  "updatedAt": "2026-10-09T04:50:49.023623700+00:00",
+  "fingerprint": "sha256:590dc30c1f2fa8fc0639c228dd7ac213b50e7747a0e62bc414548d646ca76ece"
+}

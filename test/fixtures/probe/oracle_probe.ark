@@ -1,0 +1,17 @@
+pragma arkade ^0.1.0;
+
+// Feasibility probe: settle from signatures made by other-chain oracles.
+contract OracleProbe(bytes evmSigner, bytes p256Signer, int threshold) {
+  // EVM-style oracle: ECDSA/secp256k1 over keccak256(payload); the payload's first 4 bytes carry the value.
+  function evm(bytes payload, signature sig) {
+    bytes msg = digest(payload, 4);
+    require(checkSigFromStack(sig, evmSigner, msg), "evm sig");
+    require(bin2num(substr(payload, 0, 4)) >= threshold, "value");
+  }
+
+  // HSM / KMS / passkey attestor: ECDSA/P-256 over a SHA-256 digest.
+  function p256(bytes payload, signature sig) {
+    bytes32 h = sha256(payload);
+    require(checkSigFromStack(sig, p256Signer, h), "p256 sig");
+  }
+}
