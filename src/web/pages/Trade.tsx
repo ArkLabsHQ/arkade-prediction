@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { CARRIER_SATS, mergeSets, mintSets, redeemAll } from "../../core/actions.js";
-import type { Side } from "../../core/offers.js";
+import { MIN_BET_SATS, minFillFor, offerTooSmall, type Side } from "../../core/offers.js";
 import { BINARY_VECTORS, redemptionPayout, type BinaryOutcome } from "../../core/payout.js";
 import type { BoxJson, CertificateJson, MarketJson, OfferJson, Outcome } from "../../shared/api.js";
 import { api, refreshOffers } from "../api.js";
@@ -82,6 +82,7 @@ function Ticket({ m, chain, session, onChanged, offers }: Live & { offers?: Offe
     else if (!qty) blocker = "Enter a whole number of shares";
     else if (!plan || plan.legs.length === 0) blocker = "No liquidity";
     else if (plan.qty < qty) blocker = `Only ${n(plan.qty)} of ${n(qty)} shares can be filled from this book (${n(plan.depth)} resting, some only in larger minimum fills)`;
+    else if (plan.notional < MIN_BET_SATS) blocker = `A bet must be worth at least ${sats(MIN_BET_SATS)}; this one is ${sats(plan.notional)}`;
     else if (bound === null) blocker = `Enter a valid ${side === "buy" ? "max spend" : "min receive"}`;
     else if (side === "buy" ? plan.notional > bound : plan.notional < bound) blocker = side === "buy" ? "The fill costs more than your max spend" : "The fill pays less than your min receive";
     else if (side === "buy" && holdings && holdings.plainSats < plan.notional + carriers) {
@@ -304,13 +305,14 @@ function OrderForm({ m, chain, session, onChanged }: Live) {
     const [outcome, setOutcome] = useState<Outcome>("yes");
     const [priceText, setPrice] = useState("");
     const [sizeText, setSize] = useState("1");
-    const [minText, setMin] = useState("1");
+    const [minText, setMin] = useState("");
     const [expiry, setExpiry] = useState<string>("none");
     const [custom, setCustom] = useState("");
     const act = useAction();
     const price = count(priceText);
     const size = count(sizeText);
-    const minFill = count(minText);
+    const autoMin = price ? minFillFor(price) : null;
+    const minFill = minText ? count(minText) : autoMin;
     const label = m.outcomes[outcome === "yes" ? 0 : 1];
     const held = holdings?.assets.get(assetOf(m, outcome)) ?? 0n;
     const customUnix = custom ? Math.floor(new Date(custom).getTime() / 1000) : NaN;
@@ -320,6 +322,7 @@ function OrderForm({ m, chain, session, onChanged }: Live) {
     if (!price || price >= unit) blocker = `Price must be 1 to ${n(unit - 1n)} sats per share`;
     else if (!size) blocker = "Enter a whole number of shares";
     else if (!minFill || minFill > size) blocker = "Min fill must be between 1 and the order size";
+    else if (offerTooSmall({ priceSats: price, minFill }, size)) blocker = offerTooSmall({ priceSats: price, minFill }, size)!;
     else if (expiry === "custom" && !(customUnix > Date.now() / 1000 + 60)) blocker = "Pick an expiry at least a minute ahead";
     else if (side === "buy" && holdings && holdings.plainSats < size * price + 2n * CARRIER_SATS) {
         blocker = `Needs ${sats(size * price + 2n * CARRIER_SATS)} in spendable coins (budget, ${CARRIER_SATS}-sat reserve and change carrier)`;
@@ -355,7 +358,7 @@ function OrderForm({ m, chain, session, onChanged }: Live) {
             <div className="row2">
                 <label className="field">
                     <span>Min fill (shares)</span>
-                    <input inputMode="numeric" autoComplete="off" value={minText} onChange={(e) => setMin(e.target.value)} />
+                    <input inputMode="numeric" autoComplete="off" value={minText} onChange={(e) => setMin(e.target.value)} placeholder={autoMin ? `${n(autoMin)} (${sats(MIN_BET_SATS)})` : ""} />
                 </label>
                 <label className="field">
                     <span>Expiry</span>

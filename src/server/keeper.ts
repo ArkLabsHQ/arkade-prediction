@@ -11,7 +11,7 @@ import { marketContracts, oracleSlots, PRICE_SIGNER_SLOTS, type PriceTerms, type
 import { REDSTONE_PRIMARY_SIGNERS, feedIdBytes, latestPackages, packageSignerKey, priceReport } from "../core/redstone.js";
 import { storedRound } from "./rounds.js";
 import { sha256 } from "@noble/hashes/sha2.js";
-import { offerContract } from "../core/offers.js";
+import { MIN_BET_SATS, minFillFor, offerContract } from "../core/offers.js";
 import { renewCovenantVtxos, type RenewTarget } from "../core/renewal.js";
 import { coinFromJson, offerTermsFromJson, offerTermsToJson, termsToJson, type CoinJson, type OfferTermsJson } from "../shared/api.js";
 import { all, now, run, type Db } from "./db.js";
@@ -177,7 +177,7 @@ export class Keeper {
             const target = lpAsks(JSON.parse(m.source_snapshot).referencePrices, JSON.parse(m.outcomes) as string[], terms.unitSats, none)[o.outcome as "yes" | "no"];
             const price = BigInt((JSON.parse(o.terms) as OfferTermsJson).priceSats);
             const gap = target > price ? target - price : price - target;
-            if (target === 0n || gap * 10_000n < terms.unitSats * REPRICE_BPS) continue;
+            if (target === 0n || gap * 10_000n < terms.unitSats * REPRICE_BPS || BigInt(o.remaining) * target < MIN_BET_SATS) continue;
             this.d.wf.enqueue(`reprice:${o.id}`, "lp-reprice", o.market_id, { offerId: o.id, price: target.toString() });
         }
     }
@@ -442,11 +442,11 @@ export class Keeper {
             const tk = `${outcome}Terms`;
             const fk = `${outcome}FundingTxid`;
             // Same price band registerOffer enforces: a price it would reject must not fund an offer first.
-            if (price <= 0n || price >= terms.unitSats || p[`${outcome}Registered`]) continue;
+            if (price <= 0n || price >= terms.unitSats || sets * price < MIN_BET_SATS || p[`${outcome}Registered`]) continue;
             if (!p[tk]) {
                 p[tk] = offerTermsToJson({
                     side: "sell", maker: lpKey, makerScript: lp.script, assetId: terms.assets[outcome], priceSats: price,
-                    minFill: 1n, expiresAt: lpExpiry(quotesUntil(market), nowS), reserveSats: 330n, exitDelaySeconds: this.d.net.exitDelaySeconds,
+                    minFill: minFillFor(price), expiresAt: lpExpiry(quotesUntil(market), nowS), reserveSats: 330n, exitDelaySeconds: this.d.net.exitDelaySeconds,
                 });
                 this.mark(wf, { [tk]: p[tk] });
             }
@@ -478,7 +478,8 @@ export class Keeper {
         const p = wf.payload as Record<string, unknown>;
         if (!p.cancelled) {
             const offer = await refreshOffer(this.d, p.offerId as string);
-            if (offer.status !== "open" || !offer.coin || offer.remaining === "0") return undefined;
+            // A leftover too small to re-post stays on the book at the old price rather than leave it.
+            if (offer.status !== "open" || !offer.coin || BigInt(offer.remaining) * BigInt(p.price as string) < MIN_BET_SATS) return undefined;
             this.mark(wf, { qty: offer.remaining, assetId: offerTermsFromJson(offer.terms).assetId, step: "cancelled" });
             const { txid } = await cancelOffer(ctx, lp, { terms: offerTermsFromJson(offer.terms), coin: coinFromJson(offer.coin) });
             this.mark(wf, { cancelled: txid, step: null, inputs: null, finalCheckpoints: null });
@@ -490,7 +491,7 @@ export class Keeper {
         if (!p.terms) {
             p.terms = offerTermsToJson({
                 side: "sell", maker: await lp.identity.xOnlyPublicKey(), makerScript: lp.script, assetId: p.assetId as string, priceSats: BigInt(p.price as string),
-                minFill: 1n, expiresAt: lpExpiry(quotesUntil(market), nowS), reserveSats: 330n, exitDelaySeconds: this.d.net.exitDelaySeconds,
+                minFill: minFillFor(BigInt(p.price as string)), expiresAt: lpExpiry(quotesUntil(market), nowS), reserveSats: 330n, exitDelaySeconds: this.d.net.exitDelaySeconds,
             });
             this.mark(wf, { terms: p.terms });
         }

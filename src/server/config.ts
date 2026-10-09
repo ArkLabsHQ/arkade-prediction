@@ -113,6 +113,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
         if (c.DEV_ENDPOINTS) throw new Error("DEV_ENDPOINTS is only allowed on regtest");
     }
     if (c.MARKET_UNIT_SATS % 2 !== 0) throw new Error("MARKET_UNIT_SATS must be even");
+    if (c.MARKET_UNIT_SATS < 330) throw new Error("MARKET_UNIT_SATS must be at least 330 so one set is a valid bet");
     // ORACLE_SECRET_KEY on the app runs a local attestor beside it (see embeddedAttestor.ts): one container.
     const attestorSecret = secret(env, "ORACLE_SECRET_KEY");
     if ((c.POLYMARKET_ENABLED || attestorSecret) && c.POLYGON_RPC_URLS.length < 2) throw new Error("POLYGON_RPC_URLS needs at least two providers");

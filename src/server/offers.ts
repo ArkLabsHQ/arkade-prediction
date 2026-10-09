@@ -1,7 +1,7 @@
 import { Transaction } from "@arkade-os/sdk";
 import { base64, hex } from "@scure/base";
 import type { Coin } from "../core/arkadeTx.js";
-import { offerContract } from "../core/offers.js";
+import { offerContract, offerTooSmall } from "../core/offers.js";
 import {
     offerTermsFromJson,
     type CoinJson,
@@ -110,6 +110,8 @@ export async function registerOffer(d: Deps, req: PostOfferRequest): Promise<Off
     if (foreign) throw new HttpError(400, "assets", "offer coin carries unrelated assets");
     const remaining = remainingOf(t, coin);
     if (remaining <= 0n) throw new HttpError(400, "size", "offer is empty");
+    const tooSmall = offerTooSmall(parsed, remaining);
+    if (tooSmall) throw new HttpError(400, "size", tooSmall);
     const id = `${coin.txid}:${coin.vout}`;
     const at = now();
     run(d.db, "INSERT INTO offers(id, market_id, outcome, side, terms, script, maker_script, coin, status, remaining, funding_txid, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?)",

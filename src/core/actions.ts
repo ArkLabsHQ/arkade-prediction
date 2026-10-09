@@ -13,7 +13,7 @@ import {
 } from "./arkadeTx.js";
 import { assetIdOf } from "./assets.js";
 import { genesisPacket, marketContracts, type ArkadeClient, type Contract, type MarketAssets, type VaultTerms } from "./market.js";
-import { offerContract, type OfferTerms } from "./offers.js";
+import { MIN_BET_SATS, offerContract, offerTooSmall, type OfferTerms } from "./offers.js";
 import { BINARY_VECTORS, redemptionPayout, type BinaryOutcome } from "./payout.js";
 
 export const CARRIER_SATS = DUST_SATS;
@@ -361,6 +361,8 @@ export interface LiveOffer {
 
 /** Funds a standing offer from the maker's wallet. Sell offers lock units, buy offers lock budget. */
 export async function postOffer(ctx: Ctx, maker: Party, terms: OfferTerms, size: bigint) {
+    const tooSmall = offerTooSmall(terms, size);
+    if (tooSmall) throw new Error(tooSmall);
     const contract = offerContract(ctx.ark, terms);
     const locked = terms.side === "sell" ? [{ assetId: terms.assetId, amount: size }] : [];
     const value = terms.side === "sell" ? CARRIER_SATS : size * terms.priceSats + terms.reserveSats;
@@ -432,6 +434,7 @@ export async function takeOffers(
     if (legs.some((l) => l.offer.terms.side !== side || l.offer.terms.assetId !== assetId)) throw new Error("legs must share side and asset");
     const qty = legs.reduce((s, l) => s + l.qty, 0n);
     const notional = legs.reduce((s, l) => s + l.qty * l.offer.terms.priceSats, 0n);
+    if (notional < MIN_BET_SATS) throw new Error(`a bet must be worth at least ${MIN_BET_SATS} sats`);
     if (side === "sell" && limits.maxSpendSats !== undefined && notional > limits.maxSpendSats) throw new Error(`cost ${notional} exceeds max spend ${limits.maxSpendSats}`);
     if (side === "buy" && limits.minReceiveSats !== undefined && notional < limits.minReceiveSats) throw new Error(`proceeds ${notional} below minimum ${limits.minReceiveSats}`);
     const offerInputs: InputSpec[] = legs.map((l) => ({

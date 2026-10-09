@@ -1,5 +1,6 @@
 import sellOfferArtifact from "../../contracts/artifacts/sell_offer.json" with { type: "json" };
 import buyOfferArtifact from "../../contracts/artifacts/buy_offer.json" with { type: "json" };
+import { DUST_SATS } from "./arkadeTx.js";
 import { assetScriptArgs } from "./assets.js";
 import type { ArkadeClient, Contract } from "./market.js";
 import { loadProgram, type ContractArtifact } from "./programs.js";
@@ -47,6 +48,19 @@ export function offerContract(ark: ArkadeClient, t: OfferTerms): Contract {
     return t.side === "sell"
         ? ark.contract(OFFER_PROGRAMS.sell, common)
         : ark.contract(OFFER_PROGRAMS.buy, { ...common, reserve: t.reserveSats });
+}
+
+/** Smallest bet or offer, in sats. */
+export const MIN_BET_SATS = DUST_SATS;
+
+/** Smallest min fill at `price` that keeps every partial fill at or above MIN_BET_SATS. */
+export const minFillFor = (price: bigint) => (MIN_BET_SATS + price - 1n) / price;
+
+/** Why an offer of `size` units on `t` is too small to post, or undefined. */
+export function offerTooSmall(t: Pick<OfferTerms, "priceSats" | "minFill">, size: bigint): string | undefined {
+    if (size * t.priceSats < MIN_BET_SATS) return `An offer must be worth at least ${MIN_BET_SATS} sats`;
+    if (t.minFill * t.priceSats < MIN_BET_SATS) return `Min fill must be worth at least ${MIN_BET_SATS} sats (${minFillFor(t.priceSats)} shares at this price)`;
+    return undefined;
 }
 
 /** Sats a taker pays (sell side) or receives (buy side) for `qty` units. */

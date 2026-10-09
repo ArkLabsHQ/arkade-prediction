@@ -189,3 +189,7 @@ Each entry: decision, reason, rejected alternatives. Newest last.
     unspendable OP_RETURN VTXOs. `buildArkadeTx`, which every transaction we build goes through, refuses any
     output under `DUST_SATS` (330, the operator's `dust`). Change, carriers, reserves and match surplus already
     stay at or above it; the guard makes that a rule rather than a property of each builder.
+    Bets and offers have the same floor, `MIN_BET_SATS`: a fill must be worth at least 330 sats, and a new offer
+    must be worth that in total and per minimum fill, so its min fill defaults to `ceil(330 / price)`. The
+    covenants still let the last remainder of an offer go below its min fill; a taker can only take it alongside
+    other legs that bring the bet to 330. An LP ask whose leftover is under 330 at the new price is not repriced.
