@@ -71,8 +71,15 @@ export class Workflows {
         return r && toWorkflow(r);
     }
 
+    /**
+     * Settlement and payouts first: liquidity and activation retries (an underfunded LP or operator) are numerous
+     * and old, and by age alone they filled every batch and starved resolutions behind them.
+     */
     due(limit = 20, at = Date.now()): Workflow[] {
-        return all<Row>(this.db, "SELECT * FROM workflows WHERE state IN ('pending','submitting') AND next_at <= ? ORDER BY created_at LIMIT ?", at, limit).map(toWorkflow);
+        return all<Row>(this.db,
+            `SELECT * FROM workflows WHERE state IN ('pending','submitting') AND next_at <= ?
+             ORDER BY state = 'pending', kind IN (${DEFERRABLE.map(() => "?").join(",")}), created_at LIMIT ?`,
+            at, ...DEFERRABLE, limit).map(toWorkflow);
     }
 
     list(filter: { state?: WorkflowState; marketId?: string; limit?: number } = {}): Workflow[] {
@@ -100,6 +107,8 @@ export class Workflows {
 export function backoffMs(attempts: number, baseMs = 2000, capMs = 5 * 60_000): number {
     return Math.floor(Math.random() * Math.min(capMs, baseMs * 2 ** Math.min(attempts, 10)));
 }
+
+const DEFERRABLE = ["lp-liquidity", "lp-reprice", "activate"];
 
 /** Widens per re-arm so a doomed row stops churning. */
 export function rearmCooldownMs(rearms: number, baseMs = 2 * 60_000, capMs = 60 * 60_000): number {
