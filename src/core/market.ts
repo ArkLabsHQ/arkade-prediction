@@ -3,6 +3,7 @@ import { hex } from "@scure/base";
 import marketVaultArtifact from "../../contracts/artifacts/market_vault.json" with { type: "json" };
 import marketVaultAnyKeyArtifact from "../../contracts/artifacts/market_vault_anykey.json" with { type: "json" };
 import priceVaultArtifact from "../../contracts/artifacts/price_vault.json" with { type: "json" };
+import upDownVaultArtifact from "../../contracts/artifacts/updown_vault.json" with { type: "json" };
 import resolvedVaultArtifact from "../../contracts/artifacts/resolved_vault.json" with { type: "json" };
 import { assetScriptArgs } from "./assets.js";
 import { attestorScheme } from "./attestation.js";
@@ -13,6 +14,7 @@ export const PROGRAMS = {
     marketVault: loadProgram(marketVaultArtifact as ContractArtifact),
     marketVaultAnyKey: loadProgram(marketVaultAnyKeyArtifact as ContractArtifact),
     priceVault: loadProgram(priceVaultArtifact as ContractArtifact),
+    upDownVault: loadProgram(upDownVaultArtifact as ContractArtifact),
     resolvedVault: loadProgram(resolvedVaultArtifact as ContractArtifact),
 };
 
@@ -35,13 +37,15 @@ export interface MarketAssets {
     no: string;
 }
 
-/** A market settled by an oracle's own signed price report (RedStone format) instead of our attestors. */
-export interface PriceTerms {
+/**
+ * A market settled by RedStone's own signed price reports instead of our attestors. Rounds are ms on 10 s
+ * boundaries. "threshold": YES when the median price of round settleAtMs is at or above strike (x1e8).
+ * "updown": YES (Up) when the median of round endAtMs is at or above the median of round startAtMs.
+ */
+export type PriceTerms = PriceTermsBase & ({ kind: "threshold"; strike: bigint; settleAtMs: bigint } | { kind: "updown"; startAtMs: bigint; endAtMs: bigint });
+
+interface PriceTermsBase {
     feedId: Uint8Array;
-    /** Price x1e8, as RedStone signs it; YES when the reported price is at or above it. */
-    strike: bigint;
-    /** The single RedStone round (ms, on a 10 s boundary) the market settles on. */
-    settleAtMs: bigint;
     /** 34-byte 0x10 ECDSA/secp256k1 keys, one per slot; empty-signature slots count as absent. */
     signers: Uint8Array[];
     quorum: number;
@@ -126,16 +130,17 @@ function priceContracts(ark: ArkadeClient, terms: VaultTerms, p: PriceTerms) {
     if (new Set(p.signers.map((k) => hex.encode(k))).size !== PRICE_SIGNER_SLOTS || p.quorum < 1 || p.quorum > PRICE_SIGNER_SLOTS) {
         throw new Error("price signers must be distinct, with a quorum of 1..5");
     }
-    if (p.settleAtMs <= 0n || p.settleAtMs % 10_000n !== 0n) throw new Error("settleAtMs must be a RedStone round (multiple of 10 s)");
+    const rounds = p.kind === "threshold" ? [p.settleAtMs] : [p.startAtMs, p.endAtMs];
+    if (rounds.some((r) => r <= 0n || r % 10_000n !== 0n)) throw new Error("rounds must be RedStone rounds (multiples of 10 s)");
+    if (p.kind === "updown" && p.endAtMs <= p.startAtMs) throw new Error("the end round must follow the start round");
     if (terms.unitSats <= 0n || terms.unitSats % 2n !== 0n) throw new Error("unit must be a positive even number of sats");
     const resolved = { yes: resolvedVault(ark, terms, "yes"), no: resolvedVault(ark, terms, "no"), invalid: resolvedVault(ark, terms, "invalid") };
-    const vault = ark.contract(PROGRAMS.priceVault, {
+    const vault = ark.contract(p.kind === "threshold" ? PROGRAMS.priceVault : PROGRAMS.upDownVault, {
         ...assetArgs(terms.assets),
         unit: terms.unitSats,
         capValue: terms.capSats,
         feedId: p.feedId,
-        strike: p.strike,
-        settleAtMs: p.settleAtMs,
+        ...(p.kind === "threshold" ? { strike: p.strike, settleAtMs: p.settleAtMs } : { startAtMs: p.startAtMs, endAtMs: p.endAtMs }),
         ...Object.fromEntries(p.signers.map((k, i) => [`signers.${i}`, k])),
         quorum: BigInt(p.quorum),
         closeAt: terms.closeAt,

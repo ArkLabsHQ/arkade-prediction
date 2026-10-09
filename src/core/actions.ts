@@ -266,18 +266,42 @@ export async function resolveMarket(ctx: Ctx, terms: VaultTerms, outcome: Binary
     ]);
 }
 
-/** Settles a price market on the side that at least `quorum` signers' own reports support. */
-export async function resolvePriceMarket(ctx: Ctx, terms: VaultTerms, report: { values: Uint8Array[]; stamps: Uint8Array[]; signatures: Uint8Array[]; prices: (bigint | undefined)[] }) {
+type SignedRound = { values: Uint8Array[]; stamps: Uint8Array[]; signatures: Uint8Array[]; prices: (bigint | undefined)[] };
+
+const median = (r: SignedRound) => {
+    const xs = r.prices.filter((x): x is bigint => x !== undefined).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+    return xs[Math.floor(xs.length / 2)];
+};
+
+/**
+ * Settles a price market on RedStone's signed rounds: the settlement round for "threshold" markets, the end round
+ * then the start round for "updown" ones. The side is the one the quorum of signed prices supports.
+ */
+export async function resolvePriceMarket(ctx: Ctx, terms: VaultTerms, report: SignedRound, start?: SignedRound) {
     const { vault, resolved } = marketContracts(ctx.ark, terms);
     const coin = await contractCoin(ctx, vault, terms.assets.ctrl);
     const p = terms.price;
     if (!coin || !p) throw new Error("price vault not found");
-    const above = report.prices.filter((x) => x !== undefined && x >= p.strike).length;
-    const below = report.prices.filter((x) => x !== undefined && x < p.strike).length;
-    const outcome = above >= p.quorum ? "yes" : below >= p.quorum ? "no" : undefined;
-    if (!outcome) throw new Error(`no side has ${p.quorum} signed reports (${above} above, ${below} below the strike)`);
     const slot = (name: string, xs: Uint8Array[]) => Object.fromEntries(xs.map((x, i) => [`${name}.${i}`, x]));
-    const args = { ...slot("values", report.values), ...slot("stamps", report.stamps), ...slot("sigs", report.signatures) };
+    const count = (r: SignedRound, keep: (x: bigint) => boolean) => r.prices.filter((x) => x !== undefined && keep(x)).length;
+    let outcome: "yes" | "no" | undefined;
+    let args: Record<string, bigint | Uint8Array>;
+    if (p.kind === "threshold") {
+        outcome = count(report, (x) => x >= p.strike) >= p.quorum ? "yes" : count(report, (x) => x < p.strike) >= p.quorum ? "no" : undefined;
+        args = { ...slot("values", report.values), ...slot("stamps", report.stamps), ...slot("sigs", report.signatures) };
+    } else {
+        if (!start) throw new Error("an up/down market needs the start round too");
+        const x = median(start);
+        if (x === undefined) throw new Error("no signed start price");
+        const up = count(report, (v) => v >= x) >= p.quorum && count(start, (v) => v <= x) >= p.quorum;
+        const down = count(report, (v) => v < x) >= p.quorum && count(start, (v) => v >= x) >= p.quorum;
+        outcome = up ? "yes" : down ? "no" : undefined;
+        args = {
+            x, ...slot("endValues", report.values), ...slot("endStamps", report.stamps), ...slot("endSigs", report.signatures),
+            ...slot("startValues", start.values), ...slot("startStamps", start.stamps), ...slot("startSigs", start.signatures),
+        };
+    }
+    if (!outcome) throw new Error(`no side has ${p.quorum} signed reports`);
     const { txid } = await execute(ctx, [{ kind: "covenant", coin, contract: vault, fn: outcome === "yes" ? "resolveYes" : "resolveNo", args }], [
         { script: resolved[outcome].pkScript, amount: BigInt(coin.value), assets: [{ assetId: terms.assets.ctrl, amount: 1n }] },
     ]);

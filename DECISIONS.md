@@ -154,3 +154,7 @@ Each entry: decision, reason, rejected alternatives. Newest last.
     they are recovered from the gateway's own signatures. The slots are unrolled because a loop counter under a
     bound message compiles to OP_PUT, which the pinned SDK cannot load. Chosen first because RedStone's latest
     values are public; Pyth Pro and Chainlink Data Streams need paid keys.
+39. **Up/Down markets without a trusted strike.** `UpDownVault` commits a start and an end RedStone round instead of
+    a strike. Up needs a witness x with a quorum of end prices >= x and a quorum of start prices <= x, which holds
+    exactly when median(end) >= median(start); Down mirrors it with end < x and start >= x, so only one side is
+    ever provable. The vault can therefore open before the start, as Polymarket's Up/Down markets do.
