@@ -121,7 +121,7 @@ async function main(): Promise<void> {
         return {
             process: { rssBytes: process.memoryUsage().rss, heapUsedBytes: process.memoryUsage().heapUsed, cpu: process.cpuUsage(), uptimeSeconds: Math.round(process.uptime()) },
             health: h,
-            importLag: { lastRun: getMeta(db, "import.lastRun") ?? null, lastError: getMeta(db, "import.lastError") ?? null },
+            importLag: { lastRun: getMeta(db, "import.lastRun") ?? null, lastError: getMeta(db, "import.lastError") ?? null, lastResult: JSON.parse(getMeta(db, "import.lastResult") || "null") },
             oracleLag: all(db, "SELECT id, question, close_at FROM markets WHERE status IN ('halted','closed','resolving') AND close_at < ? ORDER BY close_at LIMIT 50", Math.floor(Date.now() / 1000)),
             workflows: { failed: wf.list({ state: "failed", limit: 50 }), inFlight: wf.list({ state: "submitting", limit: 50 }), pending: wf.list({ state: "pending", limit: 50 }), done: wf.list({ state: "done", limit: 30 }) },
             liquidity: all(db, "SELECT market_id, outcome, side, COUNT(*) offers, SUM(CAST(remaining AS INTEGER)) units FROM offers WHERE status = 'open' GROUP BY market_id, outcome, side"),

@@ -89,7 +89,7 @@ type Wf = { id: string; kind: string; marketId: string | null; state: string; at
 interface OverviewJson {
     process: { rssBytes: number; uptimeSeconds: number };
     health: Record<string, Check> | Failed;
-    importLag: { lastRun: string | null; lastError: string | null };
+    importLag: { lastRun: string | null; lastError: string | null; lastResult?: { seen: number; eligible: number; activated: number; ineligibleByCode: Record<string, number> } | null };
     oracleLag: { id: string; question: string; close_at: number }[];
     workflows: { failed: Wf[]; inFlight: Wf[]; pending: Wf[]; done?: Wf[] };
     liquidity: { market_id: string; outcome: string; side: string; offers: number; units: number }[];
@@ -126,7 +126,10 @@ function Dashboard({ o }: { o: OverviewJson }) {
                     );
                 })}
                 <div className="kpi"><span className="kpi-label">Markets with LP books</span><strong className="num">{books}</strong></div>
-                <div className="kpi"><span className="kpi-label">Last import</span><strong>{ago(o.importLag.lastRun)}</strong>{o.importLag.lastError && <span className="error-text small">{o.importLag.lastError}</span>}</div>
+                <div className="kpi"><span className="kpi-label">Last import</span><strong>{ago(o.importLag.lastRun)}</strong>
+                    {o.importLag.lastResult && <span className="muted small">{o.importLag.lastResult.seen} seen · {o.importLag.lastResult.eligible} eligible · {o.importLag.lastResult.activated} opened</span>}
+                    {o.importLag.lastResult && <span className="muted small">{Object.entries(o.importLag.lastResult.ineligibleByCode).sort((x, y) => y[1] - x[1]).slice(0, 4).map(([k, v]) => `${k} ${v}`).join(" · ")}</span>}
+                    {o.importLag.lastError && <span className="error-text small">{o.importLag.lastError}</span>}</div>
                 <div className="kpi"><span className="kpi-label">Process</span><strong className="num">{Math.round(o.process.rssBytes / 2 ** 20)} MB</strong><span className="muted small">up {Math.round(o.process.uptimeSeconds / 3600)} h</span></div>
             </div>
             <WorkflowTable title={`Failed workflows (${wf.failed.length})`} rows={wf.failed} />

@@ -37,6 +37,7 @@ export async function importOnce(d: ImportDeps, upcoming: SourceMarket[] = []): 
         }
     }
     setMeta(db, "import.lastRun", now());
+    setMeta(db, "import.lastResult", JSON.stringify({ ...result, activated: result.activated.length }));
     setMeta(db, "import.lastError", errors.length ? `${now()} ${errors.join("; ")}` : "");
     if (errors.length === d.providers.length && errors.length > 0) throw new Error(errors.join("; "));
     return result;
