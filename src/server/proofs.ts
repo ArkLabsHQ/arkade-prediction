@@ -187,7 +187,8 @@ async function advance(d: ProofDeps, rpc: { polygon: Rpc; ethereum: Rpc }, job: 
         }
     } catch (err) {
         const attempts = j.attempts + 1;
-        save(d.db, { ...j, detail: `Retrying after a read error: ${String(err).slice(0, 300)}` }, attempts, Date.now() + Math.min(MAX_BACKOFF_MS, INTERVAL_MS * 2 ** attempts));
+        // detail is public; the error can name RPC hosts, and some providers put the API key in the hostname.
+        save(d.db, { ...j, detail: "Retrying after a read error from a chain data provider." }, attempts, Date.now() + Math.min(MAX_BACKOFF_MS, INTERVAL_MS * 2 ** attempts));
         d.log("proof step failed", { market: j.market_id, stage: j.stage, error: String(err).slice(0, 300) });
     }
 }

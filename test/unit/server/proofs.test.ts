@@ -129,7 +129,8 @@ describe("proof tracker", () => {
         await expect(proofTick(t.d)).resolves.toBeUndefined();
         const j = t.job()!;
         expect(j).toMatchObject({ stage: "waiting-source", attempts: 1 });
-        expect(String(j.detail)).toMatch(/polygon down/);
+        expect(String(j.detail)).toMatch(/read error/);
+        expect(String(j.detail)).not.toMatch(/polygon down/);
         expect(Number(j.next_at)).toBeGreaterThan(Date.now() + 100_000);
     });
 
