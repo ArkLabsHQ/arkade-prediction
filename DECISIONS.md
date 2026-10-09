@@ -166,3 +166,11 @@ Each entry: decision, reason, rejected alternatives. Newest last.
     They keep `kind = 'polymarket'` and are told apart by `oracle_policy = 'redstone'`, because the markets table's
     CHECK on kind cannot be changed without rebuilding a table four others reference. LP asks expire at the start
     round. They settle on RedStone, not on Polymarket's Chainlink stream; the rules text says the two can differ.
+41. **ZK settlement spike: SP1 Groth16 verifies in a covenant.** Succinct's own SP1 v6.0.0 Groth16 fixture proof
+    spends a covenant on the deployed emulator version: the script recomputes the public-values digest from
+    `sha256` (top 3 bits cleared, checked byte-wise because the language has no `%`), adds `digest*PUB_1` to a
+    precomputed `CONSTANT + vkey*PUB_0 + vkRoot*PUB_3 + nonce*PUB_4`, and checks the four-pair bn254 pairing.
+    Limits found: the pinned SDK cannot read ECPoint/G2Point artifact types (the test flattens them to the
+    compiler's per-field int slots) and the nonce is folded into the constant. The open part of native Polymarket
+    settlement is the prover: an SP1 program proving a CTF `payoutNumerators` slot through an Ethereum light client
+    (SP1-Helios), Polygon's checkpoint on Ethereum and a storage proof.
