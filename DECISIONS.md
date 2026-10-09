@@ -205,3 +205,18 @@ Each entry: decision, reason, rejected alternatives. Newest last.
     creator, so it needs `MIN_TRADERS` bettors and a probabilistic (MKT) or CANCEL resolution maps to INVALID 50/50.
     Both read the source twice and require agreement; that catches a torn read, not a dishonest source, and the
     attestor's trust is the source's. Every market carries a browse `section` from its tags and question.
+46. **An allowlisted resolver does not authenticate a condition.** Both reporters Polymarket uses are
+    permissionless: anyone can `initialize` a question on the UMA CTF adapters and anyone can `prepareMarket` on
+    the NegRiskAdapter, so a forged Gamma listing could point an import at a condition the attacker resolves,
+    and `POLYMARKET_RESOLVERS` would still pass it. What the chain does bind is the creator: a UMA
+    `questionID` is `keccak(ancillaryData || ",initializer:<msg.sender>")` and `questions(questionID).creator` is
+    that caller; a neg-risk `marketId` is `keccak(oracle, feeBips, metadata) & ~0xff` and `getOracle(marketId)`
+    is the account that prepared it. So `vetSource` reads one of those two, at each provider's finalized head
+    across a quorum, and refuses anything outside `POLYMARKET_CREATORS` / `POLYMARKET_NEGRISK_ORACLES` (defaults
+    are Polymarket's own, read on Polygon). It runs before activation, so nothing is funded on an unvetted
+    condition, and again in the attestor before it signs, which never relies on the server having run it.
+    Polymarket's crypto Up/Down resolver has no such binding: it reports for whoever calls it, each caller in its
+    own `questionId` namespace (`computeQuestionId(address,bytes32) = keccak(abi.encode(creator, q))`, confirmed
+    on chain), and exposes no view naming a condition's reporter. Its only authenticator would be the reporting
+    account, which rotates, so it is dropped from the resolver allowlist and `UPDOWN_SETTLEMENT=redstone`
+    (in-covenant RedStone rounds with pinned signers) stays the Up/Down path.

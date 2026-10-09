@@ -46,3 +46,38 @@ describe("source refresh", () => {
         expect(JSON.parse(one<{ s: string }>(db, "SELECT source_snapshot s FROM markets WHERE id = 'm'")!.s).referencePrices[0].price).toBe("0.7");
     });
 });
+
+describe("activation vetting", () => {
+    const eligible = { ...market("v1", "0.5"), endDate: new Date(Date.now() + 86_400_000).toISOString() };
+    const deps = (vetSource: () => Promise<{ ok: true } | { ok: false; reason: string }>) => {
+        const { db } = tempDb();
+        const provider = {
+            name: "polymarket", profile: "polymarket-ctf-v1-binary", vetSource,
+            discoverMarkets: async () => ({ markets: [eligible], next: null }),
+            fetchMarketDefinition: async () => eligible,
+            evaluateEligibility: () => ({ eligible: true, profile: "polymarket-ctf-v1-binary" }),
+        };
+        const cfg = {
+            IMPORT_MAX_PAGES: 1, IMPORT_PAGE_LIMIT: 100, IMPORT_TAGS: [], IMPORT_MAX_HORIZON_SECONDS: 1e10, IMPORT_MIN_HORIZON_SECONDS: 0,
+            IMPORT_MAX_ACTIVE: 5, IMPORT_MAX_PER_SECTION: 0, ORACLE_PUBKEYS: ["aa".repeat(32)], ORACLE_THRESHOLD: 1, ORACLE_EPOCH: 1,
+        };
+        return { db, d: { db, cfg, providers: [provider], wf: { enqueue: () => ({}) }, bus: { publish: () => {} }, timeoutDays: 60 } };
+    };
+
+    it("funds nothing when the chain does not vouch for the reporter, and records why", async () => {
+        const { db, d } = deps(async () => ({ ok: false, reason: "question creator 0xdead is not allowlisted" }));
+        const result = await importOnce(d as never);
+        expect(result.activated).toEqual([]);
+        expect(result.ineligibleByCode["unvetted-source"]).toBe(1);
+        expect(one(db, "SELECT 1 FROM markets")).toBeUndefined();
+        expect(one<{ code: string; eligible: number }>(db, "SELECT code, eligible FROM source_markets WHERE source_id = '42'"))
+            .toMatchObject({ code: "unvetted-source", eligible: 0 });
+    });
+
+    it("activates the same market once the vet passes", async () => {
+        const { db, d } = deps(async () => ({ ok: true }));
+        const result = await importOnce(d as never);
+        expect(result.activated).toHaveLength(1);
+        expect(one(db, "SELECT 1 FROM markets")).toBeTruthy();
+    });
+});

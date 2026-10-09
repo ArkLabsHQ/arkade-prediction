@@ -105,4 +105,9 @@ export interface MarketSourceProvider {
     screenResolved(markets: SourceMarket[]): Promise<string[]>;
     /** Re-checks evidence against the pinned profile (identity, resolver allowlist, vector shape). */
     verifyFinalResolution(market: SourceMarket, evidence: ResolutionEvidence, profile: string): { ok: true } | { ok: false; reason: string };
+    /**
+     * Authenticates from the chain who may report this market's result; a permissionless resolver makes its own
+     * address no proof. Runs before activation and again in the attestor, which never relies on the server. Fails closed.
+     */
+    vetSource?(market: SourceMarket): Promise<{ ok: true } | { ok: false; reason: string }>;
 }

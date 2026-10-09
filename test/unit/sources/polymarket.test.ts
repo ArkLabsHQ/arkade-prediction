@@ -46,13 +46,17 @@ interface SetupOpts {
     markets?: Record<string, unknown>;
     keyset?: unknown;
     allowlist?: string[];
+    creators?: string[];
+    negRiskOracles?: string[];
+    /** Synthetic exchanges, for reads the live captures in rpc.json do not cover. */
+    exchanges?: Exchange[];
 }
 
 function setup(opts: SetupOpts = {}) {
     const requests: string[] = [];
     const posts: { url: string; body: unknown }[] = [];
     const scenarios = opts.scenarios ?? (opts.scenario ? [opts.scenario] : []);
-    const exchanges: Exchange[] = [...rpc.chainId, ...scenarios.flatMap((s) => rpc.scenarios[s].exchanges as Exchange[])];
+    const exchanges: Exchange[] = [...rpc.chainId, ...scenarios.flatMap((s) => rpc.scenarios[s].exchanges as Exchange[]), ...(opts.exchanges ?? [])];
     const fake = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
         const url = String(input);
         requests.push(url);
@@ -78,6 +82,8 @@ function setup(opts: SetupOpts = {}) {
     const p = createPolymarketProvider({
         rpcUrls: opts.rpcUrls ?? (opts.scenario ? rpc.scenarios[opts.scenario].providers : [PUBLICNODE, DRPC]),
         resolverAllowlist: opts.allowlist ?? ALLOWLIST,
+        ...(opts.creators ? { creatorAllowlist: opts.creators } : {}),
+        ...(opts.negRiskOracles ? { negRiskOracleAllowlist: opts.negRiskOracles } : {}),
         fetch: fake as typeof fetch,
     });
     return { p, requests, posts };
@@ -453,5 +459,94 @@ describe("crypto Up/Down markets on the CTF path", () => {
         expect(code(setup().p, m!)).toBe("unknown-resolver");
         const live = (await setup({ allowlist: [...ALLOWLIST, UPDOWN_RESOLVER], markets: { "": [raw(new Date(NOW.getTime() - 60_000))] } }).p.fetchMarketsBySlug!(["x"]))[0]!;
         expect(code(p, live)).toBe("started");
+    });
+
+    it("cannot be vetted: the resolver has no creator to read, so it is refused", async () => {
+        const { p } = setup({ allowlist: [...ALLOWLIST, UPDOWN_RESOLVER], markets: { "": [raw(new Date(NOW.getTime() + 3600_000))] } });
+        const [m] = await p.fetchMarketsBySlug!(["btc-updown-4h-1791532800"]);
+        const vet = await p.vetSource!(m!);
+        expect(vet).toMatchObject({ ok: false });
+        expect((vet as { reason: string }).reason).toMatch(/question creator: 0\/2 providers answered/);
+    });
+});
+
+describe("source vetting", () => {
+    const SEL_QUESTIONS = "0x95addb90";
+    const SEL_GET_ORACLE = "0xdafaf94a";
+    const CREATOR = "0xac9930b2ae455a671b62de86876a7e8587825294";
+    const NEG_RISK_ORACLE = "0x71523d0f655b41e805cec45b17163f528b59b820";
+    const ADAPTER = "0xd91e80cf2e7be2e162c6513ced06f1dd0da35296";
+    const uma = gamma.markets["559651"].response;
+    const marketIdOf = (questionId: string) => `0x${(BigInt(questionId) & ~0xffn).toString(16).padStart(64, "0")}`;
+
+    /** A `questions()` return: 12 head words, ancillaryData's offset at word 11 and the creator at word 10. */
+    const questionData = (creator: string, offset = 384n) => {
+        const w = Array.from({ length: 13 }, () => "0".repeat(64));
+        w[10] = creator.slice(2).padStart(64, "0");
+        w[11] = offset.toString(16).padStart(64, "0");
+        w[12] = (32n).toString(16).padStart(64, "0");
+        return `0x${w.join("")}${"ab".repeat(32)}`;
+    };
+    const reads = (to: string, data: string, byProvider: Record<string, unknown>): Exchange[] =>
+        Object.entries(byProvider).map(([rpcUrl, result]) => ({ rpcUrl, method: "eth_call", params: [{ to, data }, "finalized"], result }));
+    const umaReads = (byProvider: Record<string, unknown>) =>
+        reads(uma.resolvedBy, `${SEL_QUESTIONS}${uma.questionID.slice(2)}`, byProvider);
+    const both = (result: unknown) => ({ [PUBLICNODE]: result, [DRPC]: result });
+    const vetUma = async (byProvider: Record<string, unknown>, opts: SetupOpts = {}) => {
+        const { p } = setup({ ...opts, exchanges: umaReads(byProvider) });
+        return p.vetSource!(await p.fetchMarketDefinition("559651"));
+    };
+
+    it("passes a question an allowlisted Polymarket creator created", async () => {
+        await expect(vetUma(both(questionData(CREATOR)))).resolves.toEqual({ ok: true });
+        await expect(vetUma(both(questionData(CREATOR.toUpperCase().replace("0X", "0x"))))).resolves.toEqual({ ok: true });
+    });
+
+    it("refuses an unknown creator", async () => {
+        const vet = await vetUma(both(questionData("0xdead00000000000000000000000000000000beef")));
+        expect(vet).toMatchObject({ ok: false });
+        expect((vet as { reason: string }).reason).toMatch(/question creator 0xdead.*not allowlisted/);
+        await expect(vetUma(both(questionData(CREATOR)), { creators: ["0x91430cad2d3975766499717fa0d66a78d814e5c5"] })).resolves.toMatchObject({ ok: false });
+    });
+
+    it("refuses an uninitialized question and a return that is not QuestionData", async () => {
+        for (const result of [
+            questionData(`0x${"0".repeat(40)}`),
+            questionData(CREATOR, 320n),
+            `0x${"0".repeat(64)}`,
+            "0x",
+        ]) {
+            await expect(vetUma(both(result))).resolves.toMatchObject({ ok: false });
+        }
+    });
+
+    it("fails closed when the providers disagree or too few answer", async () => {
+        const split = await vetUma({ [PUBLICNODE]: questionData(CREATOR), [DRPC]: questionData("0xdead00000000000000000000000000000000beef") });
+        expect((split as { reason: string }).reason).toMatch(/question creator differs/);
+        const alone = await vetUma({ [PUBLICNODE]: questionData(CREATOR) });
+        expect((alone as { reason: string }).reason).toMatch(/question creator: 1\/2 providers answered/);
+    });
+
+    it("checks the neg-risk operator that prepared the market, not the resolver", async () => {
+        const raw = gamma.keyset.response.markets[1];
+        const data = `${SEL_GET_ORACLE}${marketIdOf(raw.questionID).slice(2)}`;
+        const vet = async (oracle: string, opts: SetupOpts = {}) => {
+            const { p } = setup({ ...opts, allowlist: [...ALLOWLIST, ADAPTER], keyset: { markets: [raw] }, exchanges: reads(ADAPTER, data, both(`0x${oracle.slice(2).padStart(64, "0")}`)) });
+            const [m] = (await p.discoverMarkets(null, 5)).markets;
+            return p.vetSource!(m!);
+        };
+        await expect(vet(NEG_RISK_ORACLE)).resolves.toEqual({ ok: true });
+        const bad = await vet("0xdead00000000000000000000000000000000beef");
+        expect((bad as { reason: string }).reason).toMatch(/neg-risk oracle 0xdead.*not allowlisted/);
+        await expect(vet(`0x${"0".repeat(40)}`)).resolves.toMatchObject({ ok: false });
+        await expect(vet(NEG_RISK_ORACLE, { negRiskOracles: ["0x661992aebf6becf7ba5abb66f6b0bf62aa7a2e93"] })).resolves.toMatchObject({ ok: false });
+    });
+
+    it("refuses an identity the eligibility check already rejects, without reading the chain", async () => {
+        const { p, posts } = setup();
+        const m = await p.fetchMarketDefinition("559651");
+        const vet = await p.vetSource!({ ...m, protocol: { ...m.protocol, questionId: `0x${"0".repeat(64)}` } });
+        expect(vet).toMatchObject({ ok: false, reason: expect.stringMatching(/^condition-mismatch/) });
+        expect(posts).toHaveLength(0);
     });
 });

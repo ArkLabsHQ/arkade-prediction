@@ -137,7 +137,11 @@ async function main(): Promise<void> {
         : undefined;
     const providers: MarketSourceProvider[] = [
         ...(cfg.POLYMARKET_ENABLED
-            ? [createPolymarketProvider({ gammaUrl: cfg.POLYMARKET_GAMMA_URL, rpcUrls: cfg.POLYGON_RPC_URLS, resolverAllowlist: cfg.POLYMARKET_RESOLVERS.map((r) => r.toLowerCase()) })]
+            ? [createPolymarketProvider({
+                  gammaUrl: cfg.POLYMARKET_GAMMA_URL, rpcUrls: cfg.POLYGON_RPC_URLS,
+                  resolverAllowlist: cfg.POLYMARKET_RESOLVERS.map((r) => r.toLowerCase()),
+                  creatorAllowlist: cfg.POLYMARKET_CREATORS, negRiskOracleAllowlist: cfg.POLYMARKET_NEGRISK_ORACLES,
+              })]
             : []),
         ...(cfg.KALSHI_ENABLED ? [createKalshiProvider({ apiUrl: cfg.KALSHI_API_URL })] : []),
         ...(cfg.MANIFOLD_ENABLED ? [createManifoldProvider({ apiUrl: cfg.MANIFOLD_API_URL })] : []),
@@ -182,9 +186,17 @@ async function main(): Promise<void> {
         const upcomingCtfUpDown = async () => (cfg.UPDOWN_ENABLED && cfg.UPDOWN_SETTLEMENT === "polymarket" && polymarket?.fetchMarketsBySlug
             ? polymarket.fetchMarketsBySlug(upcomingSlugs(cfg.UPDOWN_WINDOWS, cfg.UPDOWN_ASSETS, cfg.UPDOWN_LEAD_SECONDS))
             : []);
+        let importing = false;
         const sourceLoops = sourceDeps
             ? [
-                  setInterval(() => void (lease.held && upcomingCtfUpDown().then((upcoming) => importOnce(sourceDeps, upcoming)).then((r) => log("import pass", { ...r }), (e) => log("import failed", { error: String(e) }))), cfg.IMPORT_INTERVAL_SECONDS * 1000),
+                  // One pass at a time: activation awaits on-chain vetting between its cap check and its insert.
+                  setInterval(() => {
+                      if (!lease.held || importing) return;
+                      importing = true;
+                      upcomingCtfUpDown().then((upcoming) => importOnce(sourceDeps, upcoming))
+                          .then((r) => log("import pass", { ...r }), (e) => log("import failed", { error: String(e) }))
+                          .finally(() => (importing = false));
+                  }, cfg.IMPORT_INTERVAL_SECONDS * 1000),
                   setInterval(() => void (lease.held && resolutionTick(sourceDeps).catch((e) => log("resolution tick failed", { error: String(e) }))), 15_000),
               ]
             : [];

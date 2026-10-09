@@ -30,9 +30,28 @@ export function evidenceRecord(market: SourceMarket, evidence: ResolutionEvidenc
 export const POLYGON_CHAIN_ID = 137;
 /** Polymarket's NegRiskAdapter: the CTF oracle of every neg-risk condition (conditionId = keccak(adapter, questionID, 2)). */
 export const NEG_RISK_ADAPTER = "0xd91e80cf2e7be2e162c6513ced06f1dd0da35296";
+/**
+ * `initialize` is permissionless, but `questionID = keccak(ancillaryData || ",initializer:<msg.sender>")` binds the
+ * caller, and `questions(questionID).creator` is it. Polymarket's own, read on Polygon 2026-10-09.
+ */
+export const DEFAULT_CREATORS = [
+    "0xac9930b2ae455a671b62de86876a7e8587825294",
+    "0x91430cad2d3975766499717fa0d66a78d814e5c5",
+    "0xf43d55f3a8b7484ed4b6931f93cb6f9ef5dd369d",
+];
+/** `prepareMarket` likewise: its caller is the oracle, bound into `marketId = keccak(oracle, fee, metadata) & ~0xff`. */
+export const DEFAULT_NEG_RISK_ORACLES = [
+    "0x661992aebf6becf7ba5abb66f6b0bf62aa7a2e93",
+    "0x71523d0f655b41e805cec45b17163f528b59b820",
+];
 const DEFAULT_GAMMA_URL = "https://gamma-api.polymarket.com";
 const SEL_PAYOUT_DENOMINATOR = "dd34de67";
 const SEL_PAYOUT_NUMERATORS = "0504c814";
+const SEL_QUESTIONS = "95addb90";
+const SEL_GET_ORACLE = "dafaf94a";
+/** QuestionData: `creator` is head word 10, and `ancillaryData`'s offset at word 11 pins that 12-field layout. */
+const CREATOR_WORD = 10;
+const ANCILLARY_OFFSET = 384n;
 const MAX_RETRIES = 2;
 const RETRY_BASE_MS = 250;
 const HEADERS = { accept: "application/json", "user-agent": "arkade-prediction/0.1" };
@@ -46,6 +65,8 @@ export interface PolymarketProviderOptions {
     gammaUrl?: string;
     rpcUrls: string[];
     resolverAllowlist: string[];
+    creatorAllowlist?: string[];
+    negRiskOracleAllowlist?: string[];
     fetch?: typeof fetch;
     timeoutMs?: number;
     minProviders?: number;
@@ -167,6 +188,37 @@ function normalize(raw: unknown, fetchedAt: string): SourceMarket {
     return { ...core, referencePrices, image: imageOf(raw.image), event: eventOf(raw.events), gameStartTime: kickoff, versionHash: sha256Hex(canonicalJson(core)), fetchedAt };
 }
 
+/**
+ * The condition's CTF oracle: the NegRiskAdapter, gamma's `resolvedBy`, or — when gamma omits it, as on crypto
+ * Up/Down markets — the allowlisted address its conditionId derives from.
+ */
+function oracleOf(p: SourceMarket["protocol"], allow: ReadonlySet<string>): string | null {
+    if (p.negRisk) return NEG_RISK_ADAPTER;
+    return p.resolver ?? [...allow].find((a) => BYTES32.test(p.questionId) && deriveConditionId(a, p.questionId) === p.conditionId) ?? null;
+}
+
+/** `questionId & ~0xff`, NegRiskIdLib.getMarketId. */
+function marketIdOf(questionId: string): string {
+    return `0x${(BigInt(questionId) & ~0xffn).toString(16).padStart(64, "0")}`;
+}
+
+/** A non-zero address in the low 20 bytes of word `i`; anything else is a failed or misread call, never zero. */
+function addressAt(r: unknown, i: number): string {
+    const s = typeof r === "string" && /^0x([0-9a-f]{64})+$/i.test(r) ? r.slice(2).toLowerCase() : "";
+    const w = s.slice(i * 64, i * 64 + 64);
+    const a = w.length === 64 && w.startsWith("0".repeat(24)) ? hexOf(`0x${w.slice(24)}`, ADDRESS) : null;
+    if (!a || BigInt(`0x${w}`) === 0n) throw new Error(`word ${i} is not an address: ${String(r).slice(0, 80)}`);
+    return a;
+}
+
+function questionCreator(r: unknown): string {
+    const s = typeof r === "string" && /^0x([0-9a-f]{64})+$/i.test(r) ? r.slice(2) : "";
+    if (s.length < 13 * 64 || BigInt(`0x${s.slice(11 * 64, 12 * 64)}`) !== ANCILLARY_OFFSET) {
+        throw new Error(`not a QuestionData struct: ${String(r).slice(0, 80)}`);
+    }
+    return addressAt(r, CREATOR_WORD);
+}
+
 function identityProblem(m: SourceMarket, allow: ReadonlySet<string>): Problem | null {
     const p = m.protocol;
     if (p.version !== "v1" || p.chainId !== POLYGON_CHAIN_ID || p.settlementContract !== CTF_ADDRESS) {
@@ -179,13 +231,11 @@ function identityProblem(m: SourceMarket, allow: ReadonlySet<string>): Problem |
     if (m.outcomes.length !== 2 || !a || !b || a === b) {
         return { code: "not-binary", reason: `outcomes ${JSON.stringify(m.outcomes).slice(0, 200)}` };
     }
-    // Gamma leaves resolvedBy empty on some markets (crypto Up/Down); the conditionId still names its oracle.
-    const resolver = p.resolver ?? [...allow].find((a) => BYTES32.test(p.questionId) && deriveConditionId(a, p.questionId) === p.conditionId) ?? null;
-    if (!p.negRisk && (!resolver || !allow.has(resolver))) {
-        return { code: "unknown-resolver", reason: `resolver ${resolver ?? "missing"} is not allowlisted` };
+    const oracle = oracleOf(p, allow);
+    if (!p.negRisk && (!oracle || !allow.has(oracle))) {
+        return { code: "unknown-resolver", reason: `resolver ${oracle ?? "missing"} is not allowlisted` };
     }
-    const oracle = p.negRisk ? NEG_RISK_ADAPTER : resolver!;
-    if (!BYTES32.test(p.questionId) || deriveConditionId(oracle, p.questionId) !== p.conditionId) {
+    if (!BYTES32.test(p.questionId) || deriveConditionId(oracle!, p.questionId) !== p.conditionId) {
         return { code: "condition-mismatch", reason: `conditionId != keccak256(${p.negRisk ? "NegRiskAdapter" : "resolver"}, questionId, 2)` };
     }
     return null;
@@ -240,8 +290,11 @@ export function createPolymarketProvider(opts: PolymarketProviderOptions): Marke
     const timeoutMs = opts.timeoutMs ?? 10_000;
     const doFetch = opts.fetch ?? fetch;
     const allow = new Set(opts.resolverAllowlist.map((a) => a.toLowerCase()));
+    const creators = new Set((opts.creatorAllowlist ?? DEFAULT_CREATORS).map((a) => a.toLowerCase()));
+    const negRiskOracles = new Set((opts.negRiskOracleAllowlist ?? DEFAULT_NEG_RISK_ORACLES).map((a) => a.toLowerCase()));
     if (!Number.isInteger(minProviders) || minProviders < 2) throw new Error("minProviders must be an integer >= 2");
     for (const a of allow) if (!ADDRESS.test(a)) throw new Error(`invalid resolver address ${a}`);
+    for (const a of [...creators, ...negRiskOracles]) if (!ADDRESS.test(a)) throw new Error(`invalid reporter address ${a}`);
     // RPC URLs often embed API keys: logs, details and evidence name a provider only by "host#n". fetch() quotes
     // unparsable and user:password URLs in its errors, so those are refused here.
     const labels = new Map(
@@ -374,6 +427,29 @@ export function createPolymarketProvider(opts: PolymarketProviderOptions): Marke
             const wanted = policy.tags.map((tag) => tag.toLowerCase());
             if (wanted.length > 0 && !market.tags.some((tag) => wanted.includes(tag))) return no("tag-filter", "no allowed tag");
             return { eligible: true, profile: PROFILE };
+        },
+
+        async vetSource(market) {
+            const no = (reason: string) => ({ ok: false as const, reason });
+            const bad = identityProblem(market, allow);
+            if (bad) return no(`${bad.code}: ${bad.reason}`);
+            const { questionId, negRisk } = market.protocol;
+            const [what, to, data, decode, allowed] = negRisk
+                ? ["neg-risk oracle", NEG_RISK_ADAPTER, `0x${SEL_GET_ORACLE}${marketIdOf(questionId).slice(2)}`, (r: unknown) => addressAt(r, 0), negRiskOracles] as const
+                : ["question creator", oracleOf(market.protocol, allow)!, `0x${SEL_QUESTIONS}${questionId.slice(2)}`, questionCreator, creators] as const;
+            // Immutable once written, so each provider reads its own finalized head: a lagging one disagrees and
+            // fails the vet closed rather than letting the quorum settle on a stale answer.
+            const log: RpcCall[] = [];
+            const answers = await settle(rpcUrls, (u) => rpc(log, u, "eth_call", [{ to, data }, "finalized"], decode));
+            if (answers.size < minProviders) {
+                const errors = log.filter((c) => c.error).map((c) => `${c.provider}: ${c.error}`);
+                return no(`${what}: ${answers.size}/${minProviders} providers answered; ${errors.join("; ")}`);
+            }
+            const reported = new Set(answers.values());
+            if (reported.size > 1) return no(`${what} differs across providers: ${[...answers].map(([u, a]) => `${label(u)}=${a}`).join(", ")}`);
+            const [reporter] = [...reported];
+            if (!allowed.has(reporter!)) return no(`${what} ${reporter} is not allowlisted`);
+            return { ok: true as const };
         },
 
         async fetchResolutionEvidence(market, opts = {}) {

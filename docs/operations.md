@@ -97,7 +97,8 @@ For attestors outside the app container (needed for k-of-n), one Application per
   container port `37400`. One replica: a second one only waits for the writer lease.
 - **attestor** (one Application per attestor key): command override `node dist/oracle/main.js`, its own volume
   at `/data`, `ORACLE_SECRET_KEY_FILE`, `ORACLE_PORT=37410`, `APM_NETWORK`,
-  `POLYGON_RPC_URLS`, `POLYMARKET_RESOLVERS`. No public domain needed; set the app's `ORACLE_URLS` to the
+  `POLYGON_RPC_URLS`, `POLYMARKET_RESOLVERS` (and `POLYMARKET_CREATORS` / `POLYMARKET_NEGRISK_ORACLES` only to
+  override their built-in defaults). No public domain needed; set the app's `ORACLE_URLS` to the
   attestors' internal addresses, `ORACLE_PUBKEYS` to their keys and `ORACLE_THRESHOLD` (2 with three attestors).
 
 Dokploy applies an Application's command field as the container command (split on spaces) and attaches

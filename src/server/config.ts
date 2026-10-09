@@ -3,6 +3,7 @@ import { attestorPublicKey, isAttestorKeyHex } from "../core/attestation.js";
 import { hex } from "@scure/base";
 import { defaultEndpoints } from "../core/endpoints.js";
 import { oracleSlots } from "../core/market.js";
+import { DEFAULT_CREATORS, DEFAULT_NEG_RISK_ORACLES } from "./sources/polymarket/index.js";
 import { join } from "node:path";
 import { z } from "zod";
 
@@ -57,6 +58,9 @@ const schema = z.object({
     POLYMARKET_GAMMA_URL: z.url().default("https://gamma-api.polymarket.com"),
     POLYGON_RPC_URLS: csv,
     POLYMARKET_RESOLVERS: csv,
+    // Who may report a mirrored condition; the resolver allowlist above does not authenticate one (DECISIONS #46).
+    POLYMARKET_CREATORS: csv.default(DEFAULT_CREATORS),
+    POLYMARKET_NEGRISK_ORACLES: csv.default(DEFAULT_NEG_RISK_ORACLES),
     KALSHI_ENABLED: bool,
     KALSHI_API_URL: z.url().default("https://api.elections.kalshi.com/trade-api/v2"),
     MANIFOLD_ENABLED: bool,
@@ -125,7 +129,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     // ORACLE_SECRET_KEY on the app runs a local attestor beside it (see embeddedAttestor.ts): one container.
     const attestorSecret = secret(env, "ORACLE_SECRET_KEY");
     if ((c.POLYMARKET_ENABLED || attestorSecret) && c.POLYGON_RPC_URLS.length < 2) throw new Error("POLYGON_RPC_URLS needs at least two providers");
-    if (attestorSecret !== undefined && !/^[0-9a-f]{64}$/.test(attestorSecret)) throw new Error("ORACLE_SECRET_KEY must be 32-byte hex");
+    if (attestorSecret !== undefined && !/^[0-9a-f]{64}$/.test(attestorSecret)) throw new Error(`ORACLE_SECRET_KEY must be 64 lowercase hex characters; ${hexProblem(attestorSecret)}`);
     const embeddedKey = attestorSecret && hex.encode(attestorPublicKey(c.ORACLE_KEY_SCHEME, hex.decode(attestorSecret)));
     const oraclePubkeys = c.ORACLE_PUBKEYS.length > 0 ? c.ORACLE_PUBKEYS : embeddedKey ? [embeddedKey] : [];
     if (oraclePubkeys.length > 0) oracleSlots(oraclePubkeys.map((k) => hex.decode(k)), c.ORACLE_THRESHOLD);
@@ -151,6 +155,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
 }
 
 /** Config fields safe to log or expose. URL settings keep only scheme://host: keys hide in userinfo, path and query. */
+/** Describes a malformed hex secret without echoing it. */
+function hexProblem(v: string): string {
+    if (/[<>]/.test(v)) return "it looks like a placeholder, not a key";
+    if (/^[0-9a-fA-F]+$/.test(v)) return /[A-F]/.test(v) ? "it has uppercase letters" : `it has ${v.length} characters`;
+    return `it has ${v.length} characters, some not hex (quotes or spaces?)`;
+}
+
 export function redacted(c: Config): Record<string, unknown> {
     const { OPERATOR_MNEMONIC, LP_MNEMONIC, DEV_ORACLE_SECRET, ORACLE_SECRET_KEY, ...rest } = c;
     const origin = (u: string) => (URL.canParse(u) ? `${new URL(u).protocol}//${new URL(u).host}` : "[invalid url]");

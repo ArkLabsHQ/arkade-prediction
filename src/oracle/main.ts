@@ -10,7 +10,7 @@ import { bindingOf, type MarketDefinition } from "../core/definition.js";
 import type { MarketAssets } from "../core/market.js";
 import { attestorSetProblem } from "./request.js";
 import type { CertificateJson } from "../shared/api.js";
-import { createPolymarketProvider } from "../server/sources/polymarket/index.js";
+import { DEFAULT_CREATORS, DEFAULT_NEG_RISK_ORACLES, createPolymarketProvider } from "../server/sources/polymarket/index.js";
 import { createKalshiProvider } from "../server/sources/kalshi/index.js";
 import { createManifoldProvider } from "../server/sources/manifold/index.js";
 import type { MarketSourceProvider } from "../server/sources/types.js";
@@ -53,6 +53,10 @@ if (!["schnorr", "ecdsa-secp256k1", "ecdsa-p256"].includes(scheme)) throw new Er
 const pubkey = hex.encode(attestorPublicKey(scheme, hex.decode(secret)));
 const dataDir = env.ORACLE_DATA_DIR ?? "/data/oracle";
 mkdirSync(dataDir, { recursive: true });
+const csv = (name: string, fallback: readonly string[] = []) => {
+    const set = (env[name] ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+    return set.length > 0 ? set : [...fallback];
+};
 const rpcUrls = (env.POLYGON_RPC_URLS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 if (rpcUrls.length === 1) throw new Error("POLYGON_RPC_URLS needs at least two providers");
 const providers: MarketSourceProvider[] = [
@@ -60,7 +64,9 @@ const providers: MarketSourceProvider[] = [
         ? [createPolymarketProvider({
               gammaUrl: env.POLYMARKET_GAMMA_URL ?? "https://gamma-api.polymarket.com",
               rpcUrls,
-              resolverAllowlist: (env.POLYMARKET_RESOLVERS ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean),
+              resolverAllowlist: csv("POLYMARKET_RESOLVERS"),
+              creatorAllowlist: csv("POLYMARKET_CREATORS", DEFAULT_CREATORS),
+              negRiskOracleAllowlist: csv("POLYMARKET_NEGRISK_ORACLES", DEFAULT_NEG_RISK_ORACLES),
           })]
         : []),
     ...(env.KALSHI_ENABLED === "true" ? [createKalshiProvider({ apiUrl: env.KALSHI_API_URL || undefined })] : []),
@@ -97,6 +103,12 @@ app.post("/attest", async (c) => {
     if (mismatch) {
         log("source identity mismatch", { market: req.marketId, reason: mismatch });
         return c.json({ error: `${mismatch}; quarantined`, code: "identity" }, 409);
+    }
+    // The source API says which contract will report the result; only the chain says who may make it report.
+    const vetted = await provider.vetSource?.(live);
+    if (vetted && !vetted.ok) {
+        log("source not vetted", { market: req.marketId, reason: vetted.reason });
+        return c.json({ error: `${vetted.reason}; quarantined`, code: "unvetted-source" }, 409);
     }
     const evidence = await provider.fetchResolutionEvidence(live, { atBlock: req.atBlock === undefined ? undefined : BigInt(req.atBlock) });
     if (evidence.status !== "final") return c.json({ status: evidence.status, detail: evidence.detail }, 409);

@@ -55,7 +55,11 @@ async function importFrom(d: ImportDeps, provider: MarketSourceProvider, upcomin
         upsertSource(d, m, verdict.eligible ? { eligible: true, profile: verdict.profile } : { eligible: false, code: verdict.code, reason: verdict.reason });
         return verdict;
     };
-    const consider = (m: SourceMarket) => {
+    const refuse = (m: SourceMarket, code: string, reason: string) => {
+        upsertSource(d, m, { eligible: false, code, reason });
+        result.ineligibleByCode[code] = (result.ineligibleByCode[code] ?? 0) + 1;
+    };
+    const consider = async (m: SourceMarket) => {
         result.seen++;
         seen.add(m.sourceId);
         const verdict = record(m);
@@ -64,18 +68,18 @@ async function importFrom(d: ImportDeps, provider: MarketSourceProvider, upcomin
             return;
         }
         result.eligible++;
-        const id = activate(d, m, verdict.profile);
+        const id = await activate(d, provider, m, verdict.profile, refuse);
         if (id) result.activated.push(id);
     };
     // Markets named ahead of time (crypto Up/Down) go first: by volume they would rank too low before they start.
-    upcoming.forEach(consider);
+    for (const m of upcoming) await consider(m);
     // Discovery is ordered by 24h volume, so every pass starts from the busiest markets; one pass per tag when set.
     for (const tag of tags.length ? tags : [undefined]) {
         let cursor: string | null = null;
         for (let page = 0; page < cfg.IMPORT_MAX_PAGES; page++) {
             const { markets, next } = await provider.discoverMarkets(cursor, Math.min(cfg.IMPORT_PAGE_LIMIT, 100), tag ? { tag } : {});
             result.pages++;
-            markets.forEach(consider);
+            for (const m of markets) await consider(m);
             cursor = next;
             if (!next) break;
         }
@@ -110,7 +114,13 @@ export function upsertSource(d: Deps, m: SourceMarket, v: { eligible: boolean; c
 }
 
 /** Creates the market row once per source id and enqueues operator genesis, within the activation cap. */
-function activate(d: Deps & { wf: Workflows; timeoutDays: number }, m: SourceMarket, profile: string): string | undefined {
+async function activate(
+    d: Deps & { wf: Workflows; timeoutDays: number },
+    provider: MarketSourceProvider,
+    m: SourceMarket,
+    profile: string,
+    refuse: (m: SourceMarket, code: string, reason: string) => void,
+): Promise<string | undefined> {
     if (one(d.db, "SELECT 1 FROM markets WHERE source_provider = ? AND source_id = ?", m.provider, m.sourceId)) return undefined;
     const live = all<{ source_provider: string; source_snapshot: string; question: string }>(d.db,
         "SELECT source_provider, source_snapshot, question FROM markets WHERE kind = 'polymarket' AND oracle_policy != 'redstone' AND status IN ('activating','open','halted','closed','resolving')");
@@ -119,6 +129,12 @@ function activate(d: Deps & { wf: Workflows; timeoutDays: number }, m: SourceMar
         const section = sectionOf(m.tags, m.question);
         const inSection = live.filter((r) => sectionOf((JSON.parse(r.source_snapshot) as SourceMarket).tags ?? [], r.question) === section).length;
         if (inSection >= d.cfg.IMPORT_MAX_PER_SECTION) return undefined;
+    }
+    // Last gate before the operator funds anything: the chain, not the source API, says who may report the result.
+    const vetted = await provider.vetSource?.(m);
+    if (vetted && !vetted.ok) {
+        refuse(m, "unvetted-source", vetted.reason);
+        return undefined;
     }
     const def = importedDefinition(m, profile, d.timeoutDays);
     const id = randomBytes(16).toString("hex");
@@ -145,6 +161,8 @@ export async function replayHistorical(d: ImportDeps, sourceId: string, provider
     const m = await provider.fetchMarketDefinition(sourceId);
     const verdict = provider.evaluateEligibility(m, { profiles: [provider.profile], tags: [], maxHorizonSeconds: 1e10, minHorizonSeconds: -1e10 }, new Date());
     if (!verdict.eligible && verdict.code !== "closed") throw new Error(`source market not replayable: ${verdict.code} ${verdict.reason}`);
+    const vetted = await provider.vetSource?.(m);
+    if (vetted && !vetted.ok) throw new Error(`source market not replayable: ${vetted.reason}`);
     if (!d.cfg.ORACLE_PUBKEYS[0]) throw new Error("ORACLE_PUBKEYS is empty");
     const closeAt = Math.floor(Date.now() / 1000) + 120;
     const replay: SourceMarket = { ...m, endDate: new Date(closeAt * 1000).toISOString() };

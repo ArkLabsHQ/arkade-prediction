@@ -11,14 +11,26 @@ import { definitionMismatch, importedDefinition } from "../../../src/server/sour
 import { PROFILE, createPolymarketProvider } from "../../../src/server/sources/polymarket/index.js";
 
 const gamma = JSON.parse(readFileSync(new URL("../../fixtures/polymarket/gamma.json", import.meta.url), "utf8"));
-const provider = createPolymarketProvider({
-    rpcUrls: ["https://rpc-one.example", "https://rpc-two.example"],
-    resolverAllowlist: ["0x65070be91477460d8a7aeeb94ef92fe056c2f2a7", "0x157ce2d672854c848c9b79c49a8cc6cc89176a49"],
-    fetch: (async (input: string | URL | Request) => {
-        const body = gamma.markets[new URL(String(input)).pathname.slice("/markets/".length)]?.response;
-        return body ? Response.json(body) : new Response("not found", { status: 404 });
-    }) as typeof fetch,
-});
+
+/** 2758339's real on-chain `questions(questionID)` creator; the head words before it are not read. */
+const CREATOR = "0xf43d55f3a8b7484ed4b6931f93cb6f9ef5dd369d";
+const questionData = (creator: string) => {
+    const w = Array.from({ length: 13 }, () => "0".repeat(64));
+    w[10] = creator.slice(2).padStart(64, "0");
+    w[11] = (384n).toString(16).padStart(64, "0");
+    return `0x${w.join("")}`;
+};
+const providerWith = (creator: string) =>
+    createPolymarketProvider({
+        rpcUrls: ["https://rpc-one.example", "https://rpc-two.example"],
+        resolverAllowlist: ["0x65070be91477460d8a7aeeb94ef92fe056c2f2a7", "0x157ce2d672854c848c9b79c49a8cc6cc89176a49"],
+        fetch: (async (input: string | URL | Request, init?: RequestInit) => {
+            if (init?.method === "POST") return Response.json({ jsonrpc: "2.0", id: 1, result: questionData(creator) });
+            const body = gamma.markets[new URL(String(input)).pathname.slice("/markets/".length)]?.response;
+            return body ? Response.json(body) : new Response("not found", { status: 404 });
+        }) as typeof fetch,
+    });
+const provider = providerWith(CREATOR);
 
 describe("attestor definition checks", () => {
     it("accepts the honest import and refuses swapped labels, another question or a changed source", async () => {
@@ -51,5 +63,15 @@ describe("attestor definition checks", () => {
             closeAtUnix: String(row.close_at), timeoutAtUnix: String(row.timeout_at), source: JSON.parse(row.source_snapshot!).binding,
         };
         expect(definitionMismatch(def, await provider.fetchMarketDefinition("2758339"), PROFILE)).toBeNull();
+    });
+
+    it("refuses to sign for a condition whose question an unknown account created", async () => {
+        const honest = await provider.fetchMarketDefinition("2758339");
+        expect(await provider.vetSource!(honest)).toEqual({ ok: true });
+
+        const forged = providerWith("0xdead00000000000000000000000000000000beef");
+        const vetted = await forged.vetSource!(await forged.fetchMarketDefinition("2758339"));
+        expect(vetted).toMatchObject({ ok: false });
+        expect((vetted as { reason: string }).reason).toMatch(/question creator 0xdead.*not allowlisted/);
     });
 });
