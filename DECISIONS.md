@@ -133,3 +133,5 @@ Each entry: decision, reason, rejected alternatives. Newest last.
     Sports markets close at Polymarket's `endDate`, which is the game start (`gameStartTime`); Polymarket clears
     its own book then (`clearBookOnStart`), and our LP never reprices, so in-play trading would only let informed
     takers drain it. Resolution still follows the game, from the finalized CTF payout.
+    The LP follows the refreshed source odds: an ask that drifts by 3% of the unit or more is cancelled on-contract
+    and what is left of it re-posted at the new price (`lp-reprice`, two transactions per ask).

@@ -32,7 +32,7 @@ export interface KeeperDeps extends Deps {
 type Outcome = "landed" | "not-submitted" | "lost" | "unknown";
 
 /** Kinds whose handler runs several sub-transactions: a landed step is progress, never completion. */
-const MULTI_STEP = new Set(["activate", "lp-liquidity"]);
+const MULTI_STEP = new Set(["activate", "lp-liquidity", "lp-reprice"]);
 const MATCH_CANDIDATES = 5;
 const RENEW_DEADLINE_MS = 10 * 60_000;
 const LP_MIN_WINDOW_SECONDS = 60;
@@ -114,6 +114,7 @@ export class Keeper {
         }
         this.planMatches(offers);
         this.planCancels(offers);
+        this.planReprices(offers, nowS);
         const boxes = await this.boxCoins();
         this.planRenewals(offers, nowS, boxes);
         for (const b of boxes) {
@@ -155,6 +156,24 @@ export class Keeper {
         for (const o of offers) {
             if (o.maker_script !== lp || getMarket(this.d.db, o.market_id)?.status !== "halted") continue;
             this.d.wf.enqueue(`cancel:${o.id}`, "cancel-offer", o.market_id, { offerId: o.id });
+        }
+    }
+
+    /** Moves LP asks on mirrored markets to the refreshed source odds once they drift by REPRICE_BPS of the unit. */
+    private planReprices(offers: ReturnType<typeof openOffers>, nowS: number): void {
+        const lp = this.d.lp && hex.encode(this.d.lp.script);
+        if (!lp) return;
+        for (const o of offers) {
+            if (o.maker_script !== lp || o.side !== "sell" || !o.coin) continue;
+            const m = getMarket(this.d.db, o.market_id);
+            const terms = m && marketTerms(m);
+            if (!m || !terms || m.kind !== "polymarket" || m.status !== "open" || m.close_at - nowS < LP_MIN_WINDOW_SECONDS || !m.source_snapshot) continue;
+            const none = { yes: 0n, no: 0n };
+            const target = lpAsks(JSON.parse(m.source_snapshot).referencePrices, JSON.parse(m.outcomes) as string[], terms.unitSats, none)[o.outcome as "yes" | "no"];
+            const price = BigInt((JSON.parse(o.terms) as OfferTermsJson).priceSats);
+            const gap = target > price ? target - price : price - target;
+            if (target === 0n || gap * 10_000n < terms.unitSats * REPRICE_BPS) continue;
+            this.d.wf.enqueue(`reprice:${o.id}`, "lp-reprice", o.market_id, { offerId: o.id, price: target.toString() });
         }
     }
 
@@ -304,6 +323,8 @@ export class Keeper {
             }
             case "lp-liquidity":
                 return this.liquidity(wf, ctx);
+            case "lp-reprice":
+                return this.reprice(wf, ctx);
             case "activate":
                 return this.activate(wf, ctx);
             default:
@@ -394,6 +415,47 @@ export class Keeper {
             this.mark(wf, { [`${outcome}Registered`]: true });
         }
         return undefined;
+    }
+
+    /** Cancels one LP ask and re-posts what was left of it at the new price. */
+    private async reprice(wf: Workflow, ctx: Ctx): Promise<string | undefined> {
+        const lp = this.d.lp;
+        const market = wf.marketId ? getMarket(this.d.db, wf.marketId) : undefined;
+        const terms = market && marketTerms(market);
+        if (!lp || !market || !terms) throw new Error("LP wallet or market not found");
+        const p = wf.payload as Record<string, unknown>;
+        if (!p.cancelled) {
+            const offer = await refreshOffer(this.d, p.offerId as string);
+            if (offer.status !== "open" || !offer.coin || offer.remaining === "0") return undefined;
+            this.mark(wf, { qty: offer.remaining, assetId: offerTermsFromJson(offer.terms).assetId, step: "cancelled" });
+            const { txid } = await cancelOffer(ctx, lp, { terms: offerTermsFromJson(offer.terms), coin: coinFromJson(offer.coin) });
+            this.mark(wf, { cancelled: txid, step: null, inputs: null, finalCheckpoints: null });
+            Object.assign(p, { qty: offer.remaining, assetId: offerTermsFromJson(offer.terms).assetId, cancelled: txid });
+        }
+        const nowS = Math.floor(Date.now() / 1000);
+        if (market.status !== "open" || market.close_at - nowS < LP_MIN_WINDOW_SECONDS) return undefined;
+        const qty = BigInt(p.qty as string);
+        if (!p.terms) {
+            p.terms = offerTermsToJson({
+                side: "sell", maker: await lp.identity.xOnlyPublicKey(), makerScript: lp.script, assetId: p.assetId as string, priceSats: BigInt(p.price as string),
+                minFill: 1n, expiresAt: lpExpiry(market.close_at, nowS), reserveSats: 330n, exitDelaySeconds: this.d.net.exitDelaySeconds,
+            });
+            this.mark(wf, { terms: p.terms });
+        }
+        const offerTerms = offerTermsFromJson(p.terms as OfferTermsJson);
+        if (!p.funded) {
+            await waitForAsset(lp, offerTerms.assetId, qty);
+            this.mark(wf, { step: "funded" });
+            const { txid } = await postOffer(ctx, lp, offerTerms, qty);
+            p.funded = txid;
+            this.mark(wf, { funded: txid, step: null, inputs: null, finalCheckpoints: null });
+        }
+        await waitForCoin(this, offerContract(this.d.net.ark, offerTerms).pkScript, p.funded as string);
+        await registerOffer(this.d, { marketId: market.id, terms: p.terms as OfferTermsJson, fundingTxid: p.funded as string })
+            .catch((e: unknown) => {
+                if (!isDuplicate(e)) throw e;
+            });
+        return p.funded as string;
     }
 
     /** Operator genesis for an admitted imported market: T0 (assets), T1 (vault), then open trading. */
@@ -526,8 +588,9 @@ async function waitForCoin(k: Keeper, script: Uint8Array, txid: string, timeoutM
     throw new Error("offer coin not visible");
 }
 
-// ponytail: fixed spread around the source price at activation; reprice from live source quotes if the LP needs it.
 const LP_HALF_SPREAD_BPS = 200n;
+// ponytail: fixed threshold, each reprice costs a cancel and a post; tune per market if the cost matters.
+const REPRICE_BPS = 300n;
 
 /** Opening LP asks: the source's reference price plus a half-spread per side, else the configured fixed asks. */
 export function lpAsks(ref: { outcome: string; price: string }[] | null | undefined, outcomes: string[], unit: bigint, fallback: { yes: bigint; no: bigint }) {

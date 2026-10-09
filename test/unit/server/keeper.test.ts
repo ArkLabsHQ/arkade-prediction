@@ -218,6 +218,29 @@ describe("halted markets", () => {
     });
 });
 
+describe("LP repricing", () => {
+    it("moves only drifted LP asks on mirrored markets to the source price plus spread", async () => {
+        const lpScript = P2TR("bb");
+        const h = harness({ lp: { script: Uint8Array.from(Buffer.from(lpScript, "hex")) } as never });
+        insertMarket(h.db, { id: "pm" });
+        insertMarket(h.db, { id: "custom" });
+        run(h.db, "UPDATE markets SET kind = 'polymarket', source_snapshot = ? WHERE id = 'pm'",
+            JSON.stringify({ referencePrices: [{ outcome: "Yes", price: "0.2" }, { outcome: "No", price: "0.8" }] }));
+        const ask = (id: string, marketId: string, outcome: "yes" | "no", priceSats: bigint, makerScript = lpScript) => {
+            insertBuyOffer(h.db, { id, marketId, outcome, priceSats, remaining: 3n, makerScript });
+            run(h.db, "UPDATE offers SET side = 'sell', terms = json_set(terms, '$.side', 'sell') WHERE id = ?", `${id}:0`);
+        };
+        ask("drifted", "pm", "yes", 550n);
+        ask("close", "pm", "no", 830n);
+        ask("other", "pm", "yes", 550n, P2TR("cc"));
+        ask("customAsk", "custom", "yes", 550n);
+
+        await inner(h.keeper).plan();
+        const reprices = h.wf.list({}).filter((w) => w.kind === "lp-reprice");
+        expect(reprices.map((w) => [w.id, w.payload.price])).toEqual([["reprice:drifted:0", "220"]]);
+    });
+});
+
 describe("resolution planning", () => {
     it("waits for the close before planning a resolve, because the covenant refuses earlier ones", async () => {
         const h = harness();

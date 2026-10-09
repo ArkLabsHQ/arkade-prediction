@@ -34,6 +34,6 @@ Updated: 2026-10-08 (session 1). Branch `main`, local commits only (nothing push
   The faucet's back-to-back sends could spend change arkd had not created yet (`VTXO_NOT_FOUND`); it retries.
 
 ## Not done (needs authorization or is out of scope)
-- Edge protection of the deployed admin port (deployer action); LP repricing as source odds move.
+- Edge protection of the deployed admin port (deployer action).
 - Categorical markets, nonzero-fee renewal (PLAN D4).
 - Residual risks: `docs/threat-model.md` §7.
