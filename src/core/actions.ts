@@ -266,6 +266,24 @@ export async function resolveMarket(ctx: Ctx, terms: VaultTerms, outcome: Binary
     ]);
 }
 
+/** Settles a price market on the side that at least `quorum` signers' own reports support. */
+export async function resolvePriceMarket(ctx: Ctx, terms: VaultTerms, report: { values: Uint8Array[]; stamps: Uint8Array[]; signatures: Uint8Array[]; prices: (bigint | undefined)[] }) {
+    const { vault, resolved } = marketContracts(ctx.ark, terms);
+    const coin = await contractCoin(ctx, vault, terms.assets.ctrl);
+    const p = terms.price;
+    if (!coin || !p) throw new Error("price vault not found");
+    const above = report.prices.filter((x) => x !== undefined && x >= p.strike).length;
+    const below = report.prices.filter((x) => x !== undefined && x < p.strike).length;
+    const outcome = above >= p.quorum ? "yes" : below >= p.quorum ? "no" : undefined;
+    if (!outcome) throw new Error(`no side has ${p.quorum} signed reports (${above} above, ${below} below the strike)`);
+    const slot = (name: string, xs: Uint8Array[]) => Object.fromEntries(xs.map((x, i) => [`${name}.${i}`, x]));
+    const args = { ...slot("values", report.values), ...slot("stamps", report.stamps), ...slot("sigs", report.signatures) };
+    const { txid } = await execute(ctx, [{ kind: "covenant", coin, contract: vault, fn: outcome === "yes" ? "resolveYes" : "resolveNo", args }], [
+        { script: resolved[outcome].pkScript, amount: BigInt(coin.value), assets: [{ assetId: terms.assets.ctrl, amount: 1n }] },
+    ]);
+    return { txid, outcome };
+}
+
 export async function timeoutMarket(ctx: Ctx, terms: VaultTerms) {
     const { vault, resolved } = marketContracts(ctx.ark, terms);
     const coin = await contractCoin(ctx, vault, terms.assets.ctrl);

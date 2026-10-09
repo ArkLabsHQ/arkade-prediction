@@ -143,3 +143,11 @@ Each entry: decision, reason, rejected alternatives. Newest last.
     message. The SDK checks `pubkey` parameters for 32 bytes, so such sets use `market_vault_anykey` (the vault with
     `bytes[3] oracles`, derived by `contracts/build.mjs`); all-Schnorr sets keep the original vault byte for byte,
     so existing markets need no migration. High-S ECDSA is accepted, as the emulator does.
+38. **Price markets settled by the oracle's own signatures (RedStone).** `PriceVault` keeps the market vault's
+    collateral and claim paths but resolves from signed price reports instead of our attestors. RedStone nodes each
+    sign their own observation (`keccak256(feedId ‖ value ‖ tsMs ‖ 0x00000020 ‖ 0x000001)`, ECDSA/secp256k1), so
+    each of the 5 committed signer slots carries its own value, and a side wins when 3 signers' values fall on it
+    inside the settlement window: the median. Signer keys are committed in full (the emulator has no ecrecover);
+    they are recovered from the gateway's own signatures. The slots are unrolled because a loop counter under a
+    bound message compiles to OP_PUT, which the pinned SDK cannot load. Chosen first because RedStone's latest
+    values are public; Pyth Pro and Chainlink Data Streams need paid keys.

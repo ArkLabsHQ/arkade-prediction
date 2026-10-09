@@ -1,0 +1,80 @@
+{
+ "source": "redstone-primary-prod latest gateway, captured 2026-10-09",
+ "BTC": [
+  {
+   "timestampMilliseconds": 1791522740000,
+   "signature": "NOS8spYN09MhWdsP7kl6c38271q2XVIP0X8cZWIffbJIiIDAERXfOXsQ8Csc0du5zCB309HJatWaA5QxhGRE/Rs=",
+   "isSignatureValid": true,
+   "dataPoints": [
+    {
+     "dataFeedId": "BTC",
+     "value": 82288.1445648
+    }
+   ],
+   "dataServiceId": "redstone-primary-prod",
+   "dataPackageId": "BTC",
+   "signerAddress": "0xDD682daEC5A90dD295d14DA4b0bec9281017b5bE",
+   "dataFeedId": "BTC"
+  },
+  {
+   "timestampMilliseconds": 1791522740000,
+   "signature": "xsYmtqZXKCCvpsuOT9742zcJj7P69XqUGO4NVSJSiCxl+07eMRej+aUrAltPsojSmeKxb91EIVjstBHgpSDr3xs=",
+   "isSignatureValid": true,
+   "dataPoints": [
+    {
+     "dataFeedId": "BTC",
+     "value": 82291.1221212
+    }
+   ],
+   "dataServiceId": "redstone-primary-prod",
+   "dataPackageId": "BTC",
+   "signerAddress": "0x8BB8F32Df04c8b654987DAaeD53D6B6091e3B774",
+   "dataFeedId": "BTC"
+  },
+  {
+   "timestampMilliseconds": 1791522740000,
+   "signature": "LReo3t/Y3rml5xMyFO8Jp0Vme6PQiJ6BnEu1zkEEum4CBzraU92W75N4sFrORfVdhrOAhMgIf5ja5oJe2mB9EBw=",
+   "isSignatureValid": true,
+   "dataPoints": [
+    {
+     "dataFeedId": "BTC",
+     "value": 82288.1445648
+    }
+   ],
+   "dataServiceId": "redstone-primary-prod",
+   "dataPackageId": "BTC",
+   "signerAddress": "0x51Ce04Be4b3E32572C4Ec9135221d0691Ba7d202",
+   "dataFeedId": "BTC"
+  },
+  {
+   "timestampMilliseconds": 1791522740000,
+   "signature": "tiUT5ObAmyLy2zj8UMzpFjClnntl6U9C8Hsmjcp33CAFUMYAS7dsAjmyXo0LARVF6v5RUri8rcToXQCI7kDfdxw=",
+   "isSignatureValid": true,
+   "dataPoints": [
+    {
+     "dataFeedId": "BTC",
+     "value": 82288.1445648
+    }
+   ],
+   "dataServiceId": "redstone-primary-prod",
+   "dataPackageId": "BTC",
+   "signerAddress": "0xdEB22f54738d54976C4c0fe5ce6d408E40d88499",
+   "dataFeedId": "BTC"
+  },
+  {
+   "timestampMilliseconds": 1791522740000,
+   "signature": "lrI+QELmVsjSTJnwFRhSFe8IlXabPlIFxJ3GWb34dwF92QTKUNBshAuEPp+RW+Gw/qajtIC71SJI03fQ5WWTNxs=",
+   "isSignatureValid": true,
+   "dataPoints": [
+    {
+     "dataFeedId": "BTC",
+     "value": 82289.7732282
+    }
+   ],
+   "dataServiceId": "redstone-primary-prod",
+   "dataPackageId": "BTC",
+   "signerAddress": "0x9c5AE89C4Af6aA32cE58588DBaF90d18a855B6de",
+   "dataFeedId": "BTC"
+  }
+ ]
+}

@@ -1,0 +1,133 @@
+pragma arkade ^0.1.0;
+
+// Collateral of an open binary market. Holds the control asset (CTRL) that authorizes YES/NO
+// reissuance, so every path pins the YES/NO deltas: spending CTRL alone would allow minting.
+// Binary price market settled by RedStone's own signatures: YES when the signed price at the settlement time is
+// at or above the strike. Same collateral and claim mechanics as MarketVault; no attestor of ours.
+contract PriceVault(
+  bytes32 ctrlTxid, int ctrlGidx,
+  bytes32 yesTxid, int yesGidx,
+  bytes32 noTxid, int noGidx,
+  int unit,
+  int capValue,
+  bytes32 feedId,
+  int strike,
+  int settleFromMs,
+  int settleToMs,
+  bytes[5] signers,
+  int quorum,
+  int closeAt,
+  int timeoutAt,
+  bytes32 resolvedYes,
+  bytes32 resolvedNo,
+  bytes32 resolvedInvalid,
+  // BIP341 NUMS point: arkd needs an exit leaf to admit the vault to batches; nobody can sign it.
+  pubkey noExitKey,
+  int exit
+) {
+  private function sets(int yesDelta, int noDelta) {
+    require(tx.assetGroups.has(yesTxid, yesGidx) || yesDelta == 0, "yes group");
+    require(!tx.assetGroups.has(yesTxid, yesGidx) || tx.assetGroups.find(yesTxid, yesGidx).delta == yesDelta, "yes delta");
+    require(tx.assetGroups.has(noTxid, noGidx) || noDelta == 0, "no group");
+    require(!tx.assetGroups.has(noTxid, noGidx) || tx.assetGroups.find(noTxid, noGidx).delta == noDelta, "no delta");
+  }
+
+  private function keepsCtrl() {
+    require(tx.outputs[0].witnessVersion == 1, "vault version");
+    require(tx.outputs[0].assets.lookup(ctrlTxid, ctrlGidx) == 1, "ctrl");
+    require(tx.outputs[0].assets.length == 1, "vault assets");
+  }
+
+  // Locks n * unit sats and mints n YES + n NO.
+  function mint(int n) {
+    require(n > 0, "n");
+    sets(n, n);
+    keepsCtrl();
+    require(tx.outputs[0].scriptPubKey == tx.input.current.scriptPubKey, "vault moved");
+    require(tx.outputs[0].value == tx.input.current.value + n * unit, "collateral");
+    require(tx.outputs[0].value <= capValue, "cap");
+  }
+
+  // Burns n YES + n NO and releases n * unit sats.
+  function merge(int n) {
+    require(n > 0, "n");
+    sets(0 - n, 0 - n);
+    keepsCtrl();
+    require(tx.outputs[0].scriptPubKey == tx.input.current.scriptPubKey, "vault moved");
+    require(tx.outputs[0].value == tx.input.current.value - n * unit, "collateral");
+  }
+
+  // Each RedStone signer signs its own observation: keccak256(feedId || value(32, BE, x1e8) || timestampMs(6, BE)
+  // || 0x00000020 || 0x000001). A side wins when `quorum` signers each signed a value on that side of the strike
+  // inside the window; with 5 distinct signers and quorum 3 that is the median. Absent slots carry zeros and an
+  // empty signature (counts 0); a wrong signature fails the script.
+  // Unrolled per slot: a loop counter sits under each slot's bound message, so incrementing it would need
+  // OP_PUT, which the pinned SDK cannot load.
+  private function side(bytes32[5] values, bytes[5] stamps, signature[5] sigs, bool above) {
+    bytes tail = reverseBytes(num2bin(32, 4)) + reverseBytes(num2bin(1, 3));
+    bytes m0 = digest(feedId + values[0] + stamps[0] + tail, 4);
+    int c0 = 0;
+    if (checkSigFromStack(sigs[0], signers[0], m0) && size(stamps[0]) == 6 && substr(values[0], 0, 24) == num2bin(0, 24) && bin2num(reverseBytes(stamps[0])) >= settleFromMs && bin2num(reverseBytes(stamps[0])) <= settleToMs && (bin2num(reverseBytes(substr(values[0], 24, 8))) >= strike) == above) {
+      c0 = 1;
+    }
+    bytes m1 = digest(feedId + values[1] + stamps[1] + tail, 4);
+    int c1 = 0;
+    if (checkSigFromStack(sigs[1], signers[1], m1) && size(stamps[1]) == 6 && substr(values[1], 0, 24) == num2bin(0, 24) && bin2num(reverseBytes(stamps[1])) >= settleFromMs && bin2num(reverseBytes(stamps[1])) <= settleToMs && (bin2num(reverseBytes(substr(values[1], 24, 8))) >= strike) == above) {
+      c1 = 1;
+    }
+    bytes m2 = digest(feedId + values[2] + stamps[2] + tail, 4);
+    int c2 = 0;
+    if (checkSigFromStack(sigs[2], signers[2], m2) && size(stamps[2]) == 6 && substr(values[2], 0, 24) == num2bin(0, 24) && bin2num(reverseBytes(stamps[2])) >= settleFromMs && bin2num(reverseBytes(stamps[2])) <= settleToMs && (bin2num(reverseBytes(substr(values[2], 24, 8))) >= strike) == above) {
+      c2 = 1;
+    }
+    bytes m3 = digest(feedId + values[3] + stamps[3] + tail, 4);
+    int c3 = 0;
+    if (checkSigFromStack(sigs[3], signers[3], m3) && size(stamps[3]) == 6 && substr(values[3], 0, 24) == num2bin(0, 24) && bin2num(reverseBytes(stamps[3])) >= settleFromMs && bin2num(reverseBytes(stamps[3])) <= settleToMs && (bin2num(reverseBytes(substr(values[3], 24, 8))) >= strike) == above) {
+      c3 = 1;
+    }
+    bytes m4 = digest(feedId + values[4] + stamps[4] + tail, 4);
+    int c4 = 0;
+    if (checkSigFromStack(sigs[4], signers[4], m4) && size(stamps[4]) == 6 && substr(values[4], 0, 24) == num2bin(0, 24) && bin2num(reverseBytes(stamps[4])) >= settleFromMs && bin2num(reverseBytes(stamps[4])) <= settleToMs && (bin2num(reverseBytes(substr(values[4], 24, 8))) >= strike) == above) {
+      c4 = 1;
+    }
+    require(c0 + c1 + c2 + c3 + c4 >= quorum, "quorum");
+  }
+
+  function resolveYes(bytes32[5] values, bytes[5] stamps, signature[5] sigs) {
+    require(checkTime(closeAt), "too early");
+    side(values, stamps, sigs, true);
+    sets(0, 0);
+    keepsCtrl();
+    require(tx.outputs[0].scriptPubKey == resolvedYes, "target");
+    require(tx.outputs[0].value == tx.input.current.value, "value");
+  }
+
+  function resolveNo(bytes32[5] values, bytes[5] stamps, signature[5] sigs) {
+    require(checkTime(closeAt), "too early");
+    side(values, stamps, sigs, false);
+    sets(0, 0);
+    keepsCtrl();
+    require(tx.outputs[0].scriptPubKey == resolvedNo, "target");
+    require(tx.outputs[0].value == tx.input.current.value, "value");
+  }
+
+  // Precommitted fallback when no attestation arrives: split collateral 50/50 per complete set.
+  function timeout() {
+    require(timeoutAt > 0 && checkTime(timeoutAt), "not timed out");
+    sets(0, 0);
+    keepsCtrl();
+    require(tx.outputs[0].scriptPubKey == resolvedInvalid, "target");
+    require(tx.outputs[0].value == tx.input.current.value, "value");
+  }
+
+  function renew() {
+    require(tx.version == 2, "intent only");
+    sets(0, 0);
+    require(this.tunnel(this.activeInputIndex - 1), "tunnel");
+  }
+
+  function unilateral(signature noExitSig) tapscript {
+    require(older(exit));
+    require(checkSig(noExitSig, noExitKey));
+  }
+}

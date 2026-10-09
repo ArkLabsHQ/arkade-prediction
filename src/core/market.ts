@@ -2,6 +2,7 @@ import { arkade, asset } from "@arkade-os/sdk";
 import { hex } from "@scure/base";
 import marketVaultArtifact from "../../contracts/artifacts/market_vault.json" with { type: "json" };
 import marketVaultAnyKeyArtifact from "../../contracts/artifacts/market_vault_anykey.json" with { type: "json" };
+import priceVaultArtifact from "../../contracts/artifacts/price_vault.json" with { type: "json" };
 import resolvedVaultArtifact from "../../contracts/artifacts/resolved_vault.json" with { type: "json" };
 import { assetScriptArgs } from "./assets.js";
 import { attestorScheme } from "./attestation.js";
@@ -11,6 +12,7 @@ import { loadProgram, type ContractArtifact } from "./programs.js";
 export const PROGRAMS = {
     marketVault: loadProgram(marketVaultArtifact as ContractArtifact),
     marketVaultAnyKey: loadProgram(marketVaultAnyKeyArtifact as ContractArtifact),
+    priceVault: loadProgram(priceVaultArtifact as ContractArtifact),
     resolvedVault: loadProgram(resolvedVaultArtifact as ContractArtifact),
 };
 
@@ -33,8 +35,24 @@ export interface MarketAssets {
     no: string;
 }
 
+/** A market settled by an oracle's own signed price report (RedStone format) instead of our attestors. */
+export interface PriceTerms {
+    feedId: Uint8Array;
+    /** Price x1e8, as RedStone signs it; YES when the reported price is at or above it. */
+    strike: bigint;
+    settleFromMs: bigint;
+    settleToMs: bigint;
+    /** 34-byte 0x10 ECDSA/secp256k1 keys, one per slot; empty-signature slots count as absent. */
+    signers: Uint8Array[];
+    quorum: number;
+}
+
+export const PRICE_SIGNER_SLOTS = 5;
+
 export interface VaultTerms {
     assets: MarketAssets;
+    /** Present for price markets, which ignore the attestor fields. */
+    price?: PriceTerms;
     unitSats: bigint;
     capSats: bigint;
     /** One key per vault slot; a market with fewer attestors repeats a key (see `oracleSlots`). */
@@ -101,7 +119,38 @@ export function resolvedVault(ark: ArkadeClient, terms: VaultTerms, outcome: Bin
     });
 }
 
+function priceContracts(ark: ArkadeClient, terms: VaultTerms, p: PriceTerms) {
+    if (p.feedId.length !== 32 || p.signers.length !== PRICE_SIGNER_SLOTS || p.signers.some((k) => attestorScheme(k) !== "ecdsa-secp256k1")) {
+        throw new Error(`price terms need a 32-byte feed id and ${PRICE_SIGNER_SLOTS} ECDSA/secp256k1 signer keys`);
+    }
+    if (new Set(p.signers.map((k) => hex.encode(k))).size !== PRICE_SIGNER_SLOTS || p.quorum < 1 || p.quorum > PRICE_SIGNER_SLOTS) {
+        throw new Error("price signers must be distinct, with a quorum of 1..5");
+    }
+    if (terms.unitSats <= 0n || terms.unitSats % 2n !== 0n) throw new Error("unit must be a positive even number of sats");
+    const resolved = { yes: resolvedVault(ark, terms, "yes"), no: resolvedVault(ark, terms, "no"), invalid: resolvedVault(ark, terms, "invalid") };
+    const vault = ark.contract(PROGRAMS.priceVault, {
+        ...assetArgs(terms.assets),
+        unit: terms.unitSats,
+        capValue: terms.capSats,
+        feedId: p.feedId,
+        strike: p.strike,
+        settleFromMs: p.settleFromMs,
+        settleToMs: p.settleToMs,
+        ...Object.fromEntries(p.signers.map((k, i) => [`signers.${i}`, k])),
+        quorum: BigInt(p.quorum),
+        closeAt: terms.closeAt,
+        timeoutAt: terms.timeoutAt,
+        resolvedYes: resolved.yes.pkScript.slice(2),
+        resolvedNo: resolved.no.pkScript.slice(2),
+        resolvedInvalid: resolved.invalid.pkScript.slice(2),
+        noExitKey: NUMS_KEY,
+        exit: terms.exitDelaySeconds,
+    });
+    return { vault, resolved };
+}
+
 export function marketContracts(ark: ArkadeClient, terms: VaultTerms) {
+    if (terms.price) return priceContracts(ark, terms, terms.price);
     if (terms.binding.length !== 32) throw new Error("binding is 32 bytes");
     const oracles = oracleSlots(terms.oracleKeys, terms.oracleThreshold);
     if (terms.oracleKeys.length !== ORACLE_SLOTS) throw new Error(`terms carry exactly ${ORACLE_SLOTS} attestor slots`);
