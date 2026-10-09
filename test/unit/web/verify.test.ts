@@ -48,7 +48,7 @@ function served(mirror = false) {
         outcomes: ["YES", "NO"], category: "test", section: "Other", closeAt: new Date(CLOSE * 1000).toISOString(), createdAt: new Date().toISOString(),
         source: mirror ? {
             provider: "polymarket", sourceId: "123", url: "https://polymarket.com/event/x", slug: "x", protocol: "v1", conditionId: "0x01",
-            questionId: "0x02", resolver: "0xbe", resolutionSource: "", referencePrices: null, sourceStatus: null, image: null, event: null, clarifications: [], binding: SOURCE,
+            questionId: "0x02", resolver: "0xbe", resolutionSource: "", referencePrices: null, sourceStatus: null, image: null, event: null, startsAt: null, clarifications: [], binding: SOURCE,
         } : null,
         oracle: { policy: "external-key", keys: [oracleKey, oracleKey, oracleKey], threshold: 1, epoch: 1, label: "" },
         terms: termsToJson(f.terms), genesisTxid: f.genesisTxid, vaultTxid: f.vaultTxid,

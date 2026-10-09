@@ -65,6 +65,8 @@ export interface SourceJson {
     sourceStatus: string | null;
     image: string | null;
     event: { title: string; slug: string } | null;
+    /** When the underlying event starts (sports kickoff, Up/Down window), if the source lists it. */
+    startsAt: string | null;
     clarifications: { observedAt: string; note: string }[];
     /** Source identity exactly as committed in the market binding. */
     binding: Record<string, unknown> | null;

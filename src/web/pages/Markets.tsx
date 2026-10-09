@@ -14,7 +14,9 @@ type Quick = (typeof QUICK)[number][0];
 
 const liveWindow = (m: MarketJson, now: number) => {
     const p = m.terms?.price;
-    return m.status === "open" && p?.kind === "updown" && Number(p.startAtMs) <= now && now < Number(p.endAtMs);
+    if (p?.kind === "updown") return m.status === "open" && Number(p.startAtMs) <= now && now < Number(p.endAtMs);
+    const start = m.source?.startsAt ? Date.parse(m.source.startsAt) : NaN;
+    return m.status === "open" && start <= now && now < Date.parse(m.closeAt);
 };
 const QUICK_TEST: Record<Quick, (m: MarketJson, now: number) => boolean> = {
     live: liveWindow,
