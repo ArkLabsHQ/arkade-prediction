@@ -15,7 +15,7 @@ describe("RedStone packages", () => {
 
     it("puts each signer's own value in its committed slot and leaves missing signers empty", () => {
         const signers = packages.map(packageSignerKey).reverse();
-        const report = priceReport("BTC", packages.slice(1), signers);
+        const report = priceReport("BTC", packages.slice(1), signers, BigInt(packages[0]!.timestampMilliseconds));
         expect(report.signatures.map((s) => s.length)).toEqual([64, 64, 64, 64, 0]);
         expect(report.values.every((v) => v.length === 32) && report.stamps.every((t) => t.length === 6)).toBe(true);
         expect(report.prices.reverse().slice(1)).toEqual(packages.slice(1).map((p) => BigInt(Math.round(p.dataPoints[0]!.value * 1e8))));

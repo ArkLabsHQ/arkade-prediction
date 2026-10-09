@@ -18,11 +18,9 @@ describe("price market settled by RedStone's own signatures", () => {
 
         const packages = await latestPackages("BTC");
         const signers = packages.map(packageSignerKey);
-        const report = priceReport("BTC", packages, signers);
+        const round = BigInt(packages[0]!.timestampMilliseconds);
+        const report = priceReport("BTC", packages, signers, round);
         expect(report.signatures.filter((x) => x.length).length).toBeGreaterThanOrEqual(3);
-        const times = packages.map((p) => BigInt(p.timestampMilliseconds));
-        const earliest = times.reduce((a, b) => (a < b ? a : b));
-        const latest = times.reduce((a, b) => (a > b ? a : b));
 
         const marketId = hex.encode(crypto.getRandomValues(new Uint8Array(16)));
         const { assets } = await issueMarketAssets(ctx, party, marketId, 1n);
@@ -31,7 +29,7 @@ describe("price market settled by RedStone's own signatures", () => {
         const terms: VaultTerms = {
             assets, unitSats: 1000n, capSats: 101_000n, oracleKeys: [], oracleThreshold: 1, binding: new Uint8Array(32),
             closeAt, timeoutAt: closeAt + 86_400n, exitDelaySeconds: 512n,
-            price: { feedId: feedIdBytes("BTC"), strike: report.price - 1n, settleFromMs: earliest - 60_000n, settleToMs: latest + 60_000n, signers, quorum: 3 },
+            price: { feedId: feedIdBytes("BTC"), strike: report.price - 1n, settleAtMs: round, signers, quorum: 3 },
         };
         const { vault, resolved } = marketContracts(ark, terms);
         await openVault(ctx, party, terms, 1n, 1000n);
@@ -70,8 +68,8 @@ describe("price market settled by RedStone's own signatures", () => {
         // Real signed packages captured from the gateway: three nodes at 82288.14, one at 82289.77, one at 82291.12.
         const packages: RedStonePackage[] = JSON.parse(readFileSync(new URL("../fixtures/redstone/btc-packages.json", import.meta.url), "utf8")).BTC;
         const signers = packages.map(packageSignerKey);
-        const report = priceReport("BTC", packages, signers);
         const ts = BigInt(packages[0]!.timestampMilliseconds);
+        const report = priceReport("BTC", packages, signers, ts);
 
         const marketId = hex.encode(crypto.getRandomValues(new Uint8Array(16)));
         const { assets } = await issueMarketAssets(ctx, party, marketId, 1n);
@@ -80,7 +78,7 @@ describe("price market settled by RedStone's own signatures", () => {
         const terms: VaultTerms = {
             assets, unitSats: 1000n, capSats: 101_000n, oracleKeys: [], oracleThreshold: 1, binding: new Uint8Array(32),
             closeAt, timeoutAt: closeAt + 86_400n, exitDelaySeconds: 512n,
-            price: { feedId: feedIdBytes("BTC"), strike: 8228900000000n, settleFromMs: ts - 1000n, settleToMs: ts + 1000n, signers, quorum: 3 },
+            price: { feedId: feedIdBytes("BTC"), strike: 8228900000000n, settleAtMs: ts, signers, quorum: 3 },
         };
         const { vault, resolved } = marketContracts(ark, terms);
         await openVault(ctx, party, terms, 1n, 1000n);
@@ -91,6 +89,15 @@ describe("price market settled by RedStone's own signatures", () => {
         const args = { ...slot("values", report.values), ...slot("stamps", report.stamps), ...slot("sigs", report.signatures) };
         await expectCovenantRejection(execute(ctx, [{ kind: "covenant", coin, contract: vault, fn: "resolveYes", args }],
             [{ script: resolved.yes.pkScript, amount: BigInt(coin.value), assets: [{ assetId: assets.ctrl, amount: 1n }] }]), "YES with only 2 of 5 signers above the strike");
+        const second = await issueMarketAssets(ctx, party, hex.encode(crypto.getRandomValues(new Uint8Array(16))), 1n);
+        await waitFor(async () => (await party.coins()).some((c) => c.assets?.some((a) => a.assetId === second.assets.ctrl)), { what: "second genesis" });
+        const later: VaultTerms = { ...terms, assets: second.assets, price: { ...terms.price!, settleAtMs: ts + 10_000n } };
+        const laterVault = marketContracts(ark, later);
+        await openVault(ctx, party, later, 1n, 1000n);
+        await waitFor(async () => (await spendableAt(laterVault.vault.pkScript)).length > 0, { what: "second vault" });
+        const laterCoin = (await contractCoin(ctx, laterVault.vault, second.assets.ctrl))!;
+        await expectCovenantRejection(execute(ctx, [{ kind: "covenant", coin: laterCoin, contract: laterVault.vault, fn: "resolveNo", args }],
+            [{ script: laterVault.resolved.no.pkScript, amount: BigInt(laterCoin.value), assets: [{ assetId: second.assets.ctrl, amount: 1n }] }]), "reports from a different round");
         const { outcome, txid } = await resolvePriceMarket(ctx, terms, report);
         expect(outcome).toBe("no");
         await waitFor(async () => (await spendableAt(resolved.no.pkScript)).length > 0, { what: "resolved NO vault" });

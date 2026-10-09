@@ -55,8 +55,8 @@ export function packageSignerKey(p: RedStonePackage): Uint8Array {
     return Uint8Array.from([0x10, ...key.toBytes(true)]);
 }
 
-/** Places each committed signer's own package in its slot; signers without a valid package get an empty slot. */
-export function priceReport(feed: string, packages: RedStonePackage[], signers: Uint8Array[]): PriceReport {
+/** Places each committed signer's package for round settleAtMs in its slot; others get an empty slot. */
+export function priceReport(feed: string, packages: RedStonePackage[], signers: Uint8Array[], settleAtMs: bigint): PriceReport {
     const slots = signers.map((k) => hex.encode(k));
     const report: PriceReport = {
         values: signers.map(() => new Uint8Array(32)), stamps: signers.map(() => new Uint8Array(6)),
@@ -64,7 +64,7 @@ export function priceReport(feed: string, packages: RedStonePackage[], signers: 
     };
     for (const p of packages) {
         const dp = p.dataPoints.find((d) => d.dataFeedId === feed);
-        if (!dp || p.dataPoints.length !== 1) continue;
+        if (!dp || p.dataPoints.length !== 1 || BigInt(p.timestampMilliseconds) !== settleAtMs) continue;
         let slot: number;
         try {
             slot = slots.indexOf(hex.encode(packageSignerKey(p)));

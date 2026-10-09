@@ -40,8 +40,8 @@ export interface PriceTerms {
     feedId: Uint8Array;
     /** Price x1e8, as RedStone signs it; YES when the reported price is at or above it. */
     strike: bigint;
-    settleFromMs: bigint;
-    settleToMs: bigint;
+    /** The single RedStone round (ms, on a 10 s boundary) the market settles on. */
+    settleAtMs: bigint;
     /** 34-byte 0x10 ECDSA/secp256k1 keys, one per slot; empty-signature slots count as absent. */
     signers: Uint8Array[];
     quorum: number;
@@ -126,6 +126,7 @@ function priceContracts(ark: ArkadeClient, terms: VaultTerms, p: PriceTerms) {
     if (new Set(p.signers.map((k) => hex.encode(k))).size !== PRICE_SIGNER_SLOTS || p.quorum < 1 || p.quorum > PRICE_SIGNER_SLOTS) {
         throw new Error("price signers must be distinct, with a quorum of 1..5");
     }
+    if (p.settleAtMs <= 0n || p.settleAtMs % 10_000n !== 0n) throw new Error("settleAtMs must be a RedStone round (multiple of 10 s)");
     if (terms.unitSats <= 0n || terms.unitSats % 2n !== 0n) throw new Error("unit must be a positive even number of sats");
     const resolved = { yes: resolvedVault(ark, terms, "yes"), no: resolvedVault(ark, terms, "no"), invalid: resolvedVault(ark, terms, "invalid") };
     const vault = ark.contract(PROGRAMS.priceVault, {
@@ -134,8 +135,7 @@ function priceContracts(ark: ArkadeClient, terms: VaultTerms, p: PriceTerms) {
         capValue: terms.capSats,
         feedId: p.feedId,
         strike: p.strike,
-        settleFromMs: p.settleFromMs,
-        settleToMs: p.settleToMs,
+        settleAtMs: p.settleAtMs,
         ...Object.fromEntries(p.signers.map((k, i) => [`signers.${i}`, k])),
         quorum: BigInt(p.quorum),
         closeAt: terms.closeAt,

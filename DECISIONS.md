@@ -147,7 +147,10 @@ Each entry: decision, reason, rejected alternatives. Newest last.
     collateral and claim paths but resolves from signed price reports instead of our attestors. RedStone nodes each
     sign their own observation (`keccak256(feedId ‖ value ‖ tsMs ‖ 0x00000020 ‖ 0x000001)`, ECDSA/secp256k1), so
     each of the 5 committed signer slots carries its own value, and a side wins when 3 signers' values fall on it
-    inside the settlement window: the median. Signer keys are committed in full (the emulator has no ecrecover);
+    for one exact round `settleAtMs` (RedStone rounds fall on 10 s boundaries): the median. One round, not a window,
+    because a window lets whoever resolves pick, per signer, the round that suits a side. The cost is liveness: the
+    free gateway serves only the latest round and sometimes skips one, so the keeper must capture the round while it
+    is live; a missed round ends in the precommitted 50/50 timeout rather than in a choosable outcome. Signer keys are committed in full (the emulator has no ecrecover);
     they are recovered from the gateway's own signatures. The slots are unrolled because a loop counter under a
     bound message compiles to OP_PUT, which the pinned SDK cannot load. Chosen first because RedStone's latest
     values are public; Pyth Pro and Chainlink Data Streams need paid keys.
