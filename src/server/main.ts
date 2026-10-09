@@ -21,7 +21,7 @@ import { resolutionTick } from "./resolver.js";
 import { createPolymarketProvider } from "./sources/polymarket/index.js";
 import { createKalshiProvider } from "./sources/kalshi/index.js";
 import { createManifoldProvider } from "./sources/manifold/index.js";
-import type { MarketSourceProvider } from "./sources/types.js";
+import type { MarketSourceProvider, ProviderName } from "./sources/types.js";
 import { captureTick } from "./rounds.js";
 import { discoverUpDown, importUpDown, upcomingSlugs } from "./updown.js";
 
@@ -111,7 +111,11 @@ async function main(): Promise<void> {
     // Each slow read is capped so one hung dependency cannot blank the whole operator page.
     const capped = <T,>(p: Promise<T>, ms = 10_000) =>
         Promise.race([p, new Promise<{ error: string }>((r) => setTimeout(() => r({ error: `timed out after ${ms / 1000}s` }), ms))]).catch((e) => ({ error: String(e).slice(0, 200) }));
-    const walletInfo = (w: NonNullable<typeof operator>) => capped((async () => ({ address: await w.wallet.getAddress(), available: (await w.wallet.getBalance()).available }))());
+    // The SDK balance syncs the wallet's whole history; the indexer's spendable coins answer in one read.
+    const walletInfo = (w: NonNullable<typeof operator>) => capped((async () => ({
+        address: await w.wallet.getAddress(),
+        available: (await w.party.coins()).reduce((sum, c) => sum + c.value, 0),
+    }))());
     const overview = async () => {
         const [h, op, lpw] = await Promise.all([capped(health()), operator && walletInfo(operator), lp && walletInfo(lp)]);
         return {
@@ -144,7 +148,7 @@ async function main(): Promise<void> {
         if (!lease.held) throw new Error("not the writer");
         return importOnce(sourceDeps);
     });
-    const replay = sourceDeps && cfg.DEV_ENDPOINTS ? (sourceId: string) => replayHistorical(sourceDeps, sourceId) : undefined;
+    const replay = sourceDeps && cfg.DEV_ENDPOINTS ? (sourceId: string, provider?: ProviderName) => replayHistorical(sourceDeps, sourceId, provider) : undefined;
     const apiDeps = { ...deps, keeper, health, overview, faucet, importNow, replay };
     ready = { public: createApi(apiDeps), admin: createApi({ ...apiDeps, adminRoutes: true }) };
     log("api ready", { network: cfg.APM_NETWORK, operator: !!operator, lp: !!lp });

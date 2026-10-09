@@ -1,3 +1,5 @@
+import { redacted } from "./config.js";
+import type { ProviderName } from "./sources/types.js";
 import { Hono, type Context } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { streamSSE } from "hono/streaming";
@@ -21,7 +23,7 @@ export interface ApiDeps extends Deps {
     importNow?: () => Promise<unknown>;
     overview: () => Promise<unknown>;
     faucet?: (address: string, amount: number) => Promise<string>;
-    replay?: (sourceId: string) => Promise<string>;
+    replay?: (sourceId: string, provider?: ProviderName) => Promise<string>;
     adminRoutes?: boolean;
 }
 
@@ -171,6 +173,7 @@ export function createApi(d: ApiDeps): Hono {
         await next();
     });
     admin.get("/overview", async (c) => c.json(await d.overview()));
+    admin.get("/config", (c) => c.json(redacted(d.cfg)));
     admin.post("/import/run", async (c) => {
         if (!d.importNow) throw new HttpError(409, "disabled", "source import is disabled");
         return c.json(await d.importNow());
@@ -224,10 +227,11 @@ export function createApi(d: ApiDeps): Hono {
         return c.json({ path: target }, 201);
     });
     admin.post("/replay", async (c) => {
-        if (!d.replay) throw new HttpError(409, "disabled", "historical replay needs DEV_ENDPOINTS and POLYMARKET_ENABLED on regtest");
-        const { sourceId } = await body<{ sourceId: string }>(c);
-        if (!/^[0-9]{1,12}$/.test(String(sourceId))) throw new HttpError(400, "source-id", "numeric Polymarket market id expected");
-        return c.json({ marketId: await d.replay(String(sourceId)) }, 201);
+        if (!d.replay) throw new HttpError(409, "disabled", "historical replay needs DEV_ENDPOINTS and a source provider on regtest");
+        const { sourceId, provider = "polymarket" } = await body<{ sourceId: string; provider?: string }>(c);
+        if (!["polymarket", "kalshi", "manifold"].includes(provider)) throw new HttpError(400, "provider", "provider must be polymarket, kalshi or manifold");
+        if (!/^[A-Za-z0-9._-]{1,80}$/.test(String(sourceId))) throw new HttpError(400, "source-id", "source market id expected");
+        return c.json({ marketId: await d.replay(String(sourceId), provider as ProviderName) }, 201);
     });
     // Only the admin listener (ADMIN_PORT) mounts these; it is meant to be reachable only through a protected edge.
     if (d.adminRoutes) app.route("/api/admin", admin);

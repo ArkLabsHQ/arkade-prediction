@@ -5,7 +5,7 @@ import { oracleSlots } from "../core/market.js";
 import { all, now, one, run, setMeta, tx } from "./db.js";
 import type { Deps } from "./markets.js";
 import { importedDefinition } from "./sources/definition.js";
-import type { MarketSourceProvider, SourceMarket } from "./sources/types.js";
+import type { MarketSourceProvider, ProviderName, SourceMarket } from "./sources/types.js";
 import type { Workflows } from "./workflows.js";
 import { sectionOf } from "../shared/sections.js";
 
@@ -138,24 +138,24 @@ function activate(d: Deps & { wf: Workflows; timeoutDays: number }, m: SourceMar
  * Regtest demo only: imports an already-resolved source market so its real final on-chain result can settle a
  * local market end to end. Identity checks still apply; the label is the category, as the attestor checks the question.
  */
-export async function replayHistorical(d: ImportDeps, sourceId: string): Promise<string> {
+export async function replayHistorical(d: ImportDeps, sourceId: string, providerName: ProviderName = "polymarket"): Promise<string> {
     if (d.cfg.APM_NETWORK !== "regtest") throw new Error("historical replay is regtest-only");
-    const provider = d.providers.find((p) => p.name === "polymarket");
-    if (!provider) throw new Error("historical replay needs the Polymarket provider");
+    const provider = d.providers.find((p) => p.name === providerName);
+    if (!provider) throw new Error(`historical replay needs the ${providerName} provider enabled`);
     const m = await provider.fetchMarketDefinition(sourceId);
-    const verdict = provider.evaluateEligibility(m, { profiles: ["polymarket-ctf-v1-binary"], tags: [], maxHorizonSeconds: 1e10, minHorizonSeconds: -1e10 }, new Date());
+    const verdict = provider.evaluateEligibility(m, { profiles: [provider.profile], tags: [], maxHorizonSeconds: 1e10, minHorizonSeconds: -1e10 }, new Date());
     if (!verdict.eligible && verdict.code !== "closed") throw new Error(`source market not replayable: ${verdict.code} ${verdict.reason}`);
     if (!d.cfg.ORACLE_PUBKEYS[0]) throw new Error("ORACLE_PUBKEYS is empty");
     const closeAt = Math.floor(Date.now() / 1000) + 120;
     const replay: SourceMarket = { ...m, endDate: new Date(closeAt * 1000).toISOString() };
-    const def = { ...importedDefinition(replay, "polymarket-ctf-v1-binary", 1), category: "historical replay" };
+    const def = { ...importedDefinition(replay, provider.profile, 1), category: "historical replay" };
     const id = randomBytes(16).toString("hex");
     const t = now();
     run(d.db, `INSERT INTO markets(id, kind, status, question, rules, outcomes, category, close_at, timeout_at, source_provider, source_id,
                source_version, source_snapshot, profile, oracle_policy, oracle_keys, oracle_threshold, oracle_epoch, definition_hash, created_at, updated_at)
                VALUES (?, 'polymarket', 'activating', ?, ?, ?, 'historical replay', ?, ?, ?, ?, ?, ?, ?, 'platform-attestor', ?, ?, ?, ?, ?, ?)`,
         id, def.question, def.rules, JSON.stringify(def.outcomes), Number(def.closeAtUnix), Number(def.timeoutAtUnix),
-        m.provider, `${m.sourceId}#replay-${id.slice(0, 8)}`, m.versionHash, JSON.stringify({ ...m, binding: def.source }), "polymarket-ctf-v1-binary",
+        m.provider, `${m.sourceId}#replay-${id.slice(0, 8)}`, m.versionHash, JSON.stringify({ ...m, binding: def.source }), provider.profile,
         JSON.stringify(attestorSlots(d.cfg)), d.cfg.ORACLE_THRESHOLD, d.cfg.ORACLE_EPOCH, definitionHash(def), t, t);
     d.wf.enqueue(`activate:${id}`, "activate", id, {});
     return id;
