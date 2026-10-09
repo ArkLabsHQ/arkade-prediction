@@ -3,13 +3,13 @@
  * times are ISO-8601 strings unless named `*Unix`.
  */
 import { hex } from "@scure/base";
-import type { VaultTerms } from "../core/market.js";
+import type { PriceTerms, VaultTerms } from "../core/market.js";
 import type { OfferTerms, Side } from "../core/offers.js";
 
 export type Outcome = "yes" | "no";
 export type MarketKind = "polymarket" | "custom";
 export type MarketStatus = "activating" | "open" | "halted" | "closed" | "resolving" | "resolved" | "failed" | "hidden";
-export type OraclePolicy = "platform-attestor" | "external-key" | "dev-oracle";
+export type OraclePolicy = "platform-attestor" | "external-key" | "dev-oracle" | "redstone";
 
 export interface ConfigJson {
     network: string;
@@ -41,7 +41,14 @@ export interface MarketTermsJson {
     closeAtUnix: string;
     timeoutAtUnix: string;
     exitDelaySeconds: string;
+    /** Price markets settled by RedStone's signed rounds; attestor fields are then unused. */
+    price?: PriceTermsJson;
 }
+
+export type PriceTermsJson = { feedId: string; signers: string[]; quorum: number } & (
+    | { kind: "threshold"; strike: string; settleAtMs: string }
+    | { kind: "updown"; startAtMs: string; endAtMs: string }
+);
 
 export interface SourceJson {
     provider: "polymarket";
@@ -203,7 +210,22 @@ export function termsFromJson(t: MarketTermsJson): VaultTerms {
         closeAt: big(t.closeAtUnix),
         timeoutAt: big(t.timeoutAtUnix),
         exitDelaySeconds: big(t.exitDelaySeconds),
+        ...(t.price ? { price: priceFromJson(t.price) } : {}),
     };
+}
+
+function priceFromJson(p: PriceTermsJson): PriceTerms {
+    const base = { feedId: hex.decode(p.feedId), signers: p.signers.map((k) => hex.decode(k)), quorum: p.quorum };
+    return p.kind === "threshold"
+        ? { ...base, kind: "threshold", strike: big(p.strike), settleAtMs: big(p.settleAtMs) }
+        : { ...base, kind: "updown", startAtMs: big(p.startAtMs), endAtMs: big(p.endAtMs) };
+}
+
+function priceToJson(p: PriceTerms): PriceTermsJson {
+    const base = { feedId: hex.encode(p.feedId), signers: p.signers.map((k) => hex.encode(k)), quorum: p.quorum };
+    return p.kind === "threshold"
+        ? { ...base, kind: "threshold", strike: p.strike.toString(), settleAtMs: p.settleAtMs.toString() }
+        : { ...base, kind: "updown", startAtMs: p.startAtMs.toString(), endAtMs: p.endAtMs.toString() };
 }
 
 export function termsToJson(t: VaultTerms): MarketTermsJson {
@@ -217,6 +239,7 @@ export function termsToJson(t: VaultTerms): MarketTermsJson {
         closeAtUnix: t.closeAt.toString(),
         timeoutAtUnix: t.timeoutAt.toString(),
         exitDelaySeconds: t.exitDelaySeconds.toString(),
+        ...(t.price ? { price: priceToJson(t.price) } : {}),
     };
 }
 

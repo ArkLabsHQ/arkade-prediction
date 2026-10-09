@@ -20,7 +20,7 @@ let lastScreen = 0;
 export async function resolutionTick(d: SourceDeps): Promise<void> {
     await screenOpenMarkets(d).catch((err) => d.log("early resolution screen failed", { error: String(err) }));
     const due = all<MarketRow>(d.db,
-        "SELECT * FROM markets WHERE kind = 'polymarket' AND terms IS NOT NULL AND vault_phase = 'open' AND close_at <= ?", Math.floor(Date.now() / 1000))
+        "SELECT * FROM markets WHERE kind = 'polymarket' AND oracle_policy != 'redstone' AND terms IS NOT NULL AND vault_phase = 'open' AND close_at <= ?", Math.floor(Date.now() / 1000))
         .filter((m) => { const t = marketTerms(m); return t && quorums(d.db, m.id, t).length === 0; });
     for (const m of due) {
         if (Date.now() - (lastPoll.get(m.id) ?? 0) < d.cfg.RESOLUTION_INTERVAL_SECONDS * 1000) continue;
@@ -42,7 +42,7 @@ async function screenOpenMarkets(d: SourceDeps): Promise<void> {
     if (Date.now() - lastScreen < d.cfg.RESOLUTION_INTERVAL_SECONDS * 1000) return;
     // Historical replays mirror an already-resolved source by design.
     const open = all<MarketRow>(d.db,
-        `SELECT * FROM markets WHERE kind = 'polymarket' AND terms IS NOT NULL AND vault_phase = 'open' AND close_at > ?
+        `SELECT * FROM markets WHERE kind = 'polymarket' AND oracle_policy != 'redstone' AND terms IS NOT NULL AND vault_phase = 'open' AND close_at > ?
          AND resolution_status != 'source-final' AND source_id NOT LIKE '%#replay-%'
          AND NOT EXISTS (SELECT 1 FROM certificates c WHERE c.market_id = markets.id)`, Math.floor(Date.now() / 1000));
     if (open.length === 0) return;

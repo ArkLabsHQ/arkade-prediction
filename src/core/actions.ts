@@ -308,6 +308,19 @@ export async function resolvePriceMarket(ctx: Ctx, terms: VaultTerms, report: Si
     return { txid, outcome };
 }
 
+/** Settles a Pyth Up/Down vault on the signed start and end updates. */
+export async function resolvePythMarket(ctx: Ctx, terms: VaultTerms, end: { payload: Uint8Array; signature: Uint8Array; price: bigint }, start: { payload: Uint8Array; signature: Uint8Array; price: bigint }) {
+    const { vault, resolved } = marketContracts(ctx.ark, terms);
+    const coin = await contractCoin(ctx, vault, terms.assets.ctrl);
+    if (!coin || !terms.pyth) throw new Error("pyth vault not found");
+    const outcome = end.price >= start.price ? "yes" : "no";
+    const args = { endPayload: end.payload, endSig: end.signature, startPayload: start.payload, startSig: start.signature };
+    const { txid } = await execute(ctx, [{ kind: "covenant", coin, contract: vault, fn: outcome === "yes" ? "resolveYes" : "resolveNo", args }], [
+        { script: resolved[outcome].pkScript, amount: BigInt(coin.value), assets: [{ assetId: terms.assets.ctrl, amount: 1n }] },
+    ]);
+    return { txid, outcome };
+}
+
 export async function timeoutMarket(ctx: Ctx, terms: VaultTerms) {
     const { vault, resolved } = marketContracts(ctx.ark, terms);
     const coin = await contractCoin(ctx, vault, terms.assets.ctrl);

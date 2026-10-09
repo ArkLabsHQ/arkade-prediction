@@ -200,7 +200,7 @@ export function marketJson(db: Db, row: MarketRow): MarketJson {
         },
         oracle: {
             policy: row.oracle_policy, keys: JSON.parse(row.oracle_keys), threshold: row.oracle_threshold, epoch: row.oracle_epoch,
-            label: { "platform-attestor": "Platform attestor (verifies the source on-chain)", "external-key": "Creator-designated oracle key", "dev-oracle": "Development oracle (regtest only)" }[row.oracle_policy],
+            label: { "platform-attestor": "Platform attestor (verifies the source on-chain)", "external-key": "Creator-designated oracle key", "dev-oracle": "Development oracle (regtest only)", redstone: "RedStone signed prices, checked by the vault itself" }[row.oracle_policy],
         },
         terms,
         genesisTxid: row.genesis_txid,

@@ -59,6 +59,13 @@ const schema = z.object({
     POLYMARKET_RESOLVERS: csv,
     IMPORT_TAGS: csv,
     IMPORT_MAX_ACTIVE: int(5),
+    // Polymarket crypto Up/Down mirrors settled on RedStone's signed rounds (off unless enabled).
+    UPDOWN_ENABLED: bool,
+    UPDOWN_MAX_ACTIVE: int(4),
+    UPDOWN_WINDOWS: csv.default(["15m", "4h"]),
+    UPDOWN_ASSETS: csv.default(["BTC", "ETH", "SOL", "XRP", "DOGE", "BNB"]),
+    UPDOWN_LEAD_SECONDS: int(7200),
+    UPDOWN_TIMEOUT_SECONDS: int(3600),
     IMPORT_MIN_HORIZON_SECONDS: int(3600),
     IMPORT_MAX_HORIZON_SECONDS: int(30 * 86400),
     IMPORT_INTERVAL_SECONDS: int(600),

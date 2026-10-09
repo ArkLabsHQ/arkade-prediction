@@ -53,6 +53,10 @@ const MIGRATIONS: string[] = [
     // Vaults built with the retired single-attestor template cannot be driven by this build.
     `UPDATE markets SET status = 'failed', resolution_detail = 'built with the retired single-attestor vault template; settle it with the previous release'
      WHERE terms IS NOT NULL AND json_extract(terms, '$.oracleKeys') IS NULL AND status != 'hidden';`,
+    // RedStone rounds price markets settle on; the free gateway serves only the latest, so they are kept here.
+    `CREATE TABLE price_rounds (
+        feed TEXT NOT NULL, round_ms INTEGER NOT NULL, packages TEXT NOT NULL, captured_at TEXT NOT NULL,
+        PRIMARY KEY (feed, round_ms));`,
 ];
 
 export type Db = DatabaseSync;

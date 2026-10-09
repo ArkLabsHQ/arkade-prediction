@@ -3,11 +3,14 @@ import { hex } from "@scure/base";
 import { assetIdOf } from "../core/assets.js";
 import { sha256Hex } from "../core/encoding.js";
 import {
-    cancelOffer, issueMarketAssets, mintMatch, mintSets, openVault, postOffer, resolveMarket, settleExpiredOffer,
+    cancelOffer, issueMarketAssets, mintMatch, mintSets, openVault, postOffer, resolveMarket, resolvePriceMarket, settleExpiredOffer,
     timeoutMarket, type Ctx, type LiveOffer, type Party,
 } from "../core/actions.js";
 import { bindingOf, type MarketDefinition } from "../core/definition.js";
-import { marketContracts, oracleSlots } from "../core/market.js";
+import { marketContracts, oracleSlots, PRICE_SIGNER_SLOTS, type PriceTerms, type VaultTerms } from "../core/market.js";
+import { REDSTONE_PRIMARY_SIGNERS, feedIdBytes, latestPackages, packageSignerKey, priceReport } from "../core/redstone.js";
+import { storedRound } from "./rounds.js";
+import { sha256 } from "@noble/hashes/sha2.js";
 import { offerContract } from "../core/offers.js";
 import { renewCovenantVtxos, type RenewTarget } from "../core/renewal.js";
 import { coinFromJson, offerTermsFromJson, offerTermsToJson, termsToJson, type CoinJson, type OfferTermsJson } from "../shared/api.js";
@@ -101,8 +104,9 @@ export class Keeper {
         }
         for (const m of all<MarketRow>(db, "SELECT * FROM markets WHERE vault_phase = 'open' AND terms IS NOT NULL AND close_at <= ?", nowS)) {
             const terms = marketTerms(m);
-            const reached = terms && quorums(db, m.id, terms)[0];
-            if (reached) wf.enqueue(`resolve:${m.id}`, "resolve", m.id, { outcome: reached.outcome });
+            const reached = terms && !terms.price && quorums(db, m.id, terms)[0];
+            if (terms?.price?.kind === "updown" && signedRounds(db, terms)) wf.enqueue(`resolve-price:${m.id}`, "resolve-price", m.id, {});
+            else if (reached) wf.enqueue(`resolve:${m.id}`, "resolve", m.id, { outcome: reached.outcome });
             else if (terms && m.timeout_at > 0 && m.timeout_at <= nowS) wf.enqueue(`timeout:${m.id}`, "timeout", m.id, {});
         }
         const offers = openOffers(db);
@@ -167,7 +171,7 @@ export class Keeper {
             if (o.maker_script !== lp || o.side !== "sell" || !o.coin) continue;
             const m = getMarket(this.d.db, o.market_id);
             const terms = m && marketTerms(m);
-            if (!m || !terms || m.kind !== "polymarket" || m.status !== "open" || m.close_at - nowS < LP_MIN_WINDOW_SECONDS || !m.source_snapshot) continue;
+            if (!m || !terms || m.kind !== "polymarket" || m.oracle_policy === "redstone" || m.status !== "open" || m.close_at - nowS < LP_MIN_WINDOW_SECONDS || !m.source_snapshot) continue;
             const none = { yes: 0n, no: 0n };
             const target = lpAsks(JSON.parse(m.source_snapshot).referencePrices, JSON.parse(m.outcomes) as string[], terms.unitSats, none)[o.outcome as "yes" | "no"];
             const price = BigInt((JSON.parse(o.terms) as OfferTermsJson).priceSats);
@@ -270,6 +274,14 @@ export class Keeper {
                 if (!q || !terms) throw new Error("attestation quorum or market not found");
                 const { txid } = await resolveMarket(ctx, terms, q.outcome, hex.decode(q.evidence), q.signatures);
                 run(this.d.db, "UPDATE markets SET resolution_status = 'resolved', resolution_detail = ?, updated_at = ? WHERE id = ?", `resolved ${q.outcome} in ${txid}`, now(), wf.marketId);
+                return txid;
+            }
+            case "resolve-price": {
+                const rounds = terms && signedRounds(this.d.db, terms);
+                if (!rounds || !terms) throw new Error("captured RedStone rounds or market not found");
+                const { txid, outcome } = await resolvePriceMarket(ctx, terms, rounds.end, rounds.start);
+                run(this.d.db, "UPDATE markets SET resolution_status = 'resolved', resolution_detail = ?, updated_at = ? WHERE id = ?",
+                    `resolved ${outcome === "yes" ? "Up" : "Down"} on RedStone rounds in ${txid}`, now(), wf.marketId);
                 return txid;
             }
             case "timeout": {
@@ -376,7 +388,8 @@ export class Keeper {
         const terms = market && marketTerms(market);
         if (!lp || !terms || !market) throw new Error("LP wallet or market not found");
         const nowS = Math.floor(Date.now() / 1000);
-        if (market.status !== "open" || market.close_at - nowS < LP_MIN_WINDOW_SECONDS) return undefined;
+        const until = quotesUntil(market);
+        if (market.status !== "open" || until - nowS < LP_MIN_WINDOW_SECONDS) return undefined;
         const p = wf.payload as Record<string, unknown>;
         const sets = BigInt(p.sets as string);
         if (!p.minted) {
@@ -394,7 +407,7 @@ export class Keeper {
             if (!p[tk]) {
                 p[tk] = offerTermsToJson({
                     side: "sell", maker: lpKey, makerScript: lp.script, assetId: terms.assets[outcome], priceSats: price,
-                    minFill: 1n, expiresAt: lpExpiry(market.close_at, nowS), reserveSats: 330n, exitDelaySeconds: this.d.net.exitDelaySeconds,
+                    minFill: 1n, expiresAt: lpExpiry(quotesUntil(market), nowS), reserveSats: 330n, exitDelaySeconds: this.d.net.exitDelaySeconds,
                 });
                 this.mark(wf, { [tk]: p[tk] });
             }
@@ -438,7 +451,7 @@ export class Keeper {
         if (!p.terms) {
             p.terms = offerTermsToJson({
                 side: "sell", maker: await lp.identity.xOnlyPublicKey(), makerScript: lp.script, assetId: p.assetId as string, priceSats: BigInt(p.price as string),
-                minFill: 1n, expiresAt: lpExpiry(market.close_at, nowS), reserveSats: 330n, exitDelaySeconds: this.d.net.exitDelaySeconds,
+                minFill: 1n, expiresAt: lpExpiry(quotesUntil(market), nowS), reserveSats: 330n, exitDelaySeconds: this.d.net.exitDelaySeconds,
             });
             this.mark(wf, { terms: p.terms });
         }
@@ -463,10 +476,19 @@ export class Keeper {
         const operator = this.d.operator;
         const market = wf.marketId ? getMarket(this.d.db, wf.marketId) : undefined;
         if (!operator || !market) throw new Error("operator wallet or market missing");
-        if (this.d.cfg.ORACLE_PUBKEYS.length === 0) throw new Error("ORACLE_PUBKEYS is empty");
-        const oracleKeys = oracleSlots(this.d.cfg.ORACLE_PUBKEYS.map((k) => hex.decode(k)), this.d.cfg.ORACLE_THRESHOLD);
-        const oracleThreshold = this.d.cfg.ORACLE_THRESHOLD;
-        let p = wf.payload as { genesisTxid?: string; vaultTxid?: string; inputs?: string[] };
+        const updown = market.oracle_policy === "redstone" ? (JSON.parse(market.source_snapshot!).updown as UpDownRounds) : undefined;
+        if (!updown && this.d.cfg.ORACLE_PUBKEYS.length === 0) throw new Error("ORACLE_PUBKEYS is empty");
+        const oracleKeys = updown ? [] : oracleSlots(this.d.cfg.ORACLE_PUBKEYS.map((k) => hex.decode(k)), this.d.cfg.ORACLE_THRESHOLD);
+        const oracleThreshold = updown ? PRICE_QUORUM : this.d.cfg.ORACLE_THRESHOLD;
+        let p = wf.payload as { genesisTxid?: string; vaultTxid?: string; inputs?: string[]; signers?: string[] };
+        // The signer set fixes the vault address, so it is chosen once and kept across retries.
+        if (updown && !p.signers) {
+            const keys = [...new Set((await latestPackages(updown.feed)).map((pkg) => hex.encode(packageSignerKey(pkg))))].sort();
+            if (keys.length !== PRICE_SIGNER_SLOTS) throw new Error(`RedStone serves ${keys.length} signers for ${updown.feed}, expected ${PRICE_SIGNER_SLOTS}`);
+            if (keys.some((key) => !REDSTONE_PRIMARY_SIGNERS.includes(key))) throw new Error("RedStone serves a signer outside the pinned primary-prod set; update REDSTONE_PRIMARY_SIGNERS");
+            this.mark(wf, { signers: keys });
+            p = { ...p, signers: keys };
+        }
         if (!p.genesisTxid) {
             this.mark(wf, { step: "genesisTxid" });
             const { genesisTxid } = await issueMarketAssets(ctx, operator, market.id, 1n);
@@ -479,14 +501,21 @@ export class Keeper {
         };
         const assets = { ctrl: assetIdOf(p.genesisTxid!, 0), yes: assetIdOf(p.genesisTxid!, 1), no: assetIdOf(p.genesisTxid!, 2) };
         const unit = BigInt(this.d.cfg.MARKET_UNIT_SATS);
-        const binding = bindingOf({
-            network: this.d.cfg.APM_NETWORK, arkSigner: this.d.net.ark.serverKey, emulatorSigner: this.d.net.ark.emulatorKey!,
-            marketId: market.id, definition, unitSats: unit, assets, oracleKeys: oracleKeys.map((k) => hex.encode(k)), oracleThreshold, oracleEpoch: this.d.cfg.ORACLE_EPOCH,
-        });
-        const terms = {
+        const price: PriceTerms | undefined = updown && {
+            kind: "updown", feedId: feedIdBytes(updown.feed), startAtMs: BigInt(updown.startAtMs), endAtMs: BigInt(updown.endAtMs),
+            signers: p.signers!.map((k) => hex.decode(k)), quorum: PRICE_QUORUM,
+        };
+        // Price vaults check no attestation, so their binding only records what was funded.
+        const binding = price
+            ? sha256(new TextEncoder().encode(JSON.stringify({ market: market.id, definitionHash: market.definition_hash, signers: p.signers, updown })))
+            : bindingOf({
+                network: this.d.cfg.APM_NETWORK, arkSigner: this.d.net.ark.serverKey, emulatorSigner: this.d.net.ark.emulatorKey!,
+                marketId: market.id, definition, unitSats: unit, assets, oracleKeys: oracleKeys.map((k) => hex.encode(k)), oracleThreshold, oracleEpoch: this.d.cfg.ORACLE_EPOCH,
+            });
+        const terms: VaultTerms = {
             assets, unitSats: unit, capSats: BigInt(this.d.cfg.MARKET_BASE_SATS) + unit * BigInt(this.d.cfg.MARKET_CAP_SETS),
             oracleKeys, oracleThreshold, binding, closeAt: BigInt(market.close_at), timeoutAt: BigInt(market.timeout_at),
-            exitDelaySeconds: this.d.net.exitDelaySeconds,
+            exitDelaySeconds: this.d.net.exitDelaySeconds, ...(price ? { price } : {}),
         };
         if (!p.vaultTxid) {
             await waitForAsset(operator, assets.ctrl, 1n);
@@ -497,7 +526,7 @@ export class Keeper {
         }
         const { baseSats } = await auditGenesis(this.d.net, terms, p.genesisTxid!, p.vaultTxid!);
         run(this.d.db, "UPDATE markets SET status = 'open', terms = ?, base_sats = ?, genesis_txid = ?, vault_txid = ?, oracle_keys = ?, oracle_threshold = ?, oracle_epoch = ?, updated_at = ? WHERE id = ? AND status = 'activating'",
-            JSON.stringify(termsToJson(terms)), String(baseSats), p.genesisTxid!, p.vaultTxid!, JSON.stringify(oracleKeys.map((k) => hex.encode(k))), oracleThreshold, this.d.cfg.ORACLE_EPOCH, now(), market.id);
+            JSON.stringify(termsToJson(terms)), String(baseSats), p.genesisTxid!, p.vaultTxid!, JSON.stringify(p.signers ?? oracleKeys.map((k) => hex.encode(k))), oracleThreshold, this.d.cfg.ORACLE_EPOCH, now(), market.id);
         this.d.bus.publish("market", market.id, { status: "open" });
         if (this.d.cfg.LP_BOOTSTRAP_SETS > 0 && this.d.lp) {
             const ref = market.source_snapshot ? JSON.parse(market.source_snapshot).referencePrices : null;
@@ -604,4 +633,28 @@ export function lpAsks(ref: { outcome: string; price: string }[] | null | undefi
     const no = ask(prices[1]!);
     // Asks summing to the unit or less would let anyone buy both legs and merge them for a profit.
     return yes + no > unit ? { yes, no } : fallback;
+}
+
+type UpDownRounds = { feed: string; startAtMs: number; endAtMs: number };
+const PRICE_QUORUM = 3;
+
+/** LP quotes stop at the close, or at the start round of an up/down mirror: nothing reprices them once it is live. */
+function quotesUntil(market: MarketRow): number {
+    const updown = market.oracle_policy === "redstone" ? (JSON.parse(market.source_snapshot!).updown as UpDownRounds | undefined) : undefined;
+    return updown ? Math.floor(updown.startAtMs / 1000) : market.close_at;
+}
+
+/** Both captured rounds of an up/down vault, laid out against its signers, once each has a quorum of them. */
+function signedRounds(db: Db, terms: VaultTerms) {
+    const p = terms.price;
+    if (p?.kind !== "updown") return undefined;
+    const feed = new TextDecoder().decode(p.feedId).replace(/\0+$/, "");
+    const report = (roundMs: bigint) => {
+        const pkgs = storedRound(db, feed, Number(roundMs));
+        const r = pkgs && priceReport(feed, pkgs, p.signers, roundMs);
+        return r && r.signatures.filter((x) => x.length).length >= p.quorum ? r : undefined;
+    };
+    const start = report(p.startAtMs);
+    const end = report(p.endAtMs);
+    return start && end ? { start, end } : undefined;
 }

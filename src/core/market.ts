@@ -4,6 +4,7 @@ import marketVaultArtifact from "../../contracts/artifacts/market_vault.json" wi
 import marketVaultAnyKeyArtifact from "../../contracts/artifacts/market_vault_anykey.json" with { type: "json" };
 import priceVaultArtifact from "../../contracts/artifacts/price_vault.json" with { type: "json" };
 import upDownVaultArtifact from "../../contracts/artifacts/updown_vault.json" with { type: "json" };
+import pythUpDownVaultArtifact from "../../contracts/artifacts/pyth_updown_vault.json" with { type: "json" };
 import resolvedVaultArtifact from "../../contracts/artifacts/resolved_vault.json" with { type: "json" };
 import { assetScriptArgs } from "./assets.js";
 import { attestorScheme } from "./attestation.js";
@@ -15,6 +16,7 @@ export const PROGRAMS = {
     marketVaultAnyKey: loadProgram(marketVaultAnyKeyArtifact as ContractArtifact),
     priceVault: loadProgram(priceVaultArtifact as ContractArtifact),
     upDownVault: loadProgram(upDownVaultArtifact as ContractArtifact),
+    pythUpDownVault: loadProgram(pythUpDownVaultArtifact as ContractArtifact),
     resolvedVault: loadProgram(resolvedVaultArtifact as ContractArtifact),
 };
 
@@ -53,10 +55,20 @@ interface PriceTermsBase {
 
 export const PRICE_SIGNER_SLOTS = 5;
 
+export interface PythTerms {
+    feedId: number;
+    /** 0x10 ECDSA/secp256k1 key of the Pyth Pro signer. */
+    signer: Uint8Array;
+    startTsUs: bigint;
+    endTsUs: bigint;
+}
+
 export interface VaultTerms {
     assets: MarketAssets;
     /** Present for price markets, which ignore the attestor fields. */
     price?: PriceTerms;
+    /** Present for Up/Down markets settled by one Pyth Pro signer. */
+    pyth?: PythTerms;
     unitSats: bigint;
     capSats: bigint;
     /** One key per vault slot; a market with fewer attestors repeats a key (see `oracleSlots`). */
@@ -155,8 +167,23 @@ function priceContracts(ark: ArkadeClient, terms: VaultTerms, p: PriceTerms) {
     return { vault, resolved };
 }
 
+function pythContracts(ark: ArkadeClient, terms: VaultTerms, p: PythTerms) {
+    if (attestorScheme(p.signer) !== "ecdsa-secp256k1" || !Number.isInteger(p.feedId) || p.feedId < 0 || p.endTsUs <= p.startTsUs) {
+        throw new Error("pyth terms need a 0x10 signer key, a feed id and an end after the start");
+    }
+    const resolved = { yes: resolvedVault(ark, terms, "yes"), no: resolvedVault(ark, terms, "no"), invalid: resolvedVault(ark, terms, "invalid") };
+    const vault = ark.contract(PROGRAMS.pythUpDownVault, {
+        ...assetArgs(terms.assets), unit: terms.unitSats, capValue: terms.capSats, feedId: BigInt(p.feedId), signer: p.signer,
+        startTsUs: p.startTsUs, endTsUs: p.endTsUs, closeAt: terms.closeAt, timeoutAt: terms.timeoutAt,
+        resolvedYes: resolved.yes.pkScript.slice(2), resolvedNo: resolved.no.pkScript.slice(2), resolvedInvalid: resolved.invalid.pkScript.slice(2),
+        noExitKey: NUMS_KEY, exit: terms.exitDelaySeconds,
+    });
+    return { vault, resolved };
+}
+
 export function marketContracts(ark: ArkadeClient, terms: VaultTerms) {
     if (terms.price) return priceContracts(ark, terms, terms.price);
+    if (terms.pyth) return pythContracts(ark, terms, terms.pyth);
     if (terms.binding.length !== 32) throw new Error("binding is 32 bytes");
     const oracles = oracleSlots(terms.oracleKeys, terms.oracleThreshold);
     if (terms.oracleKeys.length !== ORACLE_SLOTS) throw new Error(`terms carry exactly ${ORACLE_SLOTS} attestor slots`);

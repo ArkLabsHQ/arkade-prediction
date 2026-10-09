@@ -5,6 +5,19 @@ import { base64, hex } from "@scure/base";
 /** RedStone's public latest-value gateway for the primary-prod data service (no API key). */
 export const REDSTONE_GATEWAY = "https://oracle-gateway-1.a.redstone.finance/v2/data-packages/latest/redstone-primary-prod";
 
+/**
+ * redstone-primary-prod signers as 0x10 keys, recovered from their own signatures on BTC and ETH (2026-10-09).
+ * Vaults commit to signer keys, so a server could otherwise commit keys it controls; clients and activation refuse
+ * any set outside this list. Update it when RedStone rotates signers.
+ */
+export const REDSTONE_PRIMARY_SIGNERS = [
+    "1002490f08821dea02d23683f170459aa6317dd65b544aac1df514f2e657f87ac00b",
+    "10029a0e6cada7938a0fc616578aff2b11337d90ec4e99e9fee95e57e9d8371562b3",
+    "1003683f7100d67fbaccae68db4d146f7bc3090c5cbcb1351e333efd58d42f609cee",
+    "1003a221496ff2436da121796c11f888cc4e2155da7e36bd1148c9466fb54627f15e",
+    "1003f23aa199aeda6e55628e0ec88194c47713ba260898aae4483fb2f166c7e29b16",
+];
+
 export interface RedStonePackage {
     timestampMilliseconds: number;
     signature: string;
@@ -83,8 +96,8 @@ export function priceReport(feed: string, packages: RedStonePackage[], signers: 
     return report;
 }
 
-export async function latestPackages(feed: string, fetchImpl: typeof fetch = fetch): Promise<RedStonePackage[]> {
-    const r = await fetchImpl(REDSTONE_GATEWAY, { signal: AbortSignal.timeout(15_000) });
+export async function latestPackages(feed: string, fetchImpl: typeof fetch = fetch, gateway = REDSTONE_GATEWAY): Promise<RedStonePackage[]> {
+    const r = await fetchImpl(gateway, { signal: AbortSignal.timeout(15_000) });
     if (!r.ok) throw new Error(`RedStone gateway answered ${r.status}`);
     const body = (await r.json()) as Record<string, RedStonePackage[] | undefined>;
     return body[feed] ?? [];

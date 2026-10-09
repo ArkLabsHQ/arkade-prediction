@@ -10,6 +10,7 @@ import { offerTermsToJson, termsFromJson, termsToJson, type ConfigJson, type Mar
 import type { Chain } from "../../../src/web/chain.js";
 import { checkDisplayedBinding, checkLegs, displayedDefinition, verifiedTerms, type Deployment } from "../../../src/web/verify.js";
 import { BASE, UNIT, fundedMarket, offlineArk, p2tr, txWith } from "../core/offline.js";
+import { REDSTONE_PRIMARY_SIGNERS, feedIdBytes } from "../../../src/core/redstone.js";
 
 const CLOSE = 1_900_000_000;
 const TIMEOUT = CLOSE + 30 * 86_400;
@@ -163,5 +164,36 @@ describe("browser audit before money moves", () => {
         const { m, chain } = served();
         const other = { ...config, arkSignerPubkey: `02${hex.encode(randomBytes(32))}` };
         await expect(verifiedTerms(chain, other, m)).rejects.toThrow(/operator/);
+    });
+});
+
+describe("RedStone up/down terms", () => {
+    const START = 1_900_000_000_000;
+    const END = START + 900_000;
+    const settled = () => {
+        const { m } = served(true);
+        const signers = [...REDSTONE_PRIMARY_SIGNERS];
+        const t = { ...m.terms!, closeAtUnix: String(END / 1000),
+            price: { kind: "updown" as const, feedId: hex.encode(feedIdBytes("BTC")), startAtMs: String(START), endAtMs: String(END), signers, quorum: 3 } };
+        const settlement = { oracle: "redstone-primary-prod", feed: "BTC", startAtMs: START, endAtMs: END };
+        return { ...m, closeAt: new Date(END).toISOString(), terms: t, oracle: { ...m.oracle, policy: "redstone" as const, keys: signers, threshold: 3 },
+            source: { ...m.source!, binding: { provider: "polymarket", sourceId: "123", settlement } } } as MarketJson;
+    };
+
+    it("accepts the vault an honest server funded and refuses each substitution", () => {
+        expect(() => checkDisplayedBinding(settled(), dep)).not.toThrow();
+        const p = (m: MarketJson) => m.terms!.price!;
+        const cases: [string, (m: MarketJson) => void][] = [
+            ["feed", (m) => { p(m).feedId = hex.encode(feedIdBytes("DOGE")); }],
+            ["rounds", (m) => { (p(m) as { startAtMs: string }).startAtMs = String(START + 10_000); }],
+            ["close", (m) => { m.closeAt = new Date(END + 10_000).toISOString(); }],
+            ["signers", (m) => { p(m).signers = [...p(m).signers.slice(1), `10${"02".repeat(33)}`]; m.oracle.keys = p(m).signers; }],
+            ["quorum", (m) => { p(m).quorum = 2; }],
+        ];
+        for (const [what, tamper] of cases) {
+            const m = settled();
+            tamper(m);
+            expect(() => checkDisplayedBinding(m, dep), what).toThrow();
+        }
     });
 });

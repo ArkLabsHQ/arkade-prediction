@@ -10,6 +10,7 @@ const POLICY: Record<OraclePolicy, string> = {
     "platform-attestor": "Platform attestor: signs only after verifying the source's final on-chain resolution",
     "external-key": "External key: whoever holds this key decides the outcome",
     "dev-oracle": "Development oracle: operator-controlled key, test networks only",
+    redstone: "RedStone's signed prices: the vault verifies the signatures itself, with no attestor in between",
 };
 
 export function MarketPage({ id }: { id: string }) {

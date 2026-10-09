@@ -57,7 +57,7 @@ export async function importOnce(d: Deps & { wf: Workflows; provider: MarketSour
             if (!next) break;
         }
         // Funded markets outside the pages read still get fresh reference odds.
-        const funded = all<{ source_id: string }>(db, "SELECT source_id FROM markets WHERE kind = 'polymarket' AND status IN ('open','halted','closed','resolving') AND source_id NOT LIKE '%#%'");
+        const funded = all<{ source_id: string }>(db, "SELECT source_id FROM markets WHERE kind = 'polymarket' AND oracle_policy != 'redstone' AND status IN ('open','halted','closed','resolving') AND source_id NOT LIKE '%#%'");
         for (const { source_id } of funded) {
             if (seen.has(source_id)) continue;
             const m = await d.provider.fetchMarketDefinition(source_id).catch(() => null);
@@ -95,7 +95,7 @@ export function upsertSource(d: Deps, m: SourceMarket, v: { eligible: boolean; c
 /** Creates the market row once per source id and enqueues operator genesis, within the activation cap. */
 function activate(d: Deps & { wf: Workflows; timeoutDays: number }, m: SourceMarket, profile: string): string | undefined {
     if (one(d.db, "SELECT 1 FROM markets WHERE source_provider = ? AND source_id = ?", m.provider, m.sourceId)) return undefined;
-    const active = one<{ n: number }>(d.db, "SELECT COUNT(*) n FROM markets WHERE kind = 'polymarket' AND status IN ('activating','open','halted','closed','resolving')")!.n;
+    const active = one<{ n: number }>(d.db, "SELECT COUNT(*) n FROM markets WHERE kind = 'polymarket' AND oracle_policy != 'redstone' AND status IN ('activating','open','halted','closed','resolving')")!.n;
     if (active >= d.cfg.IMPORT_MAX_ACTIVE || !d.cfg.ORACLE_PUBKEYS[0]) return undefined;
     const def = importedDefinition(m, profile, d.timeoutDays);
     const id = randomBytes(16).toString("hex");

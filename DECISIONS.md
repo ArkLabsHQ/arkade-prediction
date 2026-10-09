@@ -158,3 +158,11 @@ Each entry: decision, reason, rejected alternatives. Newest last.
     a strike. Up needs a witness x with a quorum of end prices >= x and a quorum of start prices <= x, which holds
     exactly when median(end) >= median(start); Down mirrors it with end < x and start >= x, so only one side is
     ever provable. The vault can therefore open before the start, as Polymarket's Up/Down markets do.
+40. **Up/Down mirrors run by the server.** With `UPDOWN_ENABLED`, the server lists Polymarket's crypto Up/Down
+    events (gamma `tag_slug=up-or-down`, slug `{asset}-updown-{window}-{startUnix}`), opens an `UpDownVault` for
+    each before its start (signer set read once from a live RedStone round and kept in the workflow payload, since
+    it fixes the vault address), captures the start and end rounds from both public gateways every 2 s while they
+    are live (`price_rounds`), and resolves once both have a quorum; otherwise the vault's 50/50 timeout applies.
+    They keep `kind = 'polymarket'` and are told apart by `oracle_policy = 'redstone'`, because the markets table's
+    CHECK on kind cannot be changed without rebuilding a table four others reference. LP asks expire at the start
+    round. They settle on RedStone, not on Polymarket's Chainlink stream; the rules text says the two can differ.

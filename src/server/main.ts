@@ -19,6 +19,8 @@ import { Workflows } from "./workflows.js";
 import { importOnce, replayHistorical } from "./importer.js";
 import { resolutionTick } from "./resolver.js";
 import { createPolymarketProvider } from "./sources/polymarket/index.js";
+import { captureTick } from "./rounds.js";
+import { discoverUpDown, importUpDown, upcomingSlugs } from "./updown.js";
 
 const cfg = loadConfig();
 const log = (msg: string, extra: Record<string, unknown> = {}) => console.log(JSON.stringify({ ts: new Date().toISOString(), level: "info", msg, ...extra }));
@@ -143,6 +145,20 @@ async function main(): Promise<void> {
             if (shuttingDown || !lease.held || ticking) return;
             ticking = keeper.tick().catch((e) => log("keeper tick failed", { error: String(e) })).finally(() => (ticking = undefined));
         }, cfg.KEEPER_INTERVAL_SECONDS * 1000);
+        // Up/Down mirrors: discovery every minute, and round capture while a start or end round is live.
+        let capturing = false;
+        const upDownLoops = cfg.UPDOWN_ENABLED
+            ? [
+                  setInterval(() => void (lease.held && discoverUpDown(cfg.POLYMARKET_GAMMA_URL, upcomingSlugs(cfg.UPDOWN_WINDOWS, cfg.UPDOWN_ASSETS, cfg.UPDOWN_LEAD_SECONDS))
+                      .then((found) => importUpDown({ ...deps, wf }, found))
+                      .then((ids) => ids.length && log("up/down import", { created: ids.length }), (e) => log("up/down import failed", { error: String(e) }))), 60_000),
+                  setInterval(() => {
+                      if (!lease.held || capturing) return;
+                      capturing = true;
+                      captureTick(db, 3).then((n) => n && log("RedStone round captured", { rounds: n }), (e) => log("round capture failed", { error: String(e) })).finally(() => (capturing = false));
+                  }, 2_000),
+              ]
+            : [];
         const sourceLoops = sourceDeps
             ? [
                   setInterval(() => void (lease.held && importOnce(sourceDeps).then((r) => log("import pass", { ...r }), (e) => log("import failed", { error: String(e) }))), cfg.IMPORT_INTERVAL_SECONDS * 1000),
@@ -151,6 +167,7 @@ async function main(): Promise<void> {
             : [];
         onShutdown.push(async () => {
             sourceLoops.forEach(clearInterval);
+            upDownLoops.forEach(clearInterval);
             clearInterval(acquire);
             clearInterval(loop);
             await Promise.race([ticking, new Promise((r) => setTimeout(r, 20_000))]);

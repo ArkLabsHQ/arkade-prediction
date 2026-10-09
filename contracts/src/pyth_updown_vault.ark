@@ -1,0 +1,114 @@
+pragma arkade ^0.1.0;
+
+// Collateral of an open binary market. Holds the control asset (CTRL) that authorizes YES/NO
+// reissuance, so every path pins the YES/NO deltas: spending CTRL alone would allow minting.
+// Up/Down market settled by one Pyth Pro (Lazer) signer: YES (Up) when the signed price at the end timestamp is at
+// or above the signed price at the start timestamp. Same collateral and claim mechanics as MarketVault.
+contract PythUpDownVault(
+  bytes32 ctrlTxid, int ctrlGidx,
+  bytes32 yesTxid, int yesGidx,
+  bytes32 noTxid, int noGidx,
+  int unit,
+  int capValue,
+  int feedId,
+  bytes signer,
+  int startTsUs,
+  int endTsUs,
+  int closeAt,
+  int timeoutAt,
+  bytes32 resolvedYes,
+  bytes32 resolvedNo,
+  bytes32 resolvedInvalid,
+  // BIP341 NUMS point: arkd needs an exit leaf to admit the vault to batches; nobody can sign it.
+  pubkey noExitKey,
+  int exit
+) {
+  private function sets(int yesDelta, int noDelta) {
+    require(tx.assetGroups.has(yesTxid, yesGidx) || yesDelta == 0, "yes group");
+    require(!tx.assetGroups.has(yesTxid, yesGidx) || tx.assetGroups.find(yesTxid, yesGidx).delta == yesDelta, "yes delta");
+    require(tx.assetGroups.has(noTxid, noGidx) || noDelta == 0, "no group");
+    require(!tx.assetGroups.has(noTxid, noGidx) || tx.assetGroups.find(noTxid, noGidx).delta == noDelta, "no delta");
+  }
+
+  private function keepsCtrl() {
+    require(tx.outputs[0].witnessVersion == 1, "vault version");
+    require(tx.outputs[0].assets.lookup(ctrlTxid, ctrlGidx) == 1, "ctrl");
+    require(tx.outputs[0].assets.length == 1, "vault assets");
+  }
+
+  // Locks n * unit sats and mints n YES + n NO.
+  function mint(int n) {
+    require(n > 0, "n");
+    sets(n, n);
+    keepsCtrl();
+    require(tx.outputs[0].scriptPubKey == tx.input.current.scriptPubKey, "vault moved");
+    require(tx.outputs[0].value == tx.input.current.value + n * unit, "collateral");
+    require(tx.outputs[0].value <= capValue, "cap");
+  }
+
+  // Burns n YES + n NO and releases n * unit sats.
+  function merge(int n) {
+    require(n > 0, "n");
+    sets(0 - n, 0 - n);
+    keepsCtrl();
+    require(tx.outputs[0].scriptPubKey == tx.input.current.scriptPubKey, "vault moved");
+    require(tx.outputs[0].value == tx.input.current.value - n * unit, "collateral");
+  }
+
+  // Pyth Pro "evm" updates: ECDSA/secp256k1 over keccak256(payload), one signer. Only a single-feed, price-only
+  // payload is accepted, so every field sits at a fixed offset: magic(4) ts_us(8) channel(1) feeds=1(1) feed(4)
+  // props=1(1) prop=0 Price(1) price int64(8), big-endian. The timestamp must equal the committed one exactly.
+  private function update(bytes payload, signature sig, int ts) {
+    require(size(payload) == 28, "payload shape");
+    bytes h = digest(payload, 4);
+    require(checkSigFromStack(sig, signer, h), "pyth signature");
+    require(bin2num(reverseBytes(substr(payload, 0, 4)) + num2bin(0, 1)) == 2479346549, "magic");
+    require(bin2num(reverseBytes(substr(payload, 4, 8))) == ts, "timestamp");
+    require(substr(payload, 13, 1) == num2bin(1, 1), "one feed");
+    require(bin2num(reverseBytes(substr(payload, 14, 4)) + num2bin(0, 1)) == feedId, "feed");
+    require(substr(payload, 18, 2) == num2bin(1, 1) + num2bin(0, 1), "price only");
+    require(bin2num(reverseBytes(substr(payload, 20, 8))) > 0, "price");
+  }
+
+  function resolveYes(bytes endPayload, signature endSig, bytes startPayload, signature startSig) {
+    require(checkTime(closeAt), "too early");
+    update(endPayload, endSig, endTsUs);
+    update(startPayload, startSig, startTsUs);
+    require(bin2num(reverseBytes(substr(endPayload, 20, 8))) >= bin2num(reverseBytes(substr(startPayload, 20, 8))), "not up");
+    sets(0, 0);
+    keepsCtrl();
+    require(tx.outputs[0].scriptPubKey == resolvedYes, "target");
+    require(tx.outputs[0].value == tx.input.current.value, "value");
+  }
+
+  function resolveNo(bytes endPayload, signature endSig, bytes startPayload, signature startSig) {
+    require(checkTime(closeAt), "too early");
+    update(endPayload, endSig, endTsUs);
+    update(startPayload, startSig, startTsUs);
+    require(bin2num(reverseBytes(substr(endPayload, 20, 8))) < bin2num(reverseBytes(substr(startPayload, 20, 8))), "not down");
+    sets(0, 0);
+    keepsCtrl();
+    require(tx.outputs[0].scriptPubKey == resolvedNo, "target");
+    require(tx.outputs[0].value == tx.input.current.value, "value");
+  }
+
+  // Precommitted fallback when no attestation arrives: split collateral 50/50 per complete set.
+  function timeout() {
+    require(timeoutAt > 0 && checkTime(timeoutAt), "not timed out");
+    sets(0, 0);
+    keepsCtrl();
+    require(tx.outputs[0].scriptPubKey == resolvedInvalid, "target");
+    require(tx.outputs[0].value == tx.input.current.value, "value");
+  }
+
+  function renew() {
+    require(tx.version == 2, "intent only");
+    sets(0, 0);
+    require(this.tunnel(this.activeInputIndex - 1), "tunnel");
+  }
+
+  function unilateral(signature noExitSig) tapscript {
+    require(older(exit));
+    require(checkSig(noExitSig, noExitKey));
+  }
+}
