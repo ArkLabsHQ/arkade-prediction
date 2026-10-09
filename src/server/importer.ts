@@ -22,7 +22,7 @@ export interface ImportResult {
  */
 const attestorSlots = (cfg: Deps["cfg"]) => oracleSlots(cfg.ORACLE_PUBKEYS.map((k) => hex.decode(k)), cfg.ORACLE_THRESHOLD).map((k) => hex.encode(k));
 
-export async function importOnce(d: Deps & { wf: Workflows; provider: MarketSourceProvider; timeoutDays: number }): Promise<ImportResult> {
+export async function importOnce(d: Deps & { wf: Workflows; provider: MarketSourceProvider; timeoutDays: number }, upcoming: SourceMarket[] = []): Promise<ImportResult> {
     const { cfg, db } = d;
     const result: ImportResult = { pages: 0, seen: 0, eligible: 0, activated: [], ineligibleByCode: {} };
     const policy = {
@@ -38,6 +38,19 @@ export async function importOnce(d: Deps & { wf: Workflows; provider: MarketSour
     // Discovery is ordered by 24h volume, so every pass starts from the busiest markets.
     let cursor: string | null = null;
     try {
+        // Markets named ahead of time (crypto Up/Down) go first: by volume they would rank too low before they start.
+        for (const m of upcoming) {
+            result.seen++;
+            seen.add(m.sourceId);
+            const verdict = record(m);
+            if (!verdict.eligible) {
+                result.ineligibleByCode[verdict.code] = (result.ineligibleByCode[verdict.code] ?? 0) + 1;
+                continue;
+            }
+            result.eligible++;
+            const id = activate(d, m, verdict.profile);
+            if (id) result.activated.push(id);
+        }
         for (let page = 0; page < cfg.IMPORT_MAX_PAGES; page++) {
             const { markets, next } = await d.provider.discoverMarkets(cursor, Math.min(cfg.IMPORT_PAGE_LIMIT, 100));
             result.pages++;

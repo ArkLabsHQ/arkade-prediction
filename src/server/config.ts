@@ -61,6 +61,9 @@ const schema = z.object({
     IMPORT_MAX_ACTIVE: int(5),
     // Polymarket crypto Up/Down mirrors settled on RedStone's signed rounds (off unless enabled).
     UPDOWN_ENABLED: bool,
+    // polymarket: mirror through the CTF path and settle on Polymarket's own on-chain result (via our attestor);
+    // redstone: settle in-covenant on RedStone's signed rounds.
+    UPDOWN_SETTLEMENT: z.enum(["polymarket", "redstone"]).default("redstone"),
     UPDOWN_MAX_ACTIVE: int(4),
     UPDOWN_WINDOWS: csv.default(["15m", "4h"]),
     UPDOWN_ASSETS: csv.default(["BTC", "ETH", "SOL", "XRP", "DOGE", "BNB"]),

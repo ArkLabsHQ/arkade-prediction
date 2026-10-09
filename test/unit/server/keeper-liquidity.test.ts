@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { hex } from "@scure/base";
 import { lpAsks, lpExpiry } from "../../../src/server/keeper.js";
 import { ASSETS, harness, insertMarket, P2TR } from "./harness.js";
+import { run } from "../../../src/server/db.js";
 import type { OfferTermsJson } from "../../../src/shared/api.js";
 
 interface PostArgs { marketId: string; terms: OfferTermsJson; fundingTxid: string }
@@ -78,6 +79,21 @@ describe("LP liquidity", () => {
             expect(p.expiresAt).toBeLessThanOrEqual(BigInt(closeAt));
             expect(p.expiresAt).toBeGreaterThan(BigInt(nowS()));
         }
+    });
+
+    it("stops quoting when the event starts, not at the close", async () => {
+        const start = nowS() + 1800;
+        const h = setup(nowS() + 3 * 3600);
+        run(h.db, "UPDATE markets SET source_snapshot = ? WHERE id = 'm1'", JSON.stringify({ gameStartTime: new Date(start * 1000).toISOString() }));
+        await liquidity(h);
+        expect(calls.posts).toHaveLength(2);
+        for (const p of calls.posts) expect(p.expiresAt).toBeLessThanOrEqual(BigInt(start));
+
+        calls.posts.length = 0;
+        const live = setup(nowS() + 3 * 3600);
+        run(live.db, "UPDATE markets SET source_snapshot = ? WHERE id = 'm1'", JSON.stringify({ gameStartTime: new Date((nowS() - 60) * 1000).toISOString() }));
+        await liquidity(live);
+        expect(calls.posts).toHaveLength(0);
     });
 
     it("posts for a market closing in two minutes but not within one minute", async () => {

@@ -3,7 +3,7 @@ import { hex } from "@scure/base";
 import { assetIdOf } from "../core/assets.js";
 import { sha256Hex } from "../core/encoding.js";
 import {
-    cancelOffer, issueMarketAssets, mintMatch, mintSets, openVault, postOffer, resolveMarket, resolvePriceMarket, settleExpiredOffer,
+    cancelOffer, issueMarketAssets, mintMatch, mintSets, openVault, postOffer, redeemAll, resolveMarket, resolvePriceMarket, settleExpiredOffer,
     timeoutMarket, type Ctx, type LiveOffer, type Party,
 } from "../core/actions.js";
 import { bindingOf, type MarketDefinition } from "../core/definition.js";
@@ -119,6 +119,7 @@ export class Keeper {
         this.planMatches(offers);
         this.planCancels(offers);
         this.planReprices(offers, nowS);
+        await this.planOwnRedemptions(offers);
         const boxes = await this.boxCoins();
         this.planRenewals(offers, nowS, boxes);
         for (const b of boxes) {
@@ -178,6 +179,33 @@ export class Keeper {
             const gap = target > price ? target - price : price - target;
             if (target === 0n || gap * 10_000n < terms.unitSats * REPRICE_BPS) continue;
             this.d.wf.enqueue(`reprice:${o.id}`, "lp-reprice", o.market_id, { offerId: o.id, price: target.toString() });
+        }
+    }
+
+/** Our own wallets' leftover YES/NO (seed set, unsold LP shares) are redeemed once the market resolves. */
+    private async planOwnRedemptions(offers: ReturnType<typeof openOffers>): Promise<void> {
+        const parties = ([["operator", this.d.operator], ["lp", this.d.lp]] as const).filter((x): x is readonly ["operator" | "lp", Party] => !!x[1]);
+        if (parties.length === 0) return;
+        const since = new Date(Date.now() - OWN_REDEEM_WINDOW_MS).toISOString();
+        const resolved = all<MarketRow>(this.d.db, "SELECT * FROM markets WHERE vault_phase = 'resolved' AND vault_outcome IS NOT NULL AND updated_at > ?", since);
+        if (resolved.length === 0) return;
+        const held = new Map<string, Set<string>>();
+        for (const [who, party] of parties) {
+            const ids = new Set((await party.coins()).flatMap((c) => (c.assets ?? []).filter((x) => x.amount > 0n).map((x) => x.assetId)));
+            held.set(who, ids);
+        }
+        const lpScript = this.d.lp && hex.encode(this.d.lp.script);
+        for (const m of resolved) {
+            const terms = marketTerms(m);
+            if (!terms) continue;
+            for (const [who] of parties) {
+                const id = `redeem:${m.id}:${who}`;
+                if (this.d.wf.get(id)) continue;
+                // An LP offer still open on this market returns its shares first, through the settle workflow.
+                if (who === "lp" && offers.some((o) => o.market_id === m.id && o.maker_script === lpScript)) continue;
+                const ids = held.get(who)!;
+                if (ids.has(terms.assets.yes) || ids.has(terms.assets.no)) this.d.wf.enqueue(id, "redeem-own", m.id, { who });
+            }
         }
     }
 
@@ -275,6 +303,17 @@ export class Keeper {
                 const { txid } = await resolveMarket(ctx, terms, q.outcome, hex.decode(q.evidence), q.signatures);
                 run(this.d.db, "UPDATE markets SET resolution_status = 'resolved', resolution_detail = ?, updated_at = ? WHERE id = ?", `resolved ${q.outcome} in ${txid}`, now(), wf.marketId);
                 return txid;
+            }
+            case "redeem-own": {
+                const party = wf.payload.who === "lp" ? this.d.lp : this.d.operator;
+                const outcome = market?.vault_outcome as "yes" | "no" | "invalid" | null;
+                if (!party || !terms || !outcome) throw new Error("own wallet or resolved market not found");
+                const r = await redeemAll(ctx, party, terms, outcome).catch((e: unknown) => {
+                    if (String(e).includes("no claims to redeem")) return undefined;
+                    throw e;
+                });
+                if (r) this.d.log("redeemed own claims", { market: market!.id, who: wf.payload.who, payout: r.payout.toString() });
+                return r?.txid;
             }
             case "resolve-price": {
                 const rounds = terms && signedRounds(this.d.db, terms);
@@ -637,11 +676,16 @@ export function lpAsks(ref: { outcome: string; price: string }[] | null | undefi
 
 type UpDownRounds = { feed: string; startAtMs: number; endAtMs: number };
 const PRICE_QUORUM = 3;
+// Redemption of our own leftover claims is planned for markets resolved within this window.
+const OWN_REDEEM_WINDOW_MS = 3 * 86_400_000;
 
-/** LP quotes stop at the close, or at the start round of an up/down mirror: nothing reprices them once it is live. */
+/** LP quotes stop at the close, or when the market's event starts (an up/down window, a kickoff): nothing reprices them in play. */
 function quotesUntil(market: MarketRow): number {
-    const updown = market.oracle_policy === "redstone" ? (JSON.parse(market.source_snapshot!).updown as UpDownRounds | undefined) : undefined;
-    return updown ? Math.floor(updown.startAtMs / 1000) : market.close_at;
+    const snapshot = market.source_snapshot ? JSON.parse(market.source_snapshot) : {};
+    const updown = market.oracle_policy === "redstone" ? (snapshot.updown as UpDownRounds | undefined) : undefined;
+    if (updown) return Math.floor(updown.startAtMs / 1000);
+    const start = typeof snapshot.gameStartTime === "string" ? Math.floor(Date.parse(snapshot.gameStartTime) / 1000) : NaN;
+    return start < market.close_at ? start : market.close_at;
 }
 
 /** Both captured rounds of an up/down vault, laid out against its signers, once each has a quorum of them. */

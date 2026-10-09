@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { openDb, run } from "../../../src/server/db.js";
 import { WriterLease } from "../../../src/server/lease.js";
-import { harness, inner, insertBuyOffer, insertMarket, P2TR, tempDb } from "./harness.js";
+import { ASSETS, harness, inner, insertBuyOffer, insertMarket, P2TR, tempDb } from "./harness.js";
 
 const MIN = 60_000;
 
@@ -253,5 +253,28 @@ describe("resolution planning", () => {
         }
         await inner(h.keeper).plan();
         expect(h.wf.list({ state: "pending" }).filter((w) => w.kind === "resolve").map((w) => w.marketId)).toEqual(["closed"]);
+    });
+});
+
+describe("own claim redemption", () => {
+    it("redeems our wallets' leftover claims on resolved markets, after the LP's offers are gone, once", async () => {
+        const lpScript = P2TR("bb");
+        const coinWith = (assetId: string) => [{ txid: "aa".repeat(32), vout: 0, value: 330, assets: [{ assetId, amount: 2n }] }];
+        const h = harness({
+            operator: { script: new Uint8Array(34), coins: async () => coinWith(ASSETS.yes) } as never,
+            lp: { script: Uint8Array.from(Buffer.from(lpScript, "hex")), coins: async () => coinWith(ASSETS.no) } as never,
+        });
+        insertMarket(h.db, { id: "done", phase: "resolved" });
+        run(h.db, "UPDATE markets SET vault_outcome = 'yes', status = 'resolved' WHERE id = 'done'");
+        insertBuyOffer(h.db, { id: "lpLeft", marketId: "done", outcome: "no", priceSats: 400n, remaining: 2n, makerScript: lpScript });
+
+        await inner(h.keeper).plan();
+        const redeems = () => h.wf.list({}).filter((w) => w.kind === "redeem-own").map((w) => w.id).sort();
+        expect(redeems()).toEqual(["redeem:done:operator"]);
+
+        run(h.db, "UPDATE offers SET status = 'settled' WHERE id = 'lpLeft:0'");
+        await inner(h.keeper).plan();
+        await inner(h.keeper).plan();
+        expect(redeems()).toEqual(["redeem:done:lp", "redeem:done:operator"]);
     });
 });

@@ -430,3 +430,28 @@ describe("polymarket provider labels", () => {
         }
     });
 });
+
+describe("crypto Up/Down markets on the CTF path", () => {
+    const UPDOWN_RESOLVER = "0x58e1745bedda7312c4cddb72618923da1b90efde";
+    const questionID = `0x${"0f".repeat(32)}`;
+    const raw = (start: Date) => ({
+        ...gamma.keyset.response.markets[0], id: "5425619", slug: "btc-updown-4h-1791532800", resolvedBy: undefined, negRisk: false, negRiskOther: false,
+        outcomes: '["Up", "Down"]', questionID, conditionId: deriveConditionId(UPDOWN_RESOLVER, questionID), gameStartTime: undefined,
+        eventStartTime: start.toISOString(), endDate: new Date(start.getTime() + 4 * 3600_000).toISOString(),
+    });
+    const code = (p: ReturnType<typeof setup>["p"], m: SourceMarket) => {
+        const e = p.evaluateEligibility(m, { ...POLICY, minHorizonSeconds: 0 }, NOW);
+        return e.eligible ? "eligible" : e.code;
+    };
+
+    it("finds the oracle from the conditionId when gamma omits resolvedBy, and takes the window start as the start", async () => {
+        const upcoming = raw(new Date(NOW.getTime() + 3600_000));
+        const { p } = setup({ allowlist: [...ALLOWLIST, UPDOWN_RESOLVER], markets: { "": [upcoming] } });
+        const [m] = await p.fetchMarketsBySlug(["btc-updown-4h-1791532800"]);
+        expect(m!.gameStartTime).toBe(upcoming.eventStartTime);
+        expect(code(p, m!)).toBe("eligible");
+        expect(code(setup().p, m!)).toBe("unknown-resolver");
+        const live = (await setup({ allowlist: [...ALLOWLIST, UPDOWN_RESOLVER], markets: { "": [raw(new Date(NOW.getTime() - 60_000))] } }).p.fetchMarketsBySlug(["x"]))[0]!;
+        expect(code(p, live)).toBe("started");
+    });
+});

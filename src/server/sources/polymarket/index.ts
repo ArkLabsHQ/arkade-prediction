@@ -162,7 +162,8 @@ function normalize(raw: unknown, fetchedAt: string): SourceMarket {
             ? outcomes.map((outcome, i) => ({ outcome, price: prices[i] ?? "" }))
             : null;
     // Gamma writes kickoff as "2026-10-09 00:15:00+00"; made strict ISO before parsing.
-    const kickoff = typeof raw.gameStartTime === "string" ? isoDate(raw.gameStartTime.replace(" ", "T").replace(/([+-]\d\d)$/, "$1:00")) : null;
+    // Sports list a kickoff; crypto Up/Down markets list the start of their price window instead.
+    const kickoff = typeof raw.gameStartTime === "string" ? isoDate(raw.gameStartTime.replace(" ", "T").replace(/([+-]\d\d)$/, "$1:00")) : isoDate(raw.eventStartTime);
     return { ...core, referencePrices, image: imageOf(raw.image), event: eventOf(raw.events), gameStartTime: kickoff, versionHash: sha256Hex(canonicalJson(core)), fetchedAt };
 }
 
@@ -178,10 +179,12 @@ function identityProblem(m: SourceMarket, allow: ReadonlySet<string>): Problem |
     if (m.outcomes.length !== 2 || !a || !b || a === b) {
         return { code: "not-binary", reason: `outcomes ${JSON.stringify(m.outcomes).slice(0, 200)}` };
     }
-    if (!p.negRisk && (!p.resolver || !allow.has(p.resolver))) {
-        return { code: "unknown-resolver", reason: `resolver ${p.resolver ?? "missing"} is not allowlisted` };
+    // Gamma leaves resolvedBy empty on some markets (crypto Up/Down); the conditionId still names its oracle.
+    const resolver = p.resolver ?? [...allow].find((a) => BYTES32.test(p.questionId) && deriveConditionId(a, p.questionId) === p.conditionId) ?? null;
+    if (!p.negRisk && (!resolver || !allow.has(resolver))) {
+        return { code: "unknown-resolver", reason: `resolver ${resolver ?? "missing"} is not allowlisted` };
     }
-    const oracle = p.negRisk ? NEG_RISK_ADAPTER : p.resolver!;
+    const oracle = p.negRisk ? NEG_RISK_ADAPTER : resolver!;
     if (!BYTES32.test(p.questionId) || deriveConditionId(oracle, p.questionId) !== p.conditionId) {
         return { code: "condition-mismatch", reason: `conditionId != keccak256(${p.negRisk ? "NegRiskAdapter" : "resolver"}, questionId, 2)` };
     }
@@ -294,6 +297,24 @@ export function createPolymarketProvider(opts: PolymarketProviderOptions): Marke
                 }
             });
             return { markets, next: typeof body.next_cursor === "string" && body.next_cursor ? body.next_cursor : null };
+        },
+
+        async fetchMarketsBySlug(slugs) {
+            const out: SourceMarket[] = [];
+            for (let i = 0; i < slugs.length; i += 40) {
+                const q = new URLSearchParams([["include_tag", "true"], ...slugs.slice(i, i + 40).map((s): [string, string] => ["slug", s])]);
+                const body = await withRetry(() => getJson(`${gammaUrl}/markets?${q}`));
+                if (!Array.isArray(body)) throw new Error("unexpected /markets response");
+                const fetchedAt = new Date().toISOString();
+                for (const m of body) {
+                    try {
+                        out.push(normalize(m, fetchedAt));
+                    } catch {
+                        // a malformed entry is skipped, as in discovery
+                    }
+                }
+            }
+            return out;
         },
 
         async fetchMarketDefinition(sourceId) {

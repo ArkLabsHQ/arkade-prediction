@@ -175,3 +175,13 @@ Each entry: decision, reason, rejected alternatives. Newest last.
     The open part of native Polymarket
     settlement is the prover: an SP1 program proving a CTF `payoutNumerators` slot through an Ethereum light client
     (SP1-Helios), Polygon's checkpoint on Ethereum and a storage proof.
+42. **Up/Down mirrors settled on Polymarket's own result.** Polymarket writes each crypto Up/Down result into the
+    CTF on Polygon about a minute after the window (resolver `0x58e1…efde`, found from the condition's
+    `ConditionPreparation` event), so with `UPDOWN_SETTLEMENT=polymarket` upcoming Up/Down markets, named by slug,
+    join each import pass as ordinary CTF mirrors and settle exactly as Polymarket does, through our attestor.
+    Gamma omits `resolvedBy` on them, so the resolver is the allowlisted address the conditionId derives from;
+    `eventStartTime` stands in for `gameStartTime`, which keeps started windows out and stops LP quotes at the
+    start. They count against `IMPORT_MAX_ACTIVE`. `redstone` keeps the in-covenant RedStone vaults.
+43. **Our own leftover claims are redeemed.** After a market resolves, the operator's seed set and the LP's unsold
+    shares (once its offers have settled back) are redeemed by a one-shot `redeem-own` workflow per wallet, so
+    mirrors return their collateral instead of leaving it in resolved vaults.

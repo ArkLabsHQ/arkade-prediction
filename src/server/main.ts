@@ -147,7 +147,7 @@ async function main(): Promise<void> {
         }, cfg.KEEPER_INTERVAL_SECONDS * 1000);
         // Up/Down mirrors: discovery every minute, and round capture while a start or end round is live.
         let capturing = false;
-        const upDownLoops = cfg.UPDOWN_ENABLED
+        const upDownLoops = cfg.UPDOWN_ENABLED && cfg.UPDOWN_SETTLEMENT === "redstone"
             ? [
                   setInterval(() => void (lease.held && discoverUpDown(cfg.POLYMARKET_GAMMA_URL, upcomingSlugs(cfg.UPDOWN_WINDOWS, cfg.UPDOWN_ASSETS, cfg.UPDOWN_LEAD_SECONDS))
                       .then((found) => importUpDown({ ...deps, wf }, found))
@@ -159,9 +159,13 @@ async function main(): Promise<void> {
                   }, 2_000),
               ]
             : [];
+        // With UPDOWN_SETTLEMENT=polymarket, upcoming Up/Down markets join each import pass as ordinary CTF mirrors.
+        const upcomingCtfUpDown = async () => (cfg.UPDOWN_ENABLED && cfg.UPDOWN_SETTLEMENT === "polymarket" && provider
+            ? provider.fetchMarketsBySlug(upcomingSlugs(cfg.UPDOWN_WINDOWS, cfg.UPDOWN_ASSETS, cfg.UPDOWN_LEAD_SECONDS))
+            : []);
         const sourceLoops = sourceDeps
             ? [
-                  setInterval(() => void (lease.held && importOnce(sourceDeps).then((r) => log("import pass", { ...r }), (e) => log("import failed", { error: String(e) }))), cfg.IMPORT_INTERVAL_SECONDS * 1000),
+                  setInterval(() => void (lease.held && upcomingCtfUpDown().then((upcoming) => importOnce(sourceDeps, upcoming)).then((r) => log("import pass", { ...r }), (e) => log("import failed", { error: String(e) }))), cfg.IMPORT_INTERVAL_SECONDS * 1000),
                   setInterval(() => void (lease.held && resolutionTick(sourceDeps).catch((e) => log("resolution tick failed", { error: String(e) }))), 15_000),
               ]
             : [];

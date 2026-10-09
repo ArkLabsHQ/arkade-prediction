@@ -86,6 +86,7 @@ export interface MarketSourceProvider {
     readonly name: "polymarket";
     discoverMarkets(cursor: string | null, limit: number): Promise<Page>;
     fetchMarketDefinition(sourceId: string): Promise<SourceMarket>;
+    fetchMarketsBySlug(slugs: string[]): Promise<SourceMarket[]>;
     evaluateEligibility(market: SourceMarket, policy: EligibilityPolicy, now: Date): Eligibility;
     /** Reads authoritative settlement state at one finalized block across >= 2 providers. */
     /** `atBlock` pins the read so independent attestors sign identical evidence; it must already be finalized. */
