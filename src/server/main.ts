@@ -23,6 +23,7 @@ import { createKalshiProvider } from "./sources/kalshi/index.js";
 import { createManifoldProvider } from "./sources/manifold/index.js";
 import type { MarketSourceProvider, ProviderName } from "./sources/types.js";
 import { captureTick } from "./rounds.js";
+import { proofTick } from "./proofs.js";
 import { discoverUpDown, importUpDown, upcomingSlugs } from "./updown.js";
 
 const cfg = loadConfig();
@@ -211,7 +212,17 @@ async function main(): Promise<void> {
                   setInterval(() => void (lease.held && resolutionTick(sourceDeps).catch((e) => log("resolution tick failed", { error: String(e) }))), 15_000),
               ]
             : [];
+        let proving = false;
+        const proofDeps = { cfg, db, bus, log };
+        const proofLoop = cfg.ZK_TRACKING_ENABLED
+            ? setInterval(() => {
+                  if (!lease.held || proving) return;
+                  proving = true;
+                  void proofTick(proofDeps).finally(() => (proving = false));
+              }, 15_000)
+            : undefined;
         onShutdown.push(async () => {
+            clearInterval(proofLoop);
             sourceLoops.forEach(clearInterval);
             upDownLoops.forEach(clearInterval);
             clearInterval(acquire);

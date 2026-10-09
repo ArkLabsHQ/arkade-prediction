@@ -59,6 +59,13 @@ const MIGRATIONS: string[] = [
         PRIMARY KEY (feed, round_ms));`,
     // Offers funded before the 330-sat fill rules keep their old scripts.
     `UPDATE offers SET terms = json_set(terms, '$.legacy', json('true'));`,
+    `CREATE TABLE proof_jobs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, market_id TEXT NOT NULL UNIQUE REFERENCES markets(id),
+        stage TEXT NOT NULL CHECK (stage IN ('waiting-source','waiting-checkpoint','waiting-l1-finality','witness-ready','proving','verified','failed')),
+        detail TEXT NOT NULL DEFAULT '', polygon_block INTEGER, tx_hash TEXT, log_index INTEGER, header_block_id INTEGER,
+        checkpoint_root TEXT, checkpoint_l1_block INTEGER, attempts INTEGER NOT NULL DEFAULT 0, next_at INTEGER NOT NULL DEFAULT 0,
+        started_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+     CREATE INDEX proof_jobs_due ON proof_jobs(stage, next_at);`,
 ];
 
 export type Db = DatabaseSync;

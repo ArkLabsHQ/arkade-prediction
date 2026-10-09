@@ -50,7 +50,7 @@ export type LiveState = "connecting" | "live" | "down";
 
 const subscribers = new Set<{ current: LiveFn }>();
 const stateSubscribers = new Set<() => void>();
-const EVENT_TYPES: MarketEvent["type"][] = ["market", "offer", "trade", "resolution", "workflow", "health"];
+const EVENT_TYPES: MarketEvent["type"][] = ["market", "offer", "trade", "resolution", "workflow", "health", "proof"];
 let liveState: LiveState = "connecting";
 let started = false;
 let wasDown = false;

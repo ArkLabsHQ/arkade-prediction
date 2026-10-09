@@ -10,6 +10,7 @@ import { MarketPage } from "./pages/Market.js";
 import { Markets } from "./pages/Markets.js";
 import { Operator } from "./pages/Operator.js";
 import { Portfolio } from "./pages/Portfolio.js";
+import { ProofsPage } from "./pages/Proofs.js";
 import { WalletPage } from "./pages/Wallet.js";
 import { ErrorBox, Link, Loading, Logo, navigate, usePath } from "./ui.js";
 
@@ -118,11 +119,12 @@ function route(path: string, admin: boolean) {
     if (path === "/portfolio") return <Portfolio />;
     if (path === "/create") return <CreatePage />;
     if (path === "/wallet") return <WalletPage />;
+    if (path === "/proofs") return <ProofsPage />;
     if (admin && path === "/operator") return <Operator />;
     return <p className="state">No page at {path}. <Link to="/">Back to markets</Link></p>;
 }
 
-const NAV = [["/", "Markets"], ["/portfolio", "Portfolio"], ["/create", "Create"], ["/wallet", "Wallet"]] as const;
+const NAV = [["/", "Markets"], ["/portfolio", "Portfolio"], ["/create", "Create"], ["/wallet", "Wallet"], ["/proofs", "Proofs"]] as const;
 
 function Header({ path, admin }: { path: string; admin: boolean }) {
     const { session, holdings } = useApp();

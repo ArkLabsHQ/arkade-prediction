@@ -4,6 +4,7 @@ import { useApp } from "../ctx.js";
 import { fillable } from "../fills.js";
 import { chanceOf, fromUnix, isReplay, n, pct, providerName, refPct, safeHref, sats, sectionFor, unavailableReason, when } from "../format.js";
 import { ErrorBox, Link, Loading, Panel, PixBar, StatusBadge, Time, Txid, outcomeName, useAsync, useNow } from "../ui.js";
+import { ProofPanel, isProofTracked } from "./Proofs.js";
 import { TradePanels } from "./Trade.js";
 
 const POLICY: Record<OraclePolicy, string> = {
@@ -82,6 +83,7 @@ export function MarketPage({ id }: { id: string }) {
                         {trades.data ? <Trades m={m} trades={trades.data} unit={unit} now={now} />
                             : trades.error ? <ErrorBox error={trades.error} onRetry={trades.reload} /> : <Loading what="trades" />}
                     </Panel>
+                    {isProofTracked(m) && <ProofPanel m={m} />}
                     <Panel title="Rules">
                         <p className="prose strong">{m.question}</p>
                         <p className="prose">{m.rules || "No rules text was provided."}</p>

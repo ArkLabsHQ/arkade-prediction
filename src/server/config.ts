@@ -57,6 +57,10 @@ const schema = z.object({
     POLYMARKET_ENABLED: bool,
     POLYMARKET_GAMMA_URL: z.url().default("https://gamma-api.polymarket.com"),
     POLYGON_RPC_URLS: csv,
+    // Proof tracking (observation only): historical eth_call needs archive providers, which publicnode is not.
+    ZK_TRACKING_ENABLED: bool,
+    POLYGON_ARCHIVE_RPC_URLS: csv.default(["https://polygon.gateway.tenderly.co", "https://polygon.drpc.org"]),
+    ETHEREUM_RPC_URLS: csv.default(["https://ethereum-rpc.publicnode.com", "https://eth.drpc.org"]),
     POLYMARKET_RESOLVERS: csv,
     // Who may report a mirrored condition; the resolver allowlist above does not authenticate one (DECISIONS #46).
     POLYMARKET_CREATORS: csv.default(DEFAULT_CREATORS),

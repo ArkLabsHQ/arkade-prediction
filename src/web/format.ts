@@ -29,15 +29,17 @@ export function pct(price: Num | null | undefined, unit: Num): string {
 export const fromUnix = (u: Num) => new Date(Number(u) * 1000);
 export const when = (t: string | Date) => date.format(typeof t === "string" ? new Date(t) : t);
 
-export function rel(t: string | Date, now = Date.now()): string {
-    const d = (typeof t === "string" ? new Date(t) : t).getTime() - now;
-    const a = Math.abs(d) / 1000;
-    const span =
-        a < 60 ? `${Math.round(a)}s`
+export function duration(ms: number): string {
+    const a = Math.abs(ms) / 1000;
+    return a < 60 ? `${Math.round(a)}s`
         : a < 3600 ? `${Math.floor(a / 60)}m`
         : a < 86400 ? `${Math.floor(a / 3600)}h ${Math.floor((a % 3600) / 60)}m`
         : `${Math.floor(a / 86400)}d ${Math.floor((a % 86400) / 3600)}h`;
-    return d >= 0 ? `in ${span}` : `${span} ago`;
+}
+
+export function rel(t: string | Date, now = Date.now()): string {
+    const d = (typeof t === "string" ? new Date(t) : t).getTime() - now;
+    return d >= 0 ? `in ${duration(d)}` : `${duration(d)} ago`;
 }
 
 export const short = (s: string, head = 8, tail = 6) => (s.length > head + tail + 1 ? `${s.slice(0, head)}…${s.slice(-tail)}` : s);

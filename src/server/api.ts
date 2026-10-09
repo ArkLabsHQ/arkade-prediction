@@ -16,6 +16,7 @@ import { dirname, join } from "node:path";
 import type { Keeper } from "./keeper.js";
 import { HttpError, getMarket, listMarkets, marketJson, marketTerms, registerCustomMarket, type Deps } from "./markets.js";
 import { listOffers, offerJson, offersByMaker, refreshOffer, registerOffer, trades } from "./offers.js";
+import { listProofJobs, proofJob } from "./proofs.js";
 
 export interface ApiDeps extends Deps {
     keeper?: Keeper;
@@ -100,6 +101,13 @@ export function createApi(d: ApiDeps): Hono {
         if (!row || row.status === "hidden") throw new HttpError(404, "market", "unknown market");
         return c.json(marketJson(d.db, row));
     });
+
+    app.get("/api/markets/:id/proof", (c) => {
+        const row = getMarket(d.db, c.req.param("id"));
+        if (!row || row.status === "hidden") throw new HttpError(404, "market", "unknown market");
+        return c.json({ job: proofJob(d.db, row.id) });
+    });
+    app.get("/api/proofs", (c) => c.json({ jobs: listProofJobs(d.db, intParam(c.req.query("limit"), 50, 1, 200)) }));
 
     app.get("/api/markets/:id/offers", (c) => c.json({ offers: listOffers(d.db, c.req.param("id"), c.req.query("status") || undefined).map(offerJson) }));
     app.get("/api/markets/:id/trades", (c) => c.json({ trades: trades(d.db, { marketId: c.req.param("id"), limit: intParam(c.req.query("limit"), 100, 1, 500) }) }));

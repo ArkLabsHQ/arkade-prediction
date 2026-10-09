@@ -158,9 +158,30 @@ export interface TradeJson {
     at: string;
 }
 
+export type ProofStage = "waiting-source" | "waiting-checkpoint" | "waiting-l1-finality" | "witness-ready" | "proving" | "verified" | "failed";
+
+/** Progress towards a trustless proof of a Polymarket mirror's result. Observation only: settlement is unchanged. */
+export interface ProofJobJson {
+    marketId: string;
+    question: string;
+    stage: ProofStage;
+    detail: string;
+    /** Polygon block and transaction holding the CTF ConditionResolution log. */
+    polygonBlock: number | null;
+    txHash: string | null;
+    logIndex: number | null;
+    /** RootChain header block (checkpoint) id covering `polygonBlock`, its root, and the Ethereum block that posted it. */
+    headerBlockId: number | null;
+    checkpointRoot: string | null;
+    checkpointL1Block: number | null;
+    attempts: number;
+    startedAt: string;
+    updatedAt: string;
+}
+
 export interface MarketEvent {
     id: number;
-    type: "market" | "offer" | "trade" | "resolution" | "workflow" | "health";
+    type: "market" | "offer" | "trade" | "resolution" | "workflow" | "health" | "proof";
     marketId: string | null;
     at: string;
     data: unknown;
