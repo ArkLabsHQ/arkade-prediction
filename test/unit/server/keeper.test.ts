@@ -282,3 +282,18 @@ describe("own claim redemption", () => {
         expect(redeems()).toEqual(["redeem:done:lp", "redeem:done:operator"]);
     });
 });
+
+describe("LP bootstrap retry", () => {
+    it("re-arms a failed bootstrap on an open market once its cooldown has passed", async () => {
+        const h = harness({});
+        insertMarket(h.db, { id: "m1" });
+        insertMarket(h.db, { id: "gone", status: "resolved" });
+        for (const id of ["m1", "gone"]) {
+            run(h.db, "INSERT INTO workflows(id, kind, market_id, state, payload, error, created_at, updated_at) VALUES (?, 'lp-liquidity', ?, 'failed', ?, 'insufficient funds', ?, ?)",
+                `lp:${id}:bootstrap`, id, JSON.stringify({ sets: "5", yesAsk: "550", noAsk: "550" }), "2026-01-01T00:00:00.000Z", "2026-01-01T00:00:00.000Z");
+        }
+        await inner(h.keeper).plan();
+        expect(h.wf.get("lp:m1:bootstrap")).toMatchObject({ state: "pending", payload: { sets: "5", yesAsk: "550", rearms: 1 } });
+        expect(h.wf.get("lp:gone:bootstrap")?.state).toBe("failed");
+    });
+});

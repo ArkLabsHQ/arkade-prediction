@@ -119,6 +119,7 @@ export class Keeper {
         this.planMatches(offers);
         this.planCancels(offers);
         this.planReprices(offers, nowS);
+        this.retryLpBootstraps(nowS);
         await this.planOwnRedemptions(offers);
         const boxes = await this.boxCoins();
         this.planRenewals(offers, nowS, boxes);
@@ -165,6 +166,15 @@ export class Keeper {
     }
 
     /** Moves LP asks on mirrored markets to the refreshed source odds once they drift by REPRICE_BPS of the unit. */
+    /** A bootstrap that failed (usually an underfunded LP) is enqueued again; Workflows re-arms it after a widening cooldown. */
+    private retryLpBootstraps(nowS: number): void {
+        for (const wf of this.d.wf.list({ state: "failed", limit: 200 })) {
+            if (wf.kind !== "lp-liquidity" || !wf.id.endsWith(":bootstrap") || !wf.marketId) continue;
+            const m = getMarket(this.d.db, wf.marketId);
+            if (m?.status === "open" && quotesUntil(m) - nowS >= LP_MIN_WINDOW_SECONDS) this.d.wf.enqueue(wf.id, wf.kind, wf.marketId, {});
+        }
+    }
+
     private planReprices(offers: ReturnType<typeof openOffers>, nowS: number): void {
         const lp = this.d.lp && hex.encode(this.d.lp.script);
         if (!lp) return;
