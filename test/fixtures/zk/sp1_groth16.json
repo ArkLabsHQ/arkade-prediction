@@ -25,6 +25,10 @@
     {
       "name": "pub1",
       "type": "ECPoint"
+    },
+    {
+      "name": "pub4",
+      "type": "ECPoint"
     }
   ],
   "functions": [
@@ -45,6 +49,10 @@
             "type": "ECPoint"
           },
           {
+            "name": "nonce",
+            "type": "int"
+          },
+          {
             "name": "publicValues",
             "type": "bytes"
           },
@@ -58,6 +66,8 @@
           }
         ],
         "asm": [
+          "<pub4.y>",
+          "<pub4.x>",
           "<pub1.y>",
           "<pub1.x>",
           "<base.y>",
@@ -76,10 +86,10 @@
           "<betaNeg.xC1>",
           "<alpha.y>",
           "<alpha.x>",
-          "26",
+          "29",
           "OP_ROLL",
           "OP_SHA256",
-          "27",
+          "30",
           "OP_PICK",
           "32",
           "OP_NUM2BIN",
@@ -94,12 +104,12 @@
           "31",
           "OP_SUBSTR",
           "OP_EQUALVERIFY",
-          "29",
+          "32",
           "OP_PICK",
           "0",
           "OP_GREATERTHANOREQUAL",
           "OP_IF",
-          "29",
+          "32",
           "OP_PICK",
           "8",
           "OP_LESSTHAN",
@@ -127,7 +137,7 @@
           "OP_NUM2BIN",
           "OP_CAT",
           "OP_BIN2NUM",
-          "29",
+          "32",
           "OP_ROLL",
           "32",
           "OP_MUL",
@@ -146,15 +156,30 @@
           "OP_ROLL",
           "17",
           "OP_ROLL",
-          "26",
+          "29",
           "OP_ROLL",
           "2",
           "OP_ECMUL",
           "OP_SWAP",
-          "OP_16",
+          "18",
           "OP_ROLL",
-          "17",
+          "19",
           "OP_ROLL",
+          "28",
+          "OP_ROLL",
+          "2",
+          "OP_ECMUL",
+          "OP_SWAP",
+          "18",
+          "OP_ROLL",
+          "19",
+          "OP_ROLL",
+          "OP_4",
+          "OP_ROLL",
+          "OP_5",
+          "OP_ROLL",
+          "2",
+          "OP_ECADD",
           "OP_ROT",
           "OP_3",
           "OP_ROLL",
@@ -310,9 +335,9 @@
     }
   ],
   "source": {
-    "entry": "sp1_groth16.ark",
+    "entry": "sp1_groth16_nonce.ark",
     "files": {
-      "sp1_groth16.ark": "pragma arkade ^0.1.0;\n\n// Spike: verify an SP1 v6 Groth16 proof (bn254) in Arkade script. base = CONSTANT + programVKey*PUB_0 +\n// vkRoot*PUB_3 + nonce*PUB_4 is precomputed (this spike fixes the nonce); exitCode is 0, so its term vanishes.\ncontract SP1Groth16Probe(ECPoint alpha, G2Point betaNeg, G2Point gammaNeg, G2Point deltaNeg, ECPoint base, ECPoint pub1) {\n  // digest = sha256(publicValues) with its top 3 bits cleared, given as a witness and checked byte by byte.\n  function verify(ECPoint a, G2Point b, ECPoint c, bytes publicValues, int digest, int hi) {\n    bytes32 d = sha256(publicValues);\n    bytes db = reverseBytes(num2bin(digest, 32));\n    require(substr(db, 1, 31) == substr(d, 1, 31), \"digest low bytes\");\n    require(hi >= 0 && hi < 8 && bin2num(substr(db, 0, 1)) < 32, \"digest top bits\");\n    require(bin2num(substr(d, 0, 1) + num2bin(0, 1)) == hi * 32 + bin2num(substr(db, 0, 1) + num2bin(0, 1)), \"digest top byte\");\n    ECPoint m1 = ecMul(pub1, digest, 2);\n    ECPoint vkx = ecAdd(base, m1, 2);\n    ECPoint[4] g1 = [a, c, alpha, vkx];\n    G2Point[4] g2 = [b, deltaNeg, betaNeg, gammaNeg];\n    require(ecPairing(g1, g2, 2), \"proof\");\n  }\n}\n"
+      "sp1_groth16_nonce.ark": "pragma arkade ^0.1.0;\n\n// Spike: verify an SP1 v6 Groth16 proof (bn254) in Arkade script. base = CONSTANT + programVKey*PUB_0 +\n// vkRoot*PUB_3 is precomputed; exitCode is 0, so its term vanishes. The proof nonce is a witness.\ncontract SP1Groth16Probe(ECPoint alpha, G2Point betaNeg, G2Point gammaNeg, G2Point deltaNeg, ECPoint base, ECPoint pub1, ECPoint pub4) {\n  // digest = sha256(publicValues) with its top 3 bits cleared, given as a witness and checked byte by byte.\n  function verify(ECPoint a, G2Point b, ECPoint c, int nonce, bytes publicValues, int digest, int hi) {\n    bytes32 d = sha256(publicValues);\n    bytes db = reverseBytes(num2bin(digest, 32));\n    require(substr(db, 1, 31) == substr(d, 1, 31), \"digest low bytes\");\n    require(hi >= 0 && hi < 8 && bin2num(substr(db, 0, 1)) < 32, \"digest top bits\");\n    require(bin2num(substr(d, 0, 1) + num2bin(0, 1)) == hi * 32 + bin2num(substr(db, 0, 1) + num2bin(0, 1)), \"digest top byte\");\n    ECPoint m1 = ecMul(pub1, digest, 2);\n    ECPoint m4 = ecMul(pub4, nonce, 2);\n    ECPoint s1 = ecAdd(base, m1, 2);\n    ECPoint vkx = ecAdd(s1, m4, 2);\n    ECPoint[4] g1 = [a, c, alpha, vkx];\n    G2Point[4] g2 = [b, deltaNeg, betaNeg, gammaNeg];\n    require(ecPairing(g1, g2, 2), \"proof\");\n  }\n}\n"
     }
   },
   "compiler": {
@@ -322,6 +347,6 @@
       "optimize": true
     }
   },
-  "updatedAt": "2026-10-09T06:29:11.413471100+00:00",
-  "fingerprint": "sha256:93a0528a41dbeadee43e4a9cfaa49e5b7e41c304fdc0a182b528385bd1a0a017"
+  "updatedAt": "2026-10-09T06:47:18.006975+00:00",
+  "fingerprint": "sha256:4f75d11c84070541ec9fae5c14115149f2e4685a386fdc5b43bdcde31e9779ff"
 }

@@ -1,17 +1,19 @@
 pragma arkade ^0.1.0;
 
 // Spike: verify an SP1 v6 Groth16 proof (bn254) in Arkade script. base = CONSTANT + programVKey*PUB_0 +
-// vkRoot*PUB_3 + nonce*PUB_4 is precomputed (this spike fixes the nonce); exitCode is 0, so its term vanishes.
-contract SP1Groth16Probe(ECPoint alpha, G2Point betaNeg, G2Point gammaNeg, G2Point deltaNeg, ECPoint base, ECPoint pub1) {
+// vkRoot*PUB_3 is precomputed; exitCode is 0, so its term vanishes. The proof nonce is a witness.
+contract SP1Groth16Probe(ECPoint alpha, G2Point betaNeg, G2Point gammaNeg, G2Point deltaNeg, ECPoint base, ECPoint pub1, ECPoint pub4) {
   // digest = sha256(publicValues) with its top 3 bits cleared, given as a witness and checked byte by byte.
-  function verify(ECPoint a, G2Point b, ECPoint c, bytes publicValues, int digest, int hi) {
+  function verify(ECPoint a, G2Point b, ECPoint c, int nonce, bytes publicValues, int digest, int hi) {
     bytes32 d = sha256(publicValues);
     bytes db = reverseBytes(num2bin(digest, 32));
     require(substr(db, 1, 31) == substr(d, 1, 31), "digest low bytes");
     require(hi >= 0 && hi < 8 && bin2num(substr(db, 0, 1)) < 32, "digest top bits");
     require(bin2num(substr(d, 0, 1) + num2bin(0, 1)) == hi * 32 + bin2num(substr(db, 0, 1) + num2bin(0, 1)), "digest top byte");
     ECPoint m1 = ecMul(pub1, digest, 2);
-    ECPoint vkx = ecAdd(base, m1, 2);
+    ECPoint m4 = ecMul(pub4, nonce, 2);
+    ECPoint s1 = ecAdd(base, m1, 2);
+    ECPoint vkx = ecAdd(s1, m4, 2);
     ECPoint[4] g1 = [a, c, alpha, vkx];
     G2Point[4] g2 = [b, deltaNeg, betaNeg, gammaNeg];
     require(ecPairing(g1, g2, 2), "proof");
