@@ -78,8 +78,8 @@ export class Workflows {
     due(limit = 20, at = Date.now()): Workflow[] {
         return all<Row>(this.db,
             `SELECT * FROM workflows WHERE state IN ('pending','submitting') AND next_at <= ?
-             ORDER BY state = 'pending', kind IN (${DEFERRABLE.map(() => "?").join(",")}), created_at LIMIT ?`,
-            at, ...DEFERRABLE, limit).map(toWorkflow);
+             ORDER BY state = 'pending', CASE kind ${DEFERRED.map((_, i) => `WHEN ? THEN ${i + 1}`).join(" ")} ELSE 0 END, created_at LIMIT ?`,
+            at, ...DEFERRED, limit).map(toWorkflow);
     }
 
     list(filter: { state?: WorkflowState; marketId?: string; limit?: number } = {}): Workflow[] {
@@ -108,7 +108,9 @@ export function backoffMs(attempts: number, baseMs = 2000, capMs = 5 * 60_000): 
     return Math.floor(Math.random() * Math.min(capMs, baseMs * 2 ** Math.min(attempts, 10)));
 }
 
-const DEFERRABLE = ["lp-liquidity", "lp-reprice", "activate"];
+// After settlement, in this order: activation (operator-funded, often time-bound), repricing, then LP bootstraps,
+// which pile up as retries whenever the LP wallet runs dry.
+const DEFERRED = ["activate", "lp-reprice", "lp-liquidity"];
 
 /** Widens per re-arm so a doomed row stops churning. */
 export function rearmCooldownMs(rearms: number, baseMs = 2 * 60_000, capMs = 60 * 60_000): number {

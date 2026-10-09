@@ -299,15 +299,16 @@ describe("LP bootstrap retry", () => {
 });
 
 describe("workflow priority", () => {
-    it("runs a resolution ahead of a backlog of older liquidity retries", () => {
+    it("runs a resolution, then an activation, ahead of a backlog of older liquidity retries", () => {
         const h = harness({});
         for (let i = 0; i < 25; i++) {
             run(h.db, "INSERT INTO workflows(id, kind, market_id, state, payload, next_at, created_at, updated_at) VALUES (?, 'lp-liquidity', NULL, 'pending', '{}', 0, ?, ?)",
                 `lp:${i}`, `2026-01-01T00:00:${String(i).padStart(2, "0")}.000Z`, "2026-01-01T00:00:00.000Z");
         }
         run(h.db, "INSERT INTO workflows(id, kind, market_id, state, payload, next_at, created_at, updated_at) VALUES ('resolve:m', 'resolve', NULL, 'pending', '{}', 0, '2026-06-01T00:00:00.000Z', '2026-06-01T00:00:00.000Z')");
+        run(h.db, "INSERT INTO workflows(id, kind, market_id, state, payload, next_at, created_at, updated_at) VALUES ('activate:n', 'activate', NULL, 'pending', '{}', 0, '2026-05-01T00:00:00.000Z', '2026-05-01T00:00:00.000Z')");
         const due = h.wf.due(20).map((w) => w.id);
-        expect(due[0]).toBe("resolve:m");
+        expect(due.slice(0, 3)).toEqual(["resolve:m", "activate:n", "lp:0"]);
         expect(due).toHaveLength(20);
     });
 });
