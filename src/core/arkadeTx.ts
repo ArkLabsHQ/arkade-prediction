@@ -92,6 +92,9 @@ function assetPacket(inputs: InputSpec[], outputs: OutputSpec[]): asset.Packet |
     );
 }
 
+/** arkd turns an output below this into an unspendable OP_RETURN (subdust) VTXO; we never create one. */
+export const DUST_SATS = 330n;
+
 const ANCHOR = hex.decode("51024e73");
 
 /** Insert the extension output before the P2A anchor so asset vouts keep their positions. */
@@ -114,6 +117,8 @@ export async function buildArkadeTx(
     outputs: OutputSpec[],
     opts: { packet?: asset.Packet } = {},
 ): Promise<BuiltTx> {
+    const subdust = outputs.find((o) => o.amount < DUST_SATS);
+    if (subdust) throw new Error(`output of ${subdust.amount} sats is below the ${DUST_SATS}-sat dust limit`);
     const entries: { vin: number; script: Uint8Array; witness: Uint8Array }[] = [];
     const signerInputs: number[] = [];
     const arkInputs = inputs.map((input, vin) => {

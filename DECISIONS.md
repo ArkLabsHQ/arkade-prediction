@@ -185,3 +185,7 @@ Each entry: decision, reason, rejected alternatives. Newest last.
 43. **Our own leftover claims are redeemed.** After a market resolves, the operator's seed set and the LP's unsold
     shares (once its offers have settled back) are redeemed by a one-shot `redeem-own` workflow per wallet, so
     mirrors return their collateral instead of leaving it in resolved vaults.
+44. **No subdust outputs.** arkd accepts outputs below dust (`vtxoMinAmount` 1 on Mutinynet) and turns them into
+    unspendable OP_RETURN VTXOs. `buildArkadeTx`, which every transaction we build goes through, refuses any
+    output under `DUST_SATS` (330, the operator's `dust`). Change, carriers, reserves and match surplus already
+    stay at or above it; the guard makes that a rule rather than a property of each builder.

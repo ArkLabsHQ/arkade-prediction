@@ -2,6 +2,7 @@ import { ArkAddress, asset, type Identity, type IndexerProvider, type TapLeafScr
 import { hex } from "@scure/base";
 import {
     buildArkadeTx,
+    DUST_SATS,
     signInputs,
     submitArkadeTx,
     type AssetAmount,
@@ -15,7 +16,7 @@ import { genesisPacket, marketContracts, type ArkadeClient, type Contract, type 
 import { offerContract, type OfferTerms } from "./offers.js";
 import { BINARY_VECTORS, redemptionPayout, type BinaryOutcome } from "./payout.js";
 
-export const CARRIER_SATS = 330n;
+export const CARRIER_SATS = DUST_SATS;
 
 export interface Ctx {
     ark: ArkadeClient;
