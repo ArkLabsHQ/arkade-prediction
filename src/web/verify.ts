@@ -103,6 +103,8 @@ function checkPriceTerms(m: MarketJson, t: MarketTermsJson, p: PriceTermsJson): 
     if (p.feedId !== hex.encode(feedIdBytes(s.feed))) throw new Error(`the vault settles on another feed than ${s.feed}`);
     if (p.kind !== "updown" || p.startAtMs !== String(s.startAtMs) || p.endAtMs !== String(s.endAtMs)) throw new Error("the vault settles on other rounds than the ones shown");
     if (BigInt(Date.parse(m.closeAt)) !== BigInt(p.endAtMs) || t.closeAtUnix !== String(Date.parse(m.closeAt) / 1000)) throw new Error("the close time shown differs from the settlement round");
+    // A timeout at or before the end round would let anyone settle 50/50 before the outcome is provable.
+    if (!(BigInt(t.timeoutAtUnix) > BigInt(t.closeAtUnix) && BigInt(t.timeoutAtUnix) <= BigInt(t.closeAtUnix) + 30n * 86_400n)) throw new Error("the vault timeout is not after the settlement round");
     if (m.oracle.keys.map((key) => key.toLowerCase()).join() !== p.signers.join()) throw new Error("the RedStone signers shown are not the ones the vault checks");
     if (p.signers.length !== 5 || new Set(p.signers).size !== 5 || p.signers.some((key) => !REDSTONE_PRIMARY_SIGNERS.includes(key))) throw new Error("the vault does not commit to the RedStone primary-prod signers");
     if (p.quorum * 2 <= 5) throw new Error("the vault quorum is not a majority of its signers");

@@ -173,7 +173,7 @@ describe("RedStone up/down terms", () => {
     const settled = () => {
         const { m } = served(true);
         const signers = [...REDSTONE_PRIMARY_SIGNERS];
-        const t = { ...m.terms!, closeAtUnix: String(END / 1000),
+        const t = { ...m.terms!, closeAtUnix: String(END / 1000), timeoutAtUnix: String(END / 1000 + 3600),
             price: { kind: "updown" as const, feedId: hex.encode(feedIdBytes("BTC")), startAtMs: String(START), endAtMs: String(END), signers, quorum: 3 } };
         const settlement = { oracle: "redstone-primary-prod", feed: "BTC", startAtMs: START, endAtMs: END };
         return { ...m, closeAt: new Date(END).toISOString(), terms: t, oracle: { ...m.oracle, policy: "redstone" as const, keys: signers, threshold: 3 },
@@ -189,6 +189,7 @@ describe("RedStone up/down terms", () => {
             ["close", (m) => { m.closeAt = new Date(END + 10_000).toISOString(); }],
             ["signers", (m) => { p(m).signers = [...p(m).signers.slice(1), `10${"02".repeat(33)}`]; m.oracle.keys = p(m).signers; }],
             ["quorum", (m) => { p(m).quorum = 2; }],
+            ["timeout before the end round", (m) => { m.terms!.timeoutAtUnix = String(END / 1000 - 60); }],
         ];
         for (const [what, tamper] of cases) {
             const m = settled();
