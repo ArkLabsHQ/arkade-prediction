@@ -105,19 +105,26 @@ async function main(): Promise<void> {
             oracle: await attestorHealth(),
         };
     };
-    const overview = async () => ({
-        process: { rssBytes: process.memoryUsage().rss, heapUsedBytes: process.memoryUsage().heapUsed, cpu: process.cpuUsage(), uptimeSeconds: Math.round(process.uptime()) },
-        health: await health(),
-        importLag: { lastRun: getMeta(db, "import.lastRun") ?? null, lastError: getMeta(db, "import.lastError") ?? null },
-        oracleLag: all(db, "SELECT id, question, close_at FROM markets WHERE status IN ('halted','closed','resolving') AND close_at < ? ORDER BY close_at LIMIT 50", Math.floor(Date.now() / 1000)),
-        workflows: { failed: wf.list({ state: "failed", limit: 50 }), inFlight: wf.list({ state: "submitting", limit: 50 }), pending: wf.list({ state: "pending", limit: 50 }) },
-        liquidity: all(db, "SELECT market_id, outcome, side, COUNT(*) offers, SUM(CAST(remaining AS INTEGER)) units FROM offers WHERE status = 'open' GROUP BY market_id, outcome, side"),
-        expiries: all(db, "SELECT id, vault_expires_at FROM markets WHERE vault_expires_at IS NOT NULL ORDER BY vault_expires_at LIMIT 20"),
-        wallets: {
-            operator: operator ? { address: await operator.wallet.getAddress(), available: (await operator.wallet.getBalance()).available } : null,
-            lp: lp ? { address: await lp.wallet.getAddress(), available: (await lp.wallet.getBalance()).available } : null,
-        },
-    });
+    // Each slow read is capped so one hung dependency cannot blank the whole operator page.
+    const capped = <T,>(p: Promise<T>, ms = 10_000) =>
+        Promise.race([p, new Promise<{ error: string }>((r) => setTimeout(() => r({ error: `timed out after ${ms / 1000}s` }), ms))]).catch((e) => ({ error: String(e).slice(0, 200) }));
+    const walletInfo = (w: NonNullable<typeof operator>) => capped((async () => ({ address: await w.wallet.getAddress(), available: (await w.wallet.getBalance()).available }))());
+    const overview = async () => {
+        const [h, op, lpw] = await Promise.all([capped(health()), operator && walletInfo(operator), lp && walletInfo(lp)]);
+        return {
+            process: { rssBytes: process.memoryUsage().rss, heapUsedBytes: process.memoryUsage().heapUsed, cpu: process.cpuUsage(), uptimeSeconds: Math.round(process.uptime()) },
+            health: h,
+            importLag: { lastRun: getMeta(db, "import.lastRun") ?? null, lastError: getMeta(db, "import.lastError") ?? null },
+            oracleLag: all(db, "SELECT id, question, close_at FROM markets WHERE status IN ('halted','closed','resolving') AND close_at < ? ORDER BY close_at LIMIT 50", Math.floor(Date.now() / 1000)),
+            workflows: { failed: wf.list({ state: "failed", limit: 50 }), inFlight: wf.list({ state: "submitting", limit: 50 }), pending: wf.list({ state: "pending", limit: 50 }) },
+            liquidity: all(db, "SELECT market_id, outcome, side, COUNT(*) offers, SUM(CAST(remaining AS INTEGER)) units FROM offers WHERE status = 'open' GROUP BY market_id, outcome, side"),
+            expiries: all(db, "SELECT id, vault_expires_at FROM markets WHERE vault_expires_at IS NOT NULL ORDER BY vault_expires_at LIMIT 20"),
+            wallets: {
+                operator: op ?? null,
+                lp: lpw ?? null,
+            },
+        };
+    };
     const faucet = cfg.DEV_ENDPOINTS && operator
         ? async (address: string, amount: number) => operator.wallet.send({ address, amount })
         : undefined;

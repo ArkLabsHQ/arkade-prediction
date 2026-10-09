@@ -19,13 +19,11 @@ export function Balances() {
     return (
         <Panel title="Balance" actions={<button type="button" className="btn small" onClick={() => void refreshHoldings()}>Refresh</button>}>
             {!b ? (holdingsError ? <p className="error">{holdingsError}</p> : <Loading what="balance" />) : (
-                <dl className="kv">
-                    <dt>Available</dt><dd><strong className="num">{sats(b.available)}</strong> <span className="muted">{btc(b.available)}</span></dd>
-                    <dt>Preconfirmed</dt><dd><span className="num">{sats(b.preconfirmed)}</span> <span className="muted">offchain, not yet in a batch</span></dd>
-                    <dt>Settled</dt><dd className="num">{sats(b.settled)}</dd>
-                    {b.recoverable > 0 && <><dt>Recoverable</dt><dd><span className="num">{sats(b.recoverable)}</span> <span className="muted">expired coins; this app does not renew them</span></dd></>}
-                    {holdingsError && <><dt>Last refresh</dt><dd className="error-text">failed: {holdingsError}</dd></>}
-                </dl>
+                <div className="stack">
+                    <p><strong className="num balance">{sats(b.available)}</strong> <span className="muted">{btc(b.available)}</span></p>
+                    {b.recoverable > 0 && <p className="muted small">Plus {sats(b.recoverable)} in expired coins this app does not renew.</p>}
+                    {holdingsError && <p className="error-text small">Last refresh failed: {holdingsError}</p>}
+                </div>
             )}
             {config.devFaucet && <Faucet />}
         </Panel>

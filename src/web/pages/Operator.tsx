@@ -1,12 +1,18 @@
-import { Fragment, useState, type ReactNode } from "react";
+import { useRef, useState } from "react";
 import { ApiError, api, enc, useLive } from "../api.js";
-import { count } from "../format.js";
-import { ActionStatus, ErrorBox, Loading, Panel, useAction, useAsync } from "../ui.js";
+import { count, sats } from "../format.js";
+import { ActionStatus, ErrorBox, Link, Loading, Panel, useAction, useAsync } from "../ui.js";
 
 /** Admin routes exist only on the server's admin port, which is protected at the edge rather than by a token. */
 export function Operator() {
-    const overview = useAsync(() => api<Record<string, unknown>>("/api/admin/overview"), []);
-    useLive(() => overview.reload());
+    const overview = useAsync(() => api<OverviewJson>("/api/admin/overview"), []);
+    // The overview reads wallets and remote health, so live events refresh it at most every 30 s.
+    const lastLive = useRef(0);
+    useLive(() => {
+        if (overview.loading || Date.now() - lastLive.current < 30_000) return;
+        lastLive.current = Date.now();
+        overview.reload();
+    });
     const act = useAction();
     const importAct = useAction();
     const [marketId, setMarketId] = useState("");
@@ -29,7 +35,7 @@ export function Operator() {
             </div>
             <div className="cols">
                 <Panel title="Overview" actions={<button type="button" className="btn small" onClick={overview.reload}>Refresh</button>}>
-                    {overview.data ? <DataView value={overview.data} />
+                    {overview.data ? <Dashboard o={overview.data} />
                         : elsewhere ? <p className="muted" role="status">The operator console is served on the admin port, not this one.</p>
                         : overview.error ? <ErrorBox error={overview.error} onRetry={overview.reload} /> : <Loading what="overview" />}
                 </Panel>
@@ -77,32 +83,87 @@ export function Operator() {
     );
 }
 
-/** Renders arbitrary server JSON as text: tables for row lists, definition lists for objects. */
-function DataView({ value, depth = 0 }: { value: unknown; depth?: number }): ReactNode {
-    if (value === null || value === undefined) return <span className="muted">—</span>;
-    if (typeof value !== "object") return <span className={typeof value === "boolean" ? (value ? "bid" : "ask") : ""}>{String(value)}</span>;
-    if (depth > 3) return <code className="mono small break">{JSON.stringify(value)}</code>;
-    if (Array.isArray(value)) {
-        if (value.length === 0) return <span className="muted">none</span>;
-        if (value.every((v) => v !== null && typeof v === "object" && !Array.isArray(v))) {
-            const rows = value as Record<string, unknown>[];
-            const cols = [...new Set(rows.flatMap((r) => Object.keys(r)))].slice(0, 10);
-            return (
-                <div className="table-wrap">
-                    <table className="data compact">
-                        <thead><tr>{cols.map((c) => <th key={c} scope="col">{c}</th>)}</tr></thead>
-                        <tbody>{rows.slice(0, 200).map((r, i) => <tr key={i}>{cols.map((c) => <td key={c}><DataView value={r[c]} depth={depth + 1} /></td>)}</tr>)}</tbody>
-                    </table>
-                </div>
-            );
-        }
-        return <ul className="plain">{value.map((v, i) => <li key={i}><DataView value={v} depth={depth + 1} /></li>)}</ul>;
-    }
+type Check = { ok: boolean; detail?: string };
+type Failed = { error: string };
+type Wf = { id: string; kind: string; marketId: string | null; state: string; attempts: number; error: string | null; txid: string | null };
+interface OverviewJson {
+    process: { rssBytes: number; uptimeSeconds: number };
+    health: Record<string, Check> | Failed;
+    importLag: { lastRun: string | null; lastError: string | null };
+    oracleLag: { id: string; question: string; close_at: number }[];
+    workflows: { failed: Wf[]; inFlight: Wf[]; pending: Wf[] };
+    liquidity: { market_id: string; outcome: string; side: string; offers: number; units: number }[];
+    expiries: { id: string; vault_expires_at: string }[];
+    wallets: Record<"operator" | "lp", { address: string; available: number } | Failed | null>;
+}
+
+const failed = (v: unknown): v is Failed => !!v && typeof v === "object" && "error" in v;
+function ago(iso: string | null): string {
+    if (!iso) return "never";
+    const min = Math.round((Date.now() - Date.parse(iso)) / 60_000);
+    return min < 90 ? `${min} min ago` : min < 48 * 60 ? `${Math.round(min / 60)} h ago` : `${Math.round(min / 1440)} d ago`;
+}
+
+function Dashboard({ o }: { o: OverviewJson }) {
+    const wf = o.workflows;
+    const books = new Set(o.liquidity.map((l) => l.market_id)).size;
     return (
-        <dl className="kv">
-            {Object.entries(value as Record<string, unknown>).map(([k, v]) => (
-                <Fragment key={k}><dt>{k}</dt><dd><DataView value={v} depth={depth + 1} /></dd></Fragment>
-            ))}
-        </dl>
+        <div className="stack">
+            <div className="pills">
+                {failed(o.health) ? <span className="pill bad">health: {o.health.error}</span>
+                    : Object.entries(o.health).map(([k, c]) => <span key={k} className={`pill ${c.ok ? "good" : "bad"}`} title={c.detail}>{k}</span>)}
+            </div>
+            <div className="kpis">
+                {(["operator", "lp"] as const).map((k) => {
+                    const w = o.wallets[k];
+                    return (
+                        <div key={k} className="kpi">
+                            <span className="kpi-label">{k === "lp" ? "LP wallet" : "Operator wallet"}</span>
+                            {!w ? <span className="muted">not configured</span>
+                                : failed(w) ? <span className="error-text small">{w.error}</span>
+                                : <><strong className="num">{sats(BigInt(w.available))}</strong><span className="mono small break muted">{w.address}</span></>}
+                        </div>
+                    );
+                })}
+                <div className="kpi"><span className="kpi-label">Markets with LP books</span><strong className="num">{books}</strong></div>
+                <div className="kpi"><span className="kpi-label">Last import</span><strong>{ago(o.importLag.lastRun)}</strong>{o.importLag.lastError && <span className="error-text small">{o.importLag.lastError}</span>}</div>
+                <div className="kpi"><span className="kpi-label">Process</span><strong className="num">{Math.round(o.process.rssBytes / 2 ** 20)} MB</strong><span className="muted small">up {Math.round(o.process.uptimeSeconds / 3600)} h</span></div>
+            </div>
+            <WorkflowTable title={`Failed workflows (${wf.failed.length})`} rows={wf.failed} />
+            <WorkflowTable title={`Submitting (${wf.inFlight.length})`} rows={wf.inFlight} />
+            <WorkflowTable title={`Pending (${wf.pending.length})`} rows={wf.pending} />
+            <section>
+                <h3>Awaiting resolution ({o.oracleLag.length})</h3>
+                {o.oracleLag.length === 0 ? <p className="muted">None.</p> : (
+                    <ul className="plain">{o.oracleLag.map((m) => <li key={m.id}><Link to={`/markets/${m.id}`}>{m.question}</Link> <span className="muted small">closed {ago(new Date(m.close_at * 1000).toISOString())}</span></li>)}</ul>
+                )}
+            </section>
+            <details>
+                <summary>Raw overview JSON</summary>
+                <pre className="json">{JSON.stringify(o, null, 2)}</pre>
+            </details>
+        </div>
+    );
+}
+
+function WorkflowTable({ title, rows }: { title: string; rows: Wf[] }) {
+    if (rows.length === 0) return null;
+    return (
+        <section>
+            <h3>{title}</h3>
+            <div className="table-wrap">
+                <table className="data compact">
+                    <thead><tr><th scope="col">Kind</th><th scope="col">Market</th><th scope="col">Tries</th><th scope="col">Last error</th></tr></thead>
+                    <tbody>{rows.map((w) => (
+                        <tr key={w.id}>
+                            <td className="mono small">{w.kind}</td>
+                            <td>{w.marketId ? <Link to={`/markets/${w.marketId}`} className="mono small">{w.marketId.slice(0, 8)}</Link> : "—"}</td>
+                            <td className="num">{w.attempts}</td>
+                            <td className="small break">{w.error ?? ""}</td>
+                        </tr>
+                    ))}</tbody>
+                </table>
+            </div>
+        </section>
     );
 }

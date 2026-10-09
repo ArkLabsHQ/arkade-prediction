@@ -201,10 +201,10 @@ function Overview({ session }: { session: Session }) {
             <Panel title="Account" actions={<button type="button" className="btn small" onClick={() => void lock()}>Lock</button>}>
                 <dl className="kv">
                     <dt>Arkade address</dt><dd><span className="mono break">{session.address}</span> <Copy text={session.address} /></dd>
-                    <dt>Public key</dt><dd className="mono break">{session.pubkey}</dd>
                 </dl>
             </Panel>
             <Balances />
+            <ExportPhrase session={session} />
             <Panel title="Claims held">
                 {!holdings ? (holdingsError ? <p className="error">{holdingsError}</p> : <Loading what="claims" />)
                     : index ? <ClaimsTable index={index} holdings={holdings} />
@@ -212,6 +212,25 @@ function Overview({ session }: { session: Session }) {
             </Panel>
             <OracleKeys session={session} />
         </>
+    );
+}
+
+function ExportPhrase({ session }: { session: Session }) {
+    const [shown, setShown] = useState(false);
+    const phrase = session.keystore.secrets.mnemonic;
+    return (
+        <Panel title="Recovery phrase">
+            <p className="muted small">These 12 words restore this wallet anywhere. Anyone who sees them can spend your funds.</p>
+            {shown ? (
+                <div className="stack">
+                    <ol className="words">{phrase.split(" ").map((w, i) => <li key={i}><span className="muted">{i + 1}.</span> {w}</li>)}</ol>
+                    <div className="row-actions">
+                        <Copy text={phrase} label="Copy phrase" />
+                        <button type="button" className="btn small" onClick={() => setShown(false)}>Hide</button>
+                    </div>
+                </div>
+            ) : <button type="button" className="btn" onClick={() => setShown(true)}>Reveal recovery phrase</button>}
+        </Panel>
     );
 }
 

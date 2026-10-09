@@ -8,7 +8,7 @@ import {
     cancelFresh, ensureBox, fillWithRetry, logged, oracleKeyFor, postOrder, resolveAsOracle, sendCertificate, type Chain, type Session,
 } from "../chain.js";
 import { useApp } from "../ctx.js";
-import { planFill, type Plan } from "../fills.js";
+import { fillable, planFill, type Plan } from "../fills.js";
 import { count, fromUnix, n, pct, sats, short, when } from "../format.js";
 import { ActionStatus, Loading, LockedNotice, Panel, Time, Txid, outcomeName, useAction, useAsync } from "../ui.js";
 import { verifiedTerms } from "../verify.js";
@@ -77,10 +77,18 @@ function Ticket({ m, chain, session, onChanged, offers }: Live & { offers?: Offe
     const boxed = side === "buy" && autoClaim;
     const carriers = boxed ? 2n * CARRIER_SATS : CARRIER_SATS;
 
+    const nowUnix = Math.floor(Date.now() / 1000);
+    const resting = book.filter((o) => o.terms.side === (side === "buy" ? "sell" : "buy") && fillable(o, nowUnix, session.script));
+    // Smallest size the book fills, when the one entered falls under the 330-sat minimum or an offer's min fill.
+    const minShares = plan && plan.legs.length === 0 && resting.length > 0 && qty
+        ? Array.from({ length: 400 }, (_, i) => qty + BigInt(i + 1)).find((q) => planFill(book, side, q, nowUnix, session.script).qty === q) ?? null
+        : null;
+
     let blocker: string | null = null;
     if (!offers) blocker = "Loading the order book";
     else if (!qty) blocker = "Enter a whole number of shares";
-    else if (!plan || plan.legs.length === 0) blocker = "No liquidity";
+    else if (resting.length === 0) blocker = `No ${side === "buy" ? "sellers" : "buyers"} right now. The house stops quoting once an event starts; post a limit order instead.`;
+    else if (!plan || plan.legs.length === 0) blocker = minShares ? `Minimum bet is ${sats(MIN_BET_SATS)}: ${n(minShares)} shares at this price` : "No offer fills this size";
     else if (plan.qty < qty) blocker = `Only ${n(plan.qty)} of ${n(qty)} shares can be filled from this book (${n(plan.depth)} resting, some only in larger minimum fills)`;
     else if (plan.notional < MIN_BET_SATS) blocker = `A bet must be worth at least ${sats(MIN_BET_SATS)}; this one is ${sats(plan.notional)}`;
     else if (bound === null) blocker = `Enter a valid ${side === "buy" ? "max spend" : "min receive"}`;
@@ -144,7 +152,7 @@ function Ticket({ m, chain, session, onChanged, offers }: Live & { offers?: Offe
                 </label>
             )}
             {Date.parse(m.closeAt) <= Date.now() && <p className="notice warn">This market has closed. The outcome may already be known, and resting orders can still be filled.</p>}
-            {blocker && <p className="hint">{blocker}</p>}
+            {blocker && <p className="hint">{blocker}{minShares && !(plan?.legs.length) ? <> <button type="button" className="btn small" onClick={() => setQtyText(minShares.toString())}>Use {n(minShares)}</button></> : null}</p>}
             <button type="button" className={`btn wide ${side}`} disabled={!!blocker || act.busy} onClick={() => void submit()}>
                 {plan && qty && !blocker ? `${side === "buy" ? "Buy" : "Sell"} ${n(qty)} ${label} for ${sats(plan.notional)}` : side === "buy" ? "Buy" : "Sell"}
             </button>
