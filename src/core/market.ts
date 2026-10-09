@@ -127,8 +127,9 @@ function priceContracts(ark: ArkadeClient, terms: VaultTerms, p: PriceTerms) {
     if (p.feedId.length !== 32 || p.signers.length !== PRICE_SIGNER_SLOTS || p.signers.some((k) => attestorScheme(k) !== "ecdsa-secp256k1")) {
         throw new Error(`price terms need a 32-byte feed id and ${PRICE_SIGNER_SLOTS} ECDSA/secp256k1 signer keys`);
     }
-    if (new Set(p.signers.map((k) => hex.encode(k))).size !== PRICE_SIGNER_SLOTS || p.quorum < 1 || p.quorum > PRICE_SIGNER_SLOTS) {
-        throw new Error("price signers must be distinct, with a quorum of 1..5");
+    // A quorum below a majority would let both sides be proven; the vault refuses it too.
+    if (new Set(p.signers.map((k) => hex.encode(k))).size !== PRICE_SIGNER_SLOTS || p.quorum * 2 <= PRICE_SIGNER_SLOTS || p.quorum > PRICE_SIGNER_SLOTS) {
+        throw new Error("price signers must be distinct, with a majority quorum (3..5 of 5)");
     }
     const rounds = p.kind === "threshold" ? [p.settleAtMs] : [p.startAtMs, p.endAtMs];
     if (rounds.some((r) => r <= 0n || r % 10_000n !== 0n)) throw new Error("rounds must be RedStone rounds (multiples of 10 s)");

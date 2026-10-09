@@ -2,10 +2,11 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { hex } from "@scure/base";
 import { execute, issueMarketAssets, mintSets, openVault, redeemAll, resolvePriceMarket, walletParty, contractCoin, type Ctx } from "../../src/core/actions.js";
-import { marketContracts, type VaultTerms } from "../../src/core/market.js";
+import { NUMS_KEY, PROGRAMS, marketContracts, type VaultTerms } from "../../src/core/market.js";
+import { assetScriptArgs } from "../../src/core/assets.js";
 import { feedIdBytes, latestPackages, packageSignerKey, priceReport, type RedStonePackage } from "../../src/core/redstone.js";
 import { connectArkade, expectCovenantRejection, faucet, indexerProvider, newWallet, spendableAt, waitFor } from "./env.js";
-import { network } from "./market.js";
+import { network, walletSend } from "./market.js";
 
 describe("price market settled by RedStone's own signatures", () => {
     it("resolves on live signed BTC prices and refuses the wrong side, a tampered price and a short quorum", { timeout: 600_000 }, async () => {
@@ -102,5 +103,43 @@ describe("price market settled by RedStone's own signatures", () => {
         expect(outcome).toBe("no");
         await waitFor(async () => (await spendableAt(resolved.no.pkScript)).length > 0, { what: "resolved NO vault" });
         console.log(`disagreeing signers (${report.prices.join(", ")}) settled NO in ${txid}`);
+    });
+
+    it("refuses to resolve a vault built with a minority quorum, which could otherwise prove both sides", { timeout: 600_000 }, async () => {
+        const ark = await connectArkade();
+        const ctx: Ctx = { ark, net: network(ark), indexer: indexerProvider };
+        const w = await newWallet();
+        await faucet(await w.wallet.getAddress(), 30_000);
+        await waitFor(async () => (await w.wallet.getBalance()).available >= 30_000, { what: "funded" });
+        const party = await walletParty(w.wallet, w.identity);
+        const packages: RedStonePackage[] = JSON.parse(readFileSync(new URL("../fixtures/redstone/btc-packages.json", import.meta.url), "utf8")).BTC;
+        const signers = packages.map(packageSignerKey);
+        const ts = BigInt(packages[0]!.timestampMilliseconds);
+        const report = priceReport("BTC", packages, signers, ts);
+        const { assets } = await issueMarketAssets(ctx, party, hex.encode(crypto.getRandomValues(new Uint8Array(16))), 1n);
+        await waitFor(async () => (await party.coins()).some((c) => c.assets?.some((a) => a.assetId === assets.ctrl)), { what: "genesis" });
+        const closeAt = BigInt(Math.floor(Date.now() / 1000) - 120);
+        const terms: VaultTerms = {
+            assets, unitSats: 1000n, capSats: 101_000n, oracleKeys: [], oracleThreshold: 1, binding: new Uint8Array(32),
+            closeAt, timeoutAt: closeAt + 86_400n, exitDelaySeconds: 512n,
+            price: { kind: "threshold", feedId: feedIdBytes("BTC"), strike: 8228900000000n, settleAtMs: ts, signers, quorum: 3 },
+        };
+        const { resolved } = marketContracts(ark, terms);
+        const a = (id: string) => assetScriptArgs(id);
+        // Same vault as priceContracts builds, but with quorum 2, which the builder refuses.
+        const minority = ark.contract(PROGRAMS.priceVault, {
+            ctrlTxid: a(assets.ctrl).txid, ctrlGidx: a(assets.ctrl).gidx, yesTxid: a(assets.yes).txid, yesGidx: a(assets.yes).gidx,
+            noTxid: a(assets.no).txid, noGidx: a(assets.no).gidx, unit: 1000n, capValue: 101_000n, feedId: feedIdBytes("BTC"),
+            strike: 8228900000000n, settleAtMs: ts, ...Object.fromEntries(signers.map((k, i) => [`signers.${i}`, k])), quorum: 2n,
+            closeAt, timeoutAt: closeAt + 86_400n, resolvedYes: resolved.yes.pkScript.slice(2), resolvedNo: resolved.no.pkScript.slice(2),
+            resolvedInvalid: resolved.invalid.pkScript.slice(2), noExitKey: NUMS_KEY, exit: 512n,
+        });
+        expect(() => marketContracts(ark, { ...terms, price: { ...terms.price!, quorum: 2 } })).toThrow(/majority/);
+        await walletSend(ark, w, [{ script: minority.pkScript, amount: 2000n, assets: [{ assetId: assets.ctrl, amount: 1n }] }]);
+        const coin = await waitFor(async () => contractCoin(ctx, minority, assets.ctrl, 1), { what: "minority vault" });
+        const slot = (name: string, xs: Uint8Array[]) => Object.fromEntries(xs.map((x, i) => [`${name}.${i}`, x]));
+        const args = { ...slot("values", report.values), ...slot("stamps", report.stamps), ...slot("sigs", report.signatures) };
+        await expectCovenantRejection(execute(ctx, [{ kind: "covenant", coin, contract: minority, fn: "resolveNo", args }],
+            [{ script: resolved.no.pkScript, amount: BigInt(coin.value), assets: [{ assetId: assets.ctrl, amount: 1n }] }]), "a quorum of 2 of 5");
     });
 });

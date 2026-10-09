@@ -64,6 +64,8 @@ contract PriceVault(
   // Unrolled per slot: a loop counter sits under each slot's bound message, so incrementing it would need
   // OP_PUT, which the pinned SDK cannot load.
   private function side(bytes32[5] values, bytes[5] stamps, signature[5] sigs, bool above) {
+    // Below a majority of the 5 slots both sides could reach the quorum.
+    require(quorum * 2 > 5, "majority");
     bytes tail = reverseBytes(num2bin(32, 4)) + reverseBytes(num2bin(1, 3));
     bytes m0 = digest(feedId + values[0] + stamps[0] + tail, 4);
     int c0 = 0;
