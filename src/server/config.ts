@@ -128,7 +128,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     if (c.MARKET_UNIT_SATS < 330) throw new Error("MARKET_UNIT_SATS must be at least 330 so one set is a valid bet");
     // ORACLE_SECRET_KEY on the app runs a local attestor beside it (see embeddedAttestor.ts): one container.
     const attestorSecret = secret(env, "ORACLE_SECRET_KEY");
-    if ((c.POLYMARKET_ENABLED || attestorSecret) && c.POLYGON_RPC_URLS.length < 2) throw new Error("POLYGON_RPC_URLS needs at least two providers");
+    if (c.POLYMARKET_ENABLED && c.POLYGON_RPC_URLS.length < 2) throw new Error("POLYGON_RPC_URLS needs at least two providers");
+    // The embedded attestor serves Polymarket only with two RPCs; with no source at all it would exit in a loop.
+    if (attestorSecret && c.POLYGON_RPC_URLS.length < 2 && !c.KALSHI_ENABLED && !c.MANIFOLD_ENABLED) {
+        throw new Error("ORACLE_SECRET_KEY runs an attestor that needs a source: POLYGON_RPC_URLS (two providers), KALSHI_ENABLED or MANIFOLD_ENABLED");
+    }
     if (attestorSecret !== undefined && !/^[0-9a-f]{64}$/.test(attestorSecret)) throw new Error(`ORACLE_SECRET_KEY must be 64 lowercase hex characters; ${hexProblem(attestorSecret)}`);
     const embeddedKey = attestorSecret && hex.encode(attestorPublicKey(c.ORACLE_KEY_SCHEME, hex.decode(attestorSecret)));
     const oraclePubkeys = c.ORACLE_PUBKEYS.length > 0 ? c.ORACLE_PUBKEYS : embeddedKey ? [embeddedKey] : [];

@@ -23,7 +23,7 @@ export interface ImportResult {
  */
 const attestorSlots = (cfg: Deps["cfg"]) => oracleSlots(cfg.ORACLE_PUBKEYS.map((k) => hex.decode(k)), cfg.ORACLE_THRESHOLD).map((k) => hex.encode(k));
 
-type ImportDeps = Deps & { wf: Workflows; providers: MarketSourceProvider[]; timeoutDays: number };
+type ImportDeps = Deps & { wf: Workflows; providers: MarketSourceProvider[]; timeoutDays: number; attestorProfiles?: () => Promise<Map<string, number>> };
 
 export async function importOnce(d: ImportDeps, upcoming: SourceMarket[] = []): Promise<ImportResult> {
     const { db } = d;
@@ -115,20 +115,30 @@ export function upsertSource(d: Deps, m: SourceMarket, v: { eligible: boolean; c
 
 /** Creates the market row once per source id and enqueues operator genesis, within the activation cap. */
 async function activate(
-    d: Deps & { wf: Workflows; timeoutDays: number },
+    d: Deps & { wf: Workflows; timeoutDays: number; attestorProfiles?: () => Promise<Map<string, number>> },
     provider: MarketSourceProvider,
     m: SourceMarket,
     profile: string,
     refuse: (m: SourceMarket, code: string, reason: string) => void,
 ): Promise<string | undefined> {
-    if (one(d.db, "SELECT 1 FROM markets WHERE source_provider = ? AND source_id = ?", m.provider, m.sourceId)) return undefined;
-    const live = all<{ source_provider: string; source_snapshot: string; question: string }>(d.db,
-        "SELECT source_provider, source_snapshot, question FROM markets WHERE kind = 'polymarket' AND oracle_policy != 'redstone' AND status IN ('activating','open','halted','closed','resolving')");
-    if (live.filter((r) => r.source_provider === m.provider).length >= d.cfg.IMPORT_MAX_ACTIVE || !d.cfg.ORACLE_PUBKEYS[0]) return undefined;
-    if (d.cfg.IMPORT_MAX_PER_SECTION > 0) {
+    // Checked again after every await below: another import pass may have filled the slot meanwhile.
+    const room = () => {
+        if (one(d.db, "SELECT 1 FROM markets WHERE source_provider = ? AND source_id = ?", m.provider, m.sourceId)) return false;
+        const live = all<{ source_provider: string; source_snapshot: string; question: string }>(d.db,
+            "SELECT source_provider, source_snapshot, question FROM markets WHERE kind = 'polymarket' AND oracle_policy != 'redstone' AND status IN ('activating','open','halted','closed','resolving')");
+        if (live.filter((r) => r.source_provider === m.provider).length >= d.cfg.IMPORT_MAX_ACTIVE || !d.cfg.ORACLE_PUBKEYS[0]) return false;
+        if (d.cfg.IMPORT_MAX_PER_SECTION <= 0) return true;
         const section = sectionOf(m.tags, m.question);
-        const inSection = live.filter((r) => sectionOf((JSON.parse(r.source_snapshot) as SourceMarket).tags ?? [], r.question) === section).length;
-        if (inSection >= d.cfg.IMPORT_MAX_PER_SECTION) return undefined;
+        return live.filter((r) => sectionOf((JSON.parse(r.source_snapshot) as SourceMarket).tags ?? [], r.question) === section).length < d.cfg.IMPORT_MAX_PER_SECTION;
+    };
+    if (!room()) return undefined;
+    // A market no attestor quorum can certify would lock its collateral until the timeout.
+    if (d.attestorProfiles) {
+        const serving = (await d.attestorProfiles()).get(profile) ?? 0;
+        if (serving < d.cfg.ORACLE_THRESHOLD) {
+            refuse(m, "no-attestor", `${serving} of the configured attestors serve ${profile}; ${d.cfg.ORACLE_THRESHOLD} needed`);
+            return undefined;
+        }
     }
     // Last gate before the operator funds anything: the chain, not the source API, says who may report the result.
     const vetted = await provider.vetSource?.(m);
@@ -136,6 +146,7 @@ async function activate(
         refuse(m, "unvetted-source", vetted.reason);
         return undefined;
     }
+    if (!room()) return undefined;
     const def = importedDefinition(m, profile, d.timeoutDays);
     const id = randomBytes(16).toString("hex");
     const t = now();

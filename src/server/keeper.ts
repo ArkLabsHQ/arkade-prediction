@@ -168,10 +168,11 @@ export class Keeper {
     /** Moves LP asks on mirrored markets to the refreshed source odds once they drift by REPRICE_BPS of the unit. */
     /** A bootstrap that failed (usually an underfunded LP) is enqueued again; Workflows re-arms it after a widening cooldown. */
     private retryLpBootstraps(nowS: number): void {
-        for (const wf of this.d.wf.list({ state: "failed", limit: 200 })) {
-            if (wf.kind !== "lp-liquidity" || !wf.id.endsWith(":bootstrap") || !wf.marketId) continue;
-            const m = getMarket(this.d.db, wf.marketId);
-            if (m?.status === "open" && quotesUntil(m) - nowS >= LP_MIN_WINDOW_SECONDS) this.d.wf.enqueue(wf.id, wf.kind, wf.marketId, {});
+        const failed = all<{ id: string; market_id: string }>(this.d.db,
+            "SELECT id, market_id FROM workflows WHERE kind = 'lp-liquidity' AND state = 'failed' AND id LIKE '%:bootstrap' AND market_id IS NOT NULL");
+        for (const wf of failed) {
+            const m = getMarket(this.d.db, wf.market_id);
+            if (m?.status === "open" && quotesUntil(m) - nowS >= LP_MIN_WINDOW_SECONDS) this.d.wf.enqueue(wf.id, "lp-liquidity", wf.market_id, {});
         }
     }
 
@@ -264,7 +265,8 @@ export class Keeper {
             const message = err instanceof Error ? err.message : String(err);
             const permanent = /does not cross|already|covenant|spent|expired|no claims/i.test(message) && latest.state === "pending";
             this.d.log("workflow attempt failed", { id: wf.id, state: latest.state, error: message });
-            if (permanent || latest.attempts >= 8) this.d.wf.transition(latest, "failed", { error: message, attempt: true });
+            // A submission in flight only ever settles through reconciliation: failing it lets a re-arm submit twice.
+            if (latest.state !== "submitting" && (permanent || latest.attempts >= 8)) this.d.wf.transition(latest, "failed", { error: message, attempt: true });
             else this.d.wf.transition(latest, latest.state, { error: message, nextAt: Date.now() + backoffMs(latest.attempts), attempt: true });
         }
     }
@@ -454,7 +456,9 @@ export class Keeper {
             const fk = `${outcome}FundingTxid`;
             // Same price band registerOffer enforces: a price it would reject must not fund an offer first.
             if (price <= 0n || price >= terms.unitSats || sets * price < MIN_BET_SATS || p[`${outcome}Registered`]) continue;
-            if (!p[tk]) {
+            // Terms written before a failed attempt keep their expiry; re-derive them if it has gone stale and nothing is funded yet.
+            const stale = (t: unknown) => !t || BigInt((t as OfferTermsJson).expiresAtUnix) <= BigInt(nowS + LP_MIN_WINDOW_SECONDS);
+            if (!p[fk] && stale(p[tk])) {
                 p[tk] = offerTermsToJson({
                     side: "sell", maker: lpKey, makerScript: lp.script, assetId: terms.assets[outcome], priceSats: price,
                     minFill: minFillFor(price), expiresAt: lpExpiry(quotesUntil(market), nowS), reserveSats: 330n, exitDelaySeconds: this.d.net.exitDelaySeconds,
@@ -499,7 +503,7 @@ export class Keeper {
         const nowS = Math.floor(Date.now() / 1000);
         if (market.status !== "open" || market.close_at - nowS < LP_MIN_WINDOW_SECONDS) return undefined;
         const qty = BigInt(p.qty as string);
-        if (!p.terms) {
+        if (!p.funded && (!p.terms || BigInt((p.terms as OfferTermsJson).expiresAtUnix) <= BigInt(nowS + LP_MIN_WINDOW_SECONDS))) {
             p.terms = offerTermsToJson({
                 side: "sell", maker: await lp.identity.xOnlyPublicKey(), makerScript: lp.script, assetId: p.assetId as string, priceSats: BigInt(p.price as string),
                 minFill: minFillFor(BigInt(p.price as string)), expiresAt: lpExpiry(quotesUntil(market), nowS), reserveSats: 330n, exitDelaySeconds: this.d.net.exitDelaySeconds,
@@ -633,7 +637,7 @@ const bidTakes = (b: Bid, qty: bigint) => fillAllowed(b.terms, { units: 0n, valu
 /** The best-priced pair can be unfillable (min fill above what the other side absorbs), which stalled matching. */
 function bestMintMatch(bids: Bid[], unitSats: bigint, room: bigint): { yes: Bid; no: Bid; qty: bigint } | undefined {
     const side = (outcome: string) =>
-        bids.filter((b) => b.outcome === outcome && b.remaining > 0n).sort((a, b) => Number(b.price - a.price)).slice(0, MATCH_CANDIDATES);
+        bids.filter((b) => b.outcome === outcome && b.remaining > 0n && !b.terms.legacy).sort((a, b) => Number(b.price - a.price)).slice(0, MATCH_CANDIDATES);
     const nos = side("no");
     for (const yes of side("yes")) {
         for (const no of nos) {

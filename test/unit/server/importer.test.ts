@@ -74,6 +74,26 @@ describe("activation vetting", () => {
             .toMatchObject({ code: "unvetted-source", eligible: 0 });
     });
 
+    it("funds nothing when too few attestors serve the source's profile", async () => {
+        const { db, d } = deps(async () => ({ ok: true }));
+        const result = await importOnce({ ...d, attestorProfiles: async () => new Map([["kalshi-api-v1-binary", 1]]) } as never);
+        expect(result.ineligibleByCode["no-attestor"]).toBe(1);
+        expect(one(db, "SELECT 1 FROM markets")).toBeUndefined();
+    });
+
+    it("re-checks the slot after vetting, when another pass took it meanwhile", async () => {
+        let d!: ReturnType<typeof deps>["d"];
+        const made = deps(async () => {
+            insertMarket(made.db, { id: "other", status: "activating" });
+            run(made.db, "UPDATE markets SET kind = 'polymarket', source_provider = 'polymarket', source_id = '42' WHERE id = 'other'");
+            return { ok: true };
+        });
+        d = made.d;
+        const result = await importOnce(d as never);
+        expect(result.activated).toEqual([]);
+        expect(one<{ n: number }>(made.db, "SELECT COUNT(*) n FROM markets")!.n).toBe(1);
+    });
+
     it("activates the same market once the vet passes", async () => {
         const { db, d } = deps(async () => ({ ok: true }));
         const result = await importOnce(d as never);

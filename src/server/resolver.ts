@@ -28,7 +28,10 @@ export async function resolutionTick(d: SourceDeps): Promise<void> {
         lastPoll.set(m.id, Date.now());
         const snapshot = JSON.parse(m.source_snapshot!) as Snapshot;
         const provider = providerOf(d, m);
-        if (!provider) continue;
+        if (!provider) {
+            d.log("no source provider enabled for a funded market; it cannot be certified", { market: m.id, provider: m.source_provider });
+            continue;
+        }
         try {
             const evidence = await provider.fetchResolutionEvidence(snapshot);
             run(d.db, "UPDATE markets SET resolution_status = ?, resolution_detail = ?, updated_at = ? WHERE id = ?", evidence.status, evidence.detail.slice(0, 500), now(), m.id);
@@ -53,7 +56,12 @@ async function screenOpenMarkets(d: SourceDeps): Promise<void> {
     const resolved = new Set<string>();
     for (const provider of d.providers) {
         const mine = open.filter((m) => m.source_provider === provider.name).map((m) => JSON.parse(m.source_snapshot!) as Snapshot);
-        if (mine.length > 0) for (const id of await provider.screenResolved(mine)) resolved.add(`${provider.name}:${id}`);
+        if (mine.length === 0) continue;
+        try {
+            for (const id of await provider.screenResolved(mine)) resolved.add(`${provider.name}:${id}`);
+        } catch (err) {
+            d.log("early resolution screen failed", { provider: provider.name, error: String(err) });
+        }
     }
     for (const m of open) {
         const snapshot = JSON.parse(m.source_snapshot!) as Snapshot;

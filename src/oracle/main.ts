@@ -57,6 +57,8 @@ const csv = (name: string, fallback: readonly string[] = []) => {
     const set = (env[name] ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
     return set.length > 0 ? set : [...fallback];
 };
+// Same truthy values as the server's config (true / 1), so both sides agree on which sources are on.
+const on = (v: string | undefined) => v === "true" || v === "1";
 const rpcUrls = (env.POLYGON_RPC_URLS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 if (rpcUrls.length === 1) throw new Error("POLYGON_RPC_URLS needs at least two providers");
 const providers: MarketSourceProvider[] = [
@@ -69,8 +71,8 @@ const providers: MarketSourceProvider[] = [
               negRiskOracleAllowlist: csv("POLYMARKET_NEGRISK_ORACLES", DEFAULT_NEG_RISK_ORACLES),
           })]
         : []),
-    ...(env.KALSHI_ENABLED === "true" ? [createKalshiProvider({ apiUrl: env.KALSHI_API_URL || undefined })] : []),
-    ...(env.MANIFOLD_ENABLED === "true" ? [createManifoldProvider({ apiUrl: env.MANIFOLD_API_URL || undefined })] : []),
+    ...(on(env.KALSHI_ENABLED) ? [createKalshiProvider({ apiUrl: env.KALSHI_API_URL || undefined })] : []),
+    ...(on(env.MANIFOLD_ENABLED) ? [createManifoldProvider({ apiUrl: env.MANIFOLD_API_URL || undefined })] : []),
 ];
 if (providers.length === 0) throw new Error("no source enabled: set POLYGON_RPC_URLS, KALSHI_ENABLED or MANIFOLD_ENABLED");
 const log = (msg: string, extra: Record<string, unknown> = {}) => console.log(JSON.stringify({ ts: new Date().toISOString(), service: "attestor", msg, ...extra }));

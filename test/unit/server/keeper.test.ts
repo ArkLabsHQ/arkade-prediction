@@ -312,3 +312,15 @@ describe("workflow priority", () => {
         expect(due).toHaveLength(20);
     });
 });
+
+describe("in-flight submissions", () => {
+    it("never fails a submission whose outcome is unknown, however often reconciliation throws", async () => {
+        const indexer = { getVirtualTxs: async () => ({ txs: [] }), getVtxos: async () => { throw new Error("indexer down"); } };
+        const h = harness({ net: { indexer, ctx: {}, exitDelaySeconds: 512n } } as never);
+        insertMarket(h.db, { id: "m1" });
+        run(h.db, "INSERT INTO workflows(id, kind, market_id, state, payload, txid, attempts, created_at, updated_at) VALUES ('activate:m1', 'activate', 'm1', 'submitting', ?, ?, 9, 't', 't')",
+            JSON.stringify({ inputs: ["aa:0"] }), "bb".repeat(32));
+        await (h.keeper as unknown as { execute(wf: unknown): Promise<void> }).execute(h.wf.get("activate:m1"));
+        expect(h.wf.get("activate:m1")).toMatchObject({ state: "submitting", txid: "bb".repeat(32), payload: { inputs: ["aa:0"] } });
+    });
+});

@@ -147,7 +147,18 @@ async function main(): Promise<void> {
         ...(cfg.MANIFOLD_ENABLED ? [createManifoldProvider({ apiUrl: cfg.MANIFOLD_API_URL })] : []),
     ];
     const polymarket = providers.find((p) => p.name === "polymarket");
-    const sourceDeps = providers.length > 0 ? { ...deps, wf, providers, timeoutDays: cfg.IMPORT_TIMEOUT_DAYS, log } : undefined;
+    // How many configured attestors serve each source profile, refreshed at most once a minute.
+    let served: { at: number; counts: Map<string, number> } | undefined;
+    const attestorProfiles = async () => {
+        if (served && Date.now() - served.at < 60_000) return served.counts;
+        const counts = new Map<string, number>();
+        const infos = await Promise.all(cfg.ORACLE_URLS.map((u) => fetch(`${u}/info`, { signal: AbortSignal.timeout(5000) })
+            .then((r) => (r.ok ? r.json() : null), () => null) as Promise<{ profile?: string; profiles?: string[] } | null>));
+        for (const info of infos) for (const p of new Set(info?.profiles ?? (info?.profile ? [info.profile] : []))) counts.set(p, (counts.get(p) ?? 0) + 1);
+        served = { at: Date.now(), counts };
+        return counts;
+    };
+    const sourceDeps = providers.length > 0 ? { ...deps, wf, providers, timeoutDays: cfg.IMPORT_TIMEOUT_DAYS, log, attestorProfiles } : undefined;
     const importNow = sourceDeps && (async () => {
         if (!lease.held) throw new Error("not the writer");
         return importOnce(sourceDeps);

@@ -67,6 +67,7 @@ describe("single-container attestor", () => {
         const { schnorr } = await import("@noble/curves/secp256k1.js");
         const secret = "11".repeat(32);
         expect(() => loadConfig({ APM_NETWORK: "mutinynet", ORACLE_SECRET_KEY: secret })).toThrow(/POLYGON_RPC_URLS/);
+        expect(loadConfig({ APM_NETWORK: "mutinynet", ORACLE_SECRET_KEY: secret, KALSHI_ENABLED: "1" }).KALSHI_ENABLED).toBe(true);
         const cfg = loadConfig({ APM_NETWORK: "mutinynet", ORACLE_SECRET_KEY: secret, POLYGON_RPC_URLS: "https://a,https://b" });
         expect(cfg.ORACLE_URLS).toEqual(["http://127.0.0.1:37410"]);
         expect(cfg.ORACLE_PUBKEYS).toEqual([Buffer.from(schnorr.getPublicKey(Buffer.from(secret, "hex"))).toString("hex")]);
