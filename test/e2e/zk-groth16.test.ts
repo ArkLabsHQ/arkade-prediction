@@ -8,26 +8,39 @@ import { loadProgram, type ContractArtifact } from "../../src/core/programs.js";
 import { connectArkade, expectCovenantRejection, faucet, indexerProvider, newWallet, waitFor } from "./env.js";
 import { coinAt, network, scriptOf, walletSend } from "./market.js";
 
-// Fixtures from succinctlabs/sp1-contracts (MIT): the v6.0.0 Groth16 verifying key and its test proof.
+// Fixtures from succinctlabs/sp1-contracts (MIT): the v6.0.0 Groth16 verifying key and its test proof; the v6.1.0
+// verifying key ships with SP1's circuit artifacts.
 const fixture = (name: string) => readFileSync(new URL(`../fixtures/zk/${name}`, import.meta.url), "utf8");
-const sol = fixture("Groth16Verifier.v6.0.0.sol");
-const K = (name: string) => BigInt(new RegExp(`uint256 constant ${name} = (\\d+);`).exec(sol)![1]!);
+const vk = (sol: string) => (name: string) => BigInt(new RegExp(`uint256 constant ${name} = (\\d+);`).exec(sol)![1]!);
 const t = fixture("SP1VerifierGroth16V6.t.sol");
-const proofBytes = hex.decode(/PROOF_BYTES =\s*hex"([0-9a-f]+)"/.exec(t)![1]!);
-const publicValues = hex.decode(/PUBLIC_VALUES =\s*hex"([0-9a-f]+)"/.exec(t)![1]!);
-const programVKey = BigInt(/PROGRAM_VKEY =\s*bytes32\((0x[0-9a-f]+)\)/.exec(t)![1]!);
+const succinct = {
+    proof: /PROOF_BYTES =\s*hex"([0-9a-f]+)"/.exec(t)![1]!,
+    publicValues: /PUBLIC_VALUES =\s*hex"([0-9a-f]+)"/.exec(t)![1]!,
+    vkey: /PROGRAM_VKEY =\s*bytes32\((0x[0-9a-f]+)\)/.exec(t)![1]!,
+    K: vk(fixture("Groth16Verifier.v6.0.0.sol")),
+};
+// Our zk/ctf-payout proof of the Buccaneers vs. Cowboys CTF payout, on circuit v6.1.0.
+const ours = { ...(JSON.parse(fixture("ctf-payout-groth16.json")) as Omit<typeof succinct, "K">), K: vk(fixture("Groth16Verifier.v6.1.0.sol")) };
 
-const words = Array.from({ length: (proofBytes.length - 4) / 32 }, (_, i) => BigInt(`0x${hex.encode(proofBytes.slice(4 + i * 32, 36 + i * 32))}`));
-const [exitCode, vkRoot, nonce, ...p] = words as [bigint, bigint, bigint, ...bigint[]];
 const point = (P: { toAffine(): { x: bigint; y: bigint } }, name: string) => ({ [`${name}.x`]: P.toAffine().x, [`${name}.y`]: P.toAffine().y });
 const g2 = (name: string, x1: bigint, x0: bigint, y1: bigint, y0: bigint) => ({ [`${name}.xC1`]: x1, [`${name}.xC0`]: x0, [`${name}.yC1`]: y1, [`${name}.yC0`]: y0 });
-const pub = (i: number) => bn254.G1.Point.fromAffine({ x: K(`PUB_${i}_X`), y: K(`PUB_${i}_Y`) });
-const base = bn254.G1.Point.fromAffine({ x: K("CONSTANT_X"), y: K("CONSTANT_Y") })
-    .add(pub(0).multiplyUnsafe(programVKey)).add(pub(3).multiplyUnsafe(vkRoot));
+const bytes = (h: string) => hex.decode(h.replace(/^0x/, ""));
 
 describe("SP1 Groth16 proof verified in an Arkade covenant", () => {
-    it("spends on Succinct's v6.0.0 fixture proof and refuses other public values and a tampered proof", { timeout: 600_000 }, async () => {
+    it.each([
+        ["Succinct's v6.0.0 fixture proof", succinct],
+        ["our CTF payout proof", ours],
+    ])("spends on %s and refuses other public values and a tampered proof", { timeout: 600_000 }, async (label, f) => {
+        const K = f.K;
+        const pub = (i: number) => bn254.G1.Point.fromAffine({ x: K(`PUB_${i}_X`), y: K(`PUB_${i}_Y`) });
+        const proofBytes = bytes(f.proof);
+        const publicValues = bytes(f.publicValues);
+        const words = Array.from({ length: (proofBytes.length - 4) / 32 }, (_, i) => BigInt(`0x${hex.encode(proofBytes.slice(4 + i * 32, 36 + i * 32))}`));
+        const [exitCode, vkRoot, nonce, ...p] = words as [bigint, bigint, bigint, ...bigint[]];
         expect(exitCode).toBe(0n);
+        const base = bn254.G1.Point.fromAffine({ x: K("CONSTANT_X"), y: K("CONSTANT_Y") })
+            .add(pub(0).multiplyUnsafe(BigInt(f.vkey))).add(pub(3).multiplyUnsafe(vkRoot));
+
         const ark = await connectArkade();
         const ctx: Ctx = { ark, net: network(ark), indexer: indexerProvider };
         const contract = ark.contract(loadProgram(JSON.parse(fixture("sp1_groth16.json")) as ContractArtifact), {
@@ -62,7 +75,7 @@ describe("SP1 Groth16 proof verified in an Arkade covenant", () => {
         const doubled = bn254.G1.Point.fromAffine(C).double().toAffine();
         await expectCovenantRejection(spend(witness(publicValues, doubled)), "a tampered proof");
         const { txid } = await spend(witness(publicValues, C));
-        console.log(`SP1 v6.0.0 Groth16 proof verified in-covenant: ${txid}`);
+        console.log(`${label} verified in-covenant: ${txid}`);
         expect(txid).toMatch(/^[0-9a-f]{64}$/);
     });
 });

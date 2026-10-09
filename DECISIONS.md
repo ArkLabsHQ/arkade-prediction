@@ -172,9 +172,10 @@ Each entry: decision, reason, rejected alternatives. Newest last.
     `nonce*PUB_4` (a zero nonce works: the emulator handles the point at infinity) to a precomputed
     `CONSTANT + vkey*PUB_0 + vkRoot*PUB_3`, and checks the four-pair bn254 pairing. The pinned SDK cannot read
     ECPoint/G2Point artifact types, so `loadProgram` flattens them to the per-field int slots the compiler emits.
-    The open part of native Polymarket
-    settlement is the prover: an SP1 program proving a CTF `payoutNumerators` slot through an Ethereum light client
-    (SP1-Helios), Polygon's checkpoint on Ethereum and a storage proof.
+    Our own `zk/ctf-payout` proof of the Buccaneers vs. Cowboys payout (`[1, 0]`, circuit v6.1.0, whose
+    verifying key differs from v6.0.0's) spends the same covenant. What is still open for native Polymarket
+    settlement is anchoring the proven block hash (Ethereum light client such as SP1-Helios, then Polygon's
+    checkpoint on Ethereum) and a vault binding the proof's conditionId and payout to a market.
 42. **Up/Down mirrors settled on Polymarket's own result.** Polymarket writes each crypto Up/Down result into the
     CTF on Polygon about a minute after the window (resolver `0x58e1…efde`, found from the condition's
     `ConditionPreparation` event), so with `UPDOWN_SETTLEMENT=polymarket` upcoming Up/Down markets, named by slug,

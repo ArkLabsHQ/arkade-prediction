@@ -1,12 +1,13 @@
 //! Host: turns `eth_getBlockByNumber` + `eth_getProof` JSON into the guest input, checks it natively, then executes
-//! the guest (no proof): `cargo run --release -- --input proof.json --condition 0x...`.
+//! the guest (no proof): `cargo run --release -- --input proof.json --condition 0x...`; `--prove` also writes a
+//! Groth16 proof to fixtures/proof-groth16.json.
 use alloy_primitives::{keccak256, B256, U256};
 use alloy_rpc_types_eth::{Block, EIP1186AccountProofResponse};
 use alloy_sol_types::SolType;
 use alloy_trie::TrieAccount;
 use clap::Parser;
 use ctf_payout_lib::{verify, PayoutInput, PayoutPublicValues};
-use sp1_sdk::{blocking::{Prover, ProverClient}, include_elf, Elf, SP1Stdin};
+use sp1_sdk::{blocking::{ProveRequest, Prover, ProverClient}, include_elf, Elf, HashableKey, ProvingKey, SP1Stdin};
 
 const ELF: Elf = include_elf!("ctf-payout-program");
 
@@ -16,6 +17,8 @@ struct Args {
     input: String,
     #[arg(long)]
     condition: B256,
+    #[arg(long)]
+    prove: bool,
 }
 
 #[derive(serde::Deserialize)]
@@ -48,8 +51,22 @@ fn main() {
 
     let mut stdin = SP1Stdin::new();
     stdin.write(&input);
-    let (output, report) = ProverClient::from_env().execute(ELF, stdin).run().expect("guest execution");
+    let client = ProverClient::from_env();
+    let (output, report) = client.execute(ELF, stdin.clone()).run().expect("guest execution");
     let committed = PayoutPublicValues::abi_decode(output.as_slice()).expect("public values");
     assert_eq!(committed.blockHash, native.blockHash);
     println!("guest committed {} bytes, block {} numerators [{}, {}]; {} cycles", output.as_slice().len(), committed.blockHash, committed.numerator0, committed.numerator1, report.total_instruction_count());
+
+    if args.prove {
+        let pk = client.setup(ELF).expect("setup");
+        let proof = client.prove(&pk, stdin).groth16().run().expect("groth16 proof");
+        let fixture = serde_json::json!({
+            "vkey": pk.verifying_key().bytes32(),
+            "publicValues": format!("0x{}", alloy_primitives::hex::encode(proof.public_values.as_slice())),
+            "proof": format!("0x{}", alloy_primitives::hex::encode(proof.bytes())),
+        });
+        let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../fixtures/proof-groth16.json");
+        std::fs::write(&path, serde_json::to_string_pretty(&fixture).unwrap()).expect("write proof");
+        println!("groth16 proof written to {}", path.display());
+    }
 }
