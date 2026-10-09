@@ -135,3 +135,6 @@ Each entry: decision, reason, rejected alternatives. Newest last.
     takers drain it. Resolution still follows the game, from the finalized CTF payout.
     The LP follows the refreshed source odds: an ask that drifts by 3% of the unit or more is cancelled on-contract
     and what is left of it re-posted at the new price (`lp-reprice`, two transactions per ask).
+    Import skips markets whose `gameStartTime` has passed (`started`) or whose reference price is at least 0.98
+    (`decided`): a halted import holds an `IMPORT_MAX_ACTIVE` slot until its close, which for sports can be a week
+    after the game (Polymarket 5175509 was activated after it had already settled).

@@ -8,7 +8,7 @@ const market = (versionHash: string, price: string): SourceMarket => ({
     provider: "polymarket", sourceId: "42", slug: "s", url: "", question: "q", description: "", resolutionSource: "", outcomes: ["Yes", "No"],
     endDate: null, tags: [], active: true, closed: false, archived: false, sourceStatus: null,
     protocol: { version: "v1", chainId: 137, negRisk: false, resolver: null, conditionId: "c", questionId: "q", settlementContract: "x" },
-    referencePrices: [{ outcome: "Yes", price }, { outcome: "No", price: "0.5" }], image: null, event: { title: "E", slug: "e" },
+    referencePrices: [{ outcome: "Yes", price }, { outcome: "No", price: "0.5" }], image: null, event: { title: "E", slug: "e" }, gameStartTime: null,
     versionHash, fetchedAt: `t-${price}`,
 });
 

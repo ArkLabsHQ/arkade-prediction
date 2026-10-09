@@ -161,7 +161,9 @@ function normalize(raw: unknown, fetchedAt: string): SourceMarket {
         prices && outcomes.length > 0 && prices.length === outcomes.length && prices.every((p) => PRICE.test(p))
             ? outcomes.map((outcome, i) => ({ outcome, price: prices[i] ?? "" }))
             : null;
-    return { ...core, referencePrices, image: imageOf(raw.image), event: eventOf(raw.events), versionHash: sha256Hex(canonicalJson(core)), fetchedAt };
+    // Gamma writes kickoff as "2026-10-09 00:15:00+00"; made strict ISO before parsing.
+    const kickoff = typeof raw.gameStartTime === "string" ? isoDate(raw.gameStartTime.replace(" ", "T").replace(/([+-]\d\d)$/, "$1:00")) : null;
+    return { ...core, referencePrices, image: imageOf(raw.image), event: eventOf(raw.events), gameStartTime: kickoff, versionHash: sha256Hex(canonicalJson(core)), fetchedAt };
 }
 
 function identityProblem(m: SourceMarket, allow: ReadonlySet<string>): Problem | null {
@@ -313,6 +315,9 @@ export function createPolymarketProvider(opts: PolymarketProviderOptions): Marke
             if (!(end >= t + policy.minHorizonSeconds * 1000 && end <= t + policy.maxHorizonSeconds * 1000)) {
                 return no("horizon", `endDate ${market.endDate ?? "missing"} outside [now+${policy.minHorizonSeconds}s, now+${policy.maxHorizonSeconds}s]`);
             }
+            // Imported markets hold an active slot until close: skip ones already underway or effectively decided.
+            if (market.gameStartTime && Date.parse(market.gameStartTime) <= t) return no("started", `game started ${market.gameStartTime}`);
+            if (market.referencePrices?.some((p) => Number(p.price) >= 0.98)) return no("decided", "a reference price is at or above 0.98");
             const wanted = policy.tags.map((tag) => tag.toLowerCase());
             if (wanted.length > 0 && !market.tags.some((tag) => wanted.includes(tag))) return no("tag-filter", "no allowed tag");
             return { eligible: true, profile: PROFILE };

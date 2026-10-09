@@ -217,6 +217,11 @@ describe("polymarket eligibility", () => {
         expect(code(open, {}, setup({ allowlist: [ALLOWLIST[0]!] }).p)).toBe("unknown-resolver");
         expect(code(await p.fetchMarketDefinition("2758339"))).toBe("closed");
         expect(code(open, { profiles: [] })).toBe("profile-disabled");
+        expect(code({ ...open, gameStartTime: new Date(NOW.getTime() - 60_000).toISOString() })).toBe("started");
+        expect(code({ ...open, gameStartTime: new Date(NOW.getTime() + 3_600_000).toISOString() })).toBe("eligible");
+        expect(code({ ...open, referencePrices: [{ outcome: "a", price: "0.985" }, { outcome: "b", price: "0.015" }] })).toBe("decided");
+        const kicked = setup({ keyset: { markets: [{ ...gamma.keyset.response.markets[0], gameStartTime: "2026-10-09 00:15:00+00" }] } }).p;
+        expect((await kicked.discoverMarkets(null, 5)).markets[0]!.gameStartTime).toBe("2026-10-09T00:15:00.000Z");
         expect(code(tweak({ version: "v2" }))).toBe("unsupported-version");
         expect(code(tweak({}, { outcomes: ["Yes", "No", "Maybe"] }))).toBe("not-binary");
         expect(code(tweak({}, { outcomes: ["Yes", "Yes"] }))).toBe("not-binary");
