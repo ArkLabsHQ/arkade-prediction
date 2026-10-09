@@ -24,15 +24,15 @@ interface Live {
 
 export function TradePanels({ m, offers, onChanged }: { m: MarketJson; offers?: OfferJson[]; onChanged(): void }) {
     const { chain, session } = useApp();
-    if (!m.terms) return <Panel title="Trade"><p className="state">No funded vault yet, so this market cannot be traded.</p></Panel>;
-    if (!chain || !session) return <Panel title="Trade"><LockedNotice what="trade" /></Panel>;
+    if (!m.terms) return <Panel title="Place a bet"><p className="state">Betting isn't open on this market yet: its bitcoin hasn't been locked in.</p></Panel>;
+    if (!chain || !session) return <Panel title="Place a bet"><LockedNotice what="place a bet" /></Panel>;
     const open = m.vault.phase === "open" && m.status !== "failed";
     const trading = open && m.status !== "halted";
     const live: Live = { m, chain, session, onChanged };
     return (
         <>
             {trading && <Ticket {...live} offers={offers} />}
-            {open && !trading && <Panel title="Trade"><p className="state">Trading is halted until the close. You can still cancel orders and merge complete sets.</p></Panel>}
+            {open && !trading && <Panel title="Place a bet"><p className="state">Betting is paused until the market closes. You can still cancel your orders, or merge pairs under Advanced.</p></Panel>}
             <Position {...live} />
             {open && <Sets {...live} halted={!trading} />}
             {trading && <OrderForm {...live} />}
@@ -84,77 +84,81 @@ function Ticket({ m, chain, session, onChanged, offers }: Live & { offers?: Offe
         ? Array.from({ length: 400 }, (_, i) => qty + BigInt(i + 1)).find((q) => planFill(book, side, q, nowUnix, session.script).qty === q) ?? null
         : null;
 
+    const minimum = side === "buy" ? "Minimum bet" : "Minimum cash-out";
     let blocker: string | null = null;
-    if (!offers) blocker = "Loading the order book";
+    if (!offers) blocker = "Loading prices";
     else if (!qty) blocker = "Enter a whole number of shares";
-    else if (resting.length === 0) blocker = `No ${side === "buy" ? "sellers" : "buyers"} right now. The house stops quoting once an event starts; post a limit order instead.`;
-    else if (!plan || plan.legs.length === 0) blocker = minShares ? `Minimum bet is ${sats(MIN_BET_SATS)}: ${n(minShares)} shares at this price` : "No offer fills this size";
-    else if (plan.qty < qty) blocker = `Only ${n(plan.qty)} of ${n(qty)} shares can be filled from this book (${n(plan.depth)} resting, some only in larger minimum fills)`;
-    else if (plan.notional < MIN_BET_SATS) blocker = `A bet must be worth at least ${sats(MIN_BET_SATS)}; this one is ${sats(plan.notional)}`;
-    else if (bound === null) blocker = `Enter a valid ${side === "buy" ? "max spend" : "min receive"}`;
-    else if (side === "buy" ? plan.notional > bound : plan.notional < bound) blocker = side === "buy" ? "The fill costs more than your max spend" : "The fill pays less than your min receive";
+    else if (resting.length === 0) blocker = `No one is ${side === "buy" ? "offering" : "buying"} ${label} right now. The house stops quoting once an event starts; set your own price below instead.`;
+    else if (!plan || plan.legs.length === 0) blocker = minShares ? `${minimum} is ${sats(MIN_BET_SATS)}: ${n(minShares)} shares at this price` : "No one is matching this many shares right now";
+    else if (plan.qty < qty) blocker = `Only ${n(plan.qty)} of ${n(qty)} shares are available right now (${n(plan.depth)} on offer, some only in bigger chunks)`;
+    else if (plan.notional < MIN_BET_SATS) blocker = `${minimum} is ${sats(MIN_BET_SATS)}; this one is ${sats(plan.notional)}`;
+    else if (bound === null) blocker = `Enter a valid ${side === "buy" ? "max spend" : "lowest payout"}`;
+    else if (side === "buy" ? plan.notional > bound : plan.notional < bound) blocker = side === "buy" ? "This bet costs more than your max spend" : "This cash-out pays less than your lowest payout";
     else if (side === "buy" && holdings && holdings.plainSats < plan.notional + carriers) {
-        blocker = `Needs ${sats(plan.notional + carriers)} in spendable coins (the fill plus ${carriers === CARRIER_SATS ? "a" : "two"} ${CARRIER_SATS}-sat carrier${carriers === CARRIER_SATS ? "" : "s"}); you have ${sats(holdings.plainSats)}`;
-    } else if (side === "sell" && held < qty) blocker = `You hold ${n(held)} ${label}`;
+        blocker = `You need ${sats(plan.notional + carriers)}: your bet plus ${carriers === CARRIER_SATS ? "" : "2 × "}${CARRIER_SATS} sats held with your shares (the minimum any coin needs). You have ${sats(holdings.plainSats)}`;
+    } else if (side === "sell" && held < qty) blocker = `You only have ${n(held)} ${label} shares`;
 
     const submit = () => act.run(async (step) => {
         step(VERIFYING);
         const terms = await verifiedTerms(chain, config, m);
         let receiveScript: Uint8Array | undefined;
         if (boxed) {
-            step("Registering your auto-claim box with the keeper");
+            step("Setting up automatic payout");
             receiveScript = await ensureBox(chain, session, m, terms);
         }
-        step("Signing and submitting the fill");
+        step(side === "buy" ? "Placing your bet" : "Cashing out");
         const r = await logged(chain, session,
-            { kind: side, label: `${side === "buy" ? "Buy" : "Sell"} ${qty} ${label}${boxed ? " (auto-claim)" : ""}`, marketId: m.id, outcome, qty: String(qty) },
+            { kind: side, label: `${side === "buy" ? "Bet on" : "Cash out"} ${qty} ${label}${boxed ? " (paid automatically)" : ""}`, marketId: m.id, outcome, qty: String(qty) },
             (ctx) => fillWithRetry(ctx, session.party, book, { side, qty: qty!, bound: bound!, takerScript: session.script, receiveScript, assetId: terms.assets[outcome] }),
             (r) => ({ sats: r.notional.toString(), qty: r.qty.toString() }));
-        step("Refreshing the book");
+        step("Updating prices");
         await refreshOffers(r.touched);
         onChanged();
         void refreshHoldings();
         setBoundText(null);
         return (
             <>
-                {side === "buy" ? "Bought" : "Sold"} {n(r.qty)} {label} for {sats(r.notional)}{boxed ? " into your auto-claim box" : ""}
-                {r.retried ? ", after re-reading an offer that changed" : ""}. <Txid txid={r.txid} />
+                {side === "buy" ? "Bet placed:" : "Cashed out"} {n(r.qty)} {label} shares for {sats(r.notional)}{boxed ? ", paid out automatically when the market resolves" : ""}
+                {r.retried ? " (a price changed while you were betting, so we re-checked it)" : ""}. <Txid txid={r.txid} />
             </>
         );
     });
 
     const resetBound = () => setBoundText(null);
     return (
-        <Panel title="Trade" className="ticket">
-            <Seg name="Side" value={side} options={[["buy", "Buy"], ["sell", "Sell"]] as const} onChange={(v) => { setSide(v); resetBound(); }} />
+        <Panel title="Place a bet" className="ticket">
+            <Seg name="Side" value={side} options={[["buy", "Bet"], ["sell", "Cash out"]] as const} onChange={(v) => { setSide(v); resetBound(); }} />
             <Seg name="Outcome" value={outcome} options={outcomeOptions(m)} onChange={(v) => { setOutcome(v); resetBound(); }} />
             <label className="field">
                 <span>Shares</span>
                 <input inputMode="numeric" autoComplete="off" value={qtyText} onChange={(e) => { setQtyText(e.target.value); resetBound(); }} />
+                <small className="muted">Each share pays {sats(unit)} if you're right, 0 if not. Price = the crowd's odds.</small>
             </label>
             {plan && plan.legs.length > 0 && <Preview plan={plan} side={side} unit={unit} label={label} />}
             <label className="field">
-                <span>{side === "buy" ? "Max spend (sats)" : "Min receive (sats)"}</span>
+                <span>{side === "buy" ? "Max spend (sats)" : "Lowest payout you'll take (sats)"}</span>
                 <input inputMode="numeric" autoComplete="off" value={boundText ?? plan?.notional.toString() ?? ""} onChange={(e) => setBoundText(e.target.value)} />
                 <small className="muted">
                     {boundText === null
-                        ? side === "buy" ? "Exactly the cost shown. Raise it to tolerate book changes." : "Exactly the proceeds shown. Lower it to tolerate book changes."
-                        : <button type="button" className="linklike" onClick={resetBound}>Reset to the fill shown</button>}
+                        ? side === "buy" ? "Set to the cost shown. Raise it a little in case prices move." : "Set to the payout shown. Lower it a little in case prices move."
+                        : <button type="button" className="linklike" onClick={resetBound}>Reset to the price shown</button>}
                 </small>
             </label>
             {side === "buy" && (
                 <label className="check">
                     <input type="checkbox" checked={autoClaim} onChange={(e) => setAutoClaim(e.target.checked)} />
                     <span>
-                        Auto-claim (keeper pays you after resolution)
-                        <small className="muted block">Shares go to a box for this market, not your wallet. After resolution the server's keeper redeems the box and pays this wallet, even while your browser is closed. Needs one more {CARRIER_SATS}-sat carrier; withdraw from Portfolio to sell early.</small>
+                        Get paid automatically
+                        <small className="muted block">Your shares go into a box that can only ever pay this wallet; we trigger the payout when the market resolves, even if you never come back. The box holds {CARRIER_SATS} sats (the minimum any coin needs), returned with your winnings. To cash out early, withdraw from Your bets first.</small>
                     </span>
                 </label>
             )}
-            {Date.parse(m.closeAt) <= Date.now() && <p className="notice warn">This market has closed. The outcome may already be known, and resting orders can still be filled.</p>}
+            {Date.parse(m.closeAt) <= Date.now() && <p className="notice warn">This market has closed. The result may already be known, and open orders can still be matched.</p>}
             {blocker && <p className="hint">{blocker}{minShares && !(plan?.legs.length) ? <> <button type="button" className="btn small" onClick={() => setQtyText(minShares.toString())}>Use {n(minShares)}</button></> : null}</p>}
             <button type="button" className={`btn wide ${side}`} disabled={!!blocker || act.busy} onClick={() => void submit()}>
-                {plan && qty && !blocker ? `${side === "buy" ? "Buy" : "Sell"} ${n(qty)} ${label} for ${sats(plan.notional)}` : side === "buy" ? "Buy" : "Sell"}
+                {plan && qty && !blocker
+                    ? side === "buy" ? `Bet on ${label}: ${n(qty)} shares for ${sats(plan.notional)}` : `Cash out ${n(qty)} ${label} shares for ${sats(plan.notional)}`
+                    : side === "buy" ? `Bet on ${label}` : "Cash out"}
             </button>
             <ActionStatus s={act} />
         </Panel>
@@ -178,11 +182,11 @@ function Preview({ plan, side, unit, label }: { plan: Plan; side: Side; unit: bi
                 </tbody>
             </table>
             <dl className="kv tight">
-                <dt>{side === "buy" ? "You pay" : "You receive"}</dt><dd className="strong">{sats(plan.notional)}</dd>
-                <dt>Average</dt><dd>{`${avg10 / 10n}.${avg10 % 10n}`} sats per share ({pct(plan.notional / plan.qty, unit)})</dd>
+                <dt>{side === "buy" ? "You pay" : "You get"}</dt><dd className="strong">{sats(plan.notional)}</dd>
+                <dt>Average price</dt><dd>{`${avg10 / 10n}.${avg10 % 10n}`} sats per share ({pct(plan.notional / plan.qty, unit)} chance)</dd>
                 {side === "buy"
-                    ? <><dt>If {label} wins</dt><dd>{sats(plan.qty * unit)} paid out</dd></>
-                    : <><dt>You deliver</dt><dd>{n(plan.qty)} {label}</dd></>}
+                    ? <><dt>If {label} wins</dt><dd>you collect {sats(plan.qty * unit)}</dd></>
+                    : <><dt>You give up</dt><dd>{n(plan.qty)} {label} shares</dd></>}
             </dl>
         </div>
     );
@@ -200,10 +204,10 @@ function Position({ m, chain, session, onChanged }: Live) {
     const boxNo = boxShares(boxes.data ?? [], t.assets.no);
     const boxLine = boxYes + boxNo > 0n && (
         <p className="small">
-            In your auto-claim box: {n(boxYes)} {m.outcomes[0]}, {n(boxNo)} {m.outcomes[1]}. The keeper redeems it after resolution and pays this wallet.
+            Paid automatically: {n(boxYes)} {m.outcomes[0]} and {n(boxNo)} {m.outcomes[1]} shares. When the market resolves, any winnings go straight to this wallet.
         </p>
     );
-    if (!holdings) return <Panel title="Your position">{holdingsError ? <p className="error">{holdingsError}</p> : <Loading what="balances" />}{boxLine}</Panel>;
+    if (!holdings) return <Panel title="Your bets">{holdingsError ? <p className="error">{holdingsError}</p> : <Loading what="balances" />}{boxLine}</Panel>;
     const yes = holdings.assets.get(t.assets.yes) ?? 0n;
     const no = holdings.assets.get(t.assets.no) ?? 0n;
     const outcome = m.vault.phase === "resolved" ? m.vault.outcome : null;
@@ -211,20 +215,20 @@ function Position({ m, chain, session, onChanged }: Live) {
     const redeem = (o: BinaryOutcome) => act.run(async (step) => {
         step(VERIFYING);
         const terms = await verifiedTerms(chain, config, m);
-        step("Burning shares against the resolved vault");
-        const r = await logged(chain, session, { kind: "redeem", label: `Redeem: ${m.question.slice(0, 60)}`, marketId: m.id, outcome: o },
+        step("Collecting your winnings");
+        const r = await logged(chain, session, { kind: "redeem", label: `Collect winnings: ${m.question.slice(0, 60)}`, marketId: m.id, outcome: o },
             (ctx) => redeemAll(ctx, session.party, terms, o),
             (r) => ({ sats: r.payout.toString(), qty: String(r.yesBurn + r.noBurn) }));
         void refreshHoldings();
         onChanged();
-        return <>Redeemed {n(r.yesBurn)} {m.outcomes[0]} and {n(r.noBurn)} {m.outcomes[1]} for {sats(r.payout)}. <Txid txid={r.txid} /></>;
+        return <>Collected {sats(r.payout)} for {n(r.yesBurn)} {m.outcomes[0]} and {n(r.noBurn)} {m.outcomes[1]} shares. <Txid txid={r.txid} /></>;
     });
     return (
-        <Panel title="Your position">
+        <Panel title="Your bets">
             {boxLine}
-            {yes === 0n && no === 0n ? <p className="state">Your wallet holds no shares of this market.</p> : (
+            {yes === 0n && no === 0n ? <p className="state">You have no bets in your wallet on this market.</p> : (
                 <table className="data compact">
-                    <thead><tr><th scope="col">Outcome</th><th scope="col" className="num">Shares</th><th scope="col" className="num">Best bid</th><th scope="col" className="num">Mark (sats)</th></tr></thead>
+                    <thead><tr><th scope="col">Outcome</th><th scope="col" className="num">Shares</th><th scope="col" className="num">Cash-out price</th><th scope="col" className="num">Cash-out value (sats)</th></tr></thead>
                     <tbody>
                         {([["yes", yes], ["no", no]] as const).map(([o, qty], i) => {
                             const bid = m.book[o].bid;
@@ -233,7 +237,7 @@ function Position({ m, chain, session, onChanged }: Live) {
                                     <td>{m.outcomes[i]}</td>
                                     <td className="num">{n(qty)}</td>
                                     <td className="num">{bid ? n(bid) : "—"}</td>
-                                    <td className="num">{bid ? n(qty * BigInt(bid)) : "no bid"}</td>
+                                    <td className="num">{bid ? n(qty * BigInt(bid)) : "no buyers"}</td>
                                 </tr>
                             );
                         })}
@@ -242,9 +246,9 @@ function Position({ m, chain, session, onChanged }: Live) {
             )}
             {outcome && (yes > 0n || no > 0n) && (
                 <>
-                    <p>Resolved {outcomeName(m, outcome)}. Your shares redeem for <strong>{sats(payout)}</strong>.</p>
+                    <p>Result: {outcomeName(m, outcome)}. Your winnings: <strong>{sats(payout)}</strong>.</p>
                     <button type="button" className="btn primary wide" disabled={act.busy} onClick={() => void redeem(outcome)}>
-                        {payout > 0n ? `Redeem for ${sats(payout)}` : "Burn worthless shares (pays 0 sats)"}
+                        {payout > 0n ? `Collect ${sats(payout)} winnings` : "Clear losing shares (pays 0 sats)"}
                     </button>
                 </>
             )}
@@ -263,35 +267,38 @@ function Sets({ m, chain, session, onChanged, halted }: Live & { halted: boolean
     const yes = holdings?.assets.get(t.assets.yes) ?? 0n;
     const no = holdings?.assets.get(t.assets.no) ?? 0n;
     const room = m.vault.valueSats ? (BigInt(t.capSats) - BigInt(m.vault.valueSats)) / unit : null;
-    const mintBlock = halted ? "trading is halted until the close"
-        : !k ? "enter a whole number of sets"
-        : room !== null && k > room ? `the vault cap allows ${n(room)} more sets`
-        : holdings && holdings.plainSats < k * unit + CARRIER_SATS ? `needs ${sats(k * unit + CARRIER_SATS)} in spendable coins` : null;
-    const mergeBlock = !k ? "enter a whole number of sets" : yes < k || no < k ? `needs ${n(k)} of each outcome; you hold ${n(yes)} and ${n(no)}` : null;
+    const mintBlock = halted ? "betting is paused until the market closes"
+        : !k ? "enter a whole number of pairs"
+        : room !== null && k > room ? `this market has room for ${n(room)} more pairs`
+        : holdings && holdings.plainSats < k * unit + CARRIER_SATS ? `you need ${sats(k * unit + CARRIER_SATS)} in your balance` : null;
+    const mergeBlock = !k ? "enter a whole number of pairs" : yes < k || no < k ? `you need ${n(k)} of each; you have ${n(yes)} ${m.outcomes[0]} and ${n(no)} ${m.outcomes[1]}` : null;
     const run = (kind: "mint" | "merge") => act.run(async (step) => {
         step(VERIFYING);
         const terms = await verifiedTerms(chain, config, m);
-        step(kind === "mint" ? "Minting complete sets" : "Merging complete sets");
-        const r = await logged(chain, session, { kind, label: `${kind === "mint" ? "Mint" : "Merge"} ${k} sets`, marketId: m.id, qty: String(k), sats: String(k! * unit) },
+        step(kind === "mint" ? "Minting pairs" : "Merging pairs");
+        const r = await logged(chain, session, { kind, label: `${kind === "mint" ? "Mint" : "Merge"} ${k} pairs`, marketId: m.id, qty: String(k), sats: String(k! * unit) },
             (ctx) => (kind === "mint" ? mintSets : mergeSets)(ctx, session.party, terms, k!));
         void refreshHoldings();
         onChanged();
-        return <>{kind === "mint" ? "Minted" : "Merged"} {n(k!)} sets {kind === "mint" ? "for" : "into"} {sats(k! * unit)}. <Txid txid={r.txid} /></>;
+        return <>{kind === "mint" ? "Minted" : "Merged"} {n(k!)} pairs {kind === "mint" ? "for" : "into"} {sats(k! * unit)}. <Txid txid={r.txid} /></>;
     });
     return (
-        <Panel title="Complete sets">
-            <p className="muted small">One {m.outcomes[0]} plus one {m.outcomes[1]} always redeems for {sats(unit)}. Minting locks sats in the vault, merging releases them.</p>
-            <label className="field">
-                <span>Sets</span>
-                <input inputMode="numeric" autoComplete="off" value={text} onChange={(e) => setText(e.target.value)} />
-            </label>
-            <div className="row2">
-                <button type="button" className="btn" disabled={!!mintBlock || act.busy} onClick={() => void run("mint")}>Mint{k ? ` for ${sats(k * unit)}` : ""}</button>
-                <button type="button" className="btn" disabled={!!mergeBlock || act.busy} onClick={() => void run("merge")}>Merge{k ? ` for ${sats(k * unit)}` : ""}</button>
-            </div>
-            {mintBlock && <p className="hint">Mint: {mintBlock}.</p>}
-            {mergeBlock && <p className="hint">Merge: {mergeBlock}.</p>}
-            <ActionStatus s={act} />
+        <Panel title="Advanced">
+            <details>
+                <summary>Mint or merge {m.outcomes[0]} + {m.outcomes[1]} pairs</summary>
+                <p className="muted small">Mint: lock {sats(unit)} to get one {m.outcomes[0]} and one {m.outcomes[1]} share. Merge: hand one of each back for {sats(unit)}.</p>
+                <label className="field">
+                    <span>Pairs</span>
+                    <input inputMode="numeric" autoComplete="off" value={text} onChange={(e) => setText(e.target.value)} />
+                </label>
+                <div className="row2">
+                    <button type="button" className="btn" disabled={!!mintBlock || act.busy} onClick={() => void run("mint")}>Mint{k ? ` for ${sats(k * unit)}` : ""}</button>
+                    <button type="button" className="btn" disabled={!!mergeBlock || act.busy} onClick={() => void run("merge")}>Merge{k ? ` for ${sats(k * unit)}` : ""}</button>
+                </div>
+                {mintBlock && <p className="hint">Mint: {mintBlock}.</p>}
+                {mergeBlock && <p className="hint">Merge: {mergeBlock}.</p>}
+                <ActionStatus s={act} />
+            </details>
         </Panel>
     );
 }
@@ -329,34 +336,37 @@ function OrderForm({ m, chain, session, onChanged }: Live) {
     let blocker: string | null = null;
     if (!price || price >= unit) blocker = `Price must be 1 to ${n(unit - 1n)} sats per share`;
     else if (!size) blocker = "Enter a whole number of shares";
-    else if (!minFill || minFill > size) blocker = "Min fill must be between 1 and the order size";
-    else if (offerTooSmall({ priceSats: price, minFill }, size)) blocker = offerTooSmall({ priceSats: price, minFill }, size)!;
-    else if (expiry === "custom" && !(customUnix > Date.now() / 1000 + 60)) blocker = "Pick an expiry at least a minute ahead";
+    else if (!minFill || minFill > size) blocker = "Smallest partial fill must be between 1 and your number of shares";
+    else if (offerTooSmall({ priceSats: price, minFill }, size)) {
+        blocker = size * price < MIN_BET_SATS ? `Minimum order is ${sats(MIN_BET_SATS)}`
+            : `Smallest partial fill must be worth at least ${sats(MIN_BET_SATS)}: ${n(minFillFor(price))} shares at this price`;
+    } else if (expiry === "custom" && !(customUnix > Date.now() / 1000 + 60)) blocker = "Pick an expiry at least a minute ahead";
     else if (side === "buy" && holdings && holdings.plainSats < size * price + 2n * CARRIER_SATS) {
-        blocker = `Needs ${sats(size * price + 2n * CARRIER_SATS)} in spendable coins (budget, ${CARRIER_SATS}-sat reserve and change carrier)`;
-    } else if (side === "sell" && held < size) blocker = `You hold ${n(held)} ${label}`;
+        blocker = `You need ${sats(size * price + 2n * CARRIER_SATS)}: your order plus 2 × ${CARRIER_SATS} sats (the minimum any coin needs)`;
+    } else if (side === "sell" && held < size) blocker = `You only have ${n(held)} ${label} shares`;
     const crosses = !!price && (side === "buy" ? !!quote.ask && price >= BigInt(quote.ask) : !!quote.bid && price <= BigInt(quote.bid));
 
     const submit = () => act.run(async (step) => {
         step(VERIFYING);
         const terms = await verifiedTerms(chain, config, m);
-        step("Funding the order");
+        step("Placing your order");
         const r = await postOrder(chain, session, config, m, terms, { side, outcome, price: price!, size: size!, minFill: minFill!, expiresAt: expiryUnix(expiry, customUnix) });
         void refreshHoldings();
         onChanged();
-        if (r.registerError) throw new Error(`Order funded (tx ${short(r.txid)}) but the server has not registered it yet: ${r.registerError}. Retry it from Portfolio, Pending.`);
-        return <>Posted {side === "buy" ? "bid" : "ask"}: {n(size!)} {label} at {n(price!)} sats. <Txid txid={r.txid} /></>;
+        if (r.registerError) throw new Error(`Your order is funded (tx ${short(r.txid)}) but the server hasn't listed it yet: ${r.registerError}. Retry it from Portfolio, Pending.`);
+        return <>Order posted: {side === "buy" ? "bet on" : "cash out"} {n(size!)} {label} at {n(price!)} sats. <Txid txid={r.txid} /></>;
     });
 
     return (
-        <Panel title="Limit order">
-            <Seg name="Order side" value={side} options={[["buy", "Bid (buy)"], ["sell", "Ask (sell)"]] as const} onChange={(v) => setSide(v)} />
+        <Panel title="Set your own price">
+            <p className="muted small">Don't like the current price? Name yours. Your order waits until someone takes it, and you can cancel any time before then.</p>
+            <Seg name="Order side" value={side} options={[["buy", "Bet"], ["sell", "Cash out"]] as const} onChange={(v) => setSide(v)} />
             <Seg name="Order outcome" value={outcome} options={outcomeOptions(m)} onChange={(v) => setOutcome(v)} />
             <div className="row2">
                 <label className="field">
-                    <span>Price (sats)</span>
+                    <span>Price per share (sats)</span>
                     <input inputMode="numeric" autoComplete="off" value={priceText} onChange={(e) => setPrice(e.target.value)} placeholder={`1–${n(unit - 1n)}`} />
-                    <small className="muted">{price ? `${pct(price, unit)} implied` : " "}</small>
+                    <small className="muted">{price ? `${pct(price, unit)} chance` : " "}</small>
                 </label>
                 <label className="field">
                     <span>Shares</span>
@@ -365,11 +375,11 @@ function OrderForm({ m, chain, session, onChanged }: Live) {
             </div>
             <div className="row2">
                 <label className="field">
-                    <span>Min fill (shares)</span>
+                    <span>Smallest partial fill (shares)</span>
                     <input inputMode="numeric" autoComplete="off" value={minText} onChange={(e) => setMin(e.target.value)} placeholder={autoMin ? `${n(autoMin)} (${sats(MIN_BET_SATS)})` : ""} />
                 </label>
                 <label className="field">
-                    <span>Expiry</span>
+                    <span>Expires</span>
                     <select value={expiry} onChange={(e) => setExpiry(e.target.value)}>
                         {EXPIRY.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                     </select>
@@ -384,14 +394,14 @@ function OrderForm({ m, chain, session, onChanged }: Live) {
             {price && size ? (
                 <p className="muted small">
                     {side === "buy"
-                        ? `Locks ${sats(size * price + CARRIER_SATS)} now (budget plus a ${CARRIER_SATS}-sat reserve). Bought shares stay in the order until it completes or you cancel it.`
-                        : `Locks ${n(size)} ${label} and ${CARRIER_SATS} sats. Proceeds collect in the order; the last fill or a cancel pays them out to you.`}
+                        ? `Sets aside ${sats(size * price + CARRIER_SATS)} now (your order plus ${CARRIER_SATS} sats held with it). Shares you get wait in the order until it fills completely or you cancel it.`
+                        : `Sets aside ${n(size)} ${label} shares and ${CARRIER_SATS} sats. Your cash collects in the order and is paid out on the last fill or when you cancel.`}
                 </p>
             ) : null}
-            {crosses && <p className="notice warn">This price crosses the best {side === "buy" ? "ask" : "bid"}. Orders here never match automatically: use the trade ticket to take it instead.</p>}
+            {crosses && <p className="notice warn">You can already get this price right now. Orders here never match existing prices automatically: use Place a bet above instead.</p>}
             {blocker && <p className="hint">{blocker}</p>}
             <button type="button" className="btn primary wide" disabled={!!blocker || act.busy} onClick={() => void submit()}>
-                {price && size ? `Post ${side === "buy" ? "bid" : "ask"}: ${n(size)} ${label} at ${n(price)}` : "Post order"}
+                {price && size ? `Post order: ${side === "buy" ? "bet on" : "cash out"} ${n(size)} ${label} at ${n(price)} sats` : "Post order"}
             </button>
             <ActionStatus s={act} />
         </Panel>
@@ -402,14 +412,14 @@ function MyOrders({ m, onChanged, session, offers }: Live & { offers?: OfferJson
     if (!offers) return null;
     const mine = offers.filter((o) => o.terms.makerScript === session.script && o.status === "open");
     return (
-        <Panel title="Your open orders">
-            {m.status === "halted" && mine.length > 0 && <p className="notice warn">Other clients can still fill these orders while trading is halted here. Cancel any you no longer want.</p>}
+        <Panel title="Open orders">
+            {m.status === "halted" && mine.length > 0 && <p className="notice warn">Others can still take these orders while betting is paused here. Cancel any you no longer want.</p>}
             {mine.length === 0 ? <p className="state">No open orders in this market.</p> : (
                 <table className="data compact">
-                    <thead><tr><th scope="col">Order</th><th scope="col" className="num">Price</th><th scope="col" className="num">Left</th><th scope="col">Expires</th><th scope="col"><span className="sr-only">Action</span></th></tr></thead>
+                    <thead><tr><th scope="col">Order</th><th scope="col" className="num">Price</th><th scope="col" className="num">Shares left</th><th scope="col">Expires</th><th scope="col"><span className="sr-only">Action</span></th></tr></thead>
                     <tbody>
                         {mine.map((o) => {
-                            const label = `${o.terms.side === "buy" ? "Bid" : "Ask"} ${m.outcomes[o.outcome === "yes" ? 0 : 1]}`;
+                            const label = `${o.terms.side === "buy" ? "Bet on" : "Cash out"} ${m.outcomes[o.outcome === "yes" ? 0 : 1]}`;
                             return (
                                 <tr key={o.id}>
                                     <td>{label}</td>
@@ -487,7 +497,7 @@ function Resolve({ m, chain, session, onChanged }: Live) {
                 {(["yes", "no", "invalid"] as const).map((o) => (
                     <label key={o} className="radio">
                         <input type="radio" name="resolve-outcome" value={o} checked={outcome === o} onChange={() => setOutcome(o)} />
-                        {o === "invalid" ? "Invalid: every complete set splits 50/50" : `${outcomeName(m, o)} wins`}
+                        {o === "invalid" ? "Invalid: every share pays half" : `${outcomeName(m, o)} wins`}
                     </label>
                 ))}
             </fieldset>

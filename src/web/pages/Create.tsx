@@ -29,7 +29,7 @@ export function CreatePage() {
         <div className="stack narrow">
             <div className="page-head">
                 <h1>Create a market</h1>
-                <p className="muted">A custom two-outcome market collateralised in BTC on Arkade. You fund its vault and keep one complete set.</p>
+                <p className="muted">A custom two-outcome market collateralised in BTC on Arkade. You lock its bitcoin and keep one share of each outcome.</p>
             </div>
             {session && chain ? <Creator key={session.script} session={session} chain={chain} /> : <LockedNotice what="create a market" />}
         </div>
@@ -110,7 +110,7 @@ function Form({ session, onStart }: { session: Session; onStart(d: CreateDraft):
     if (!(closeUnix >= now + MIN_LEAD_SECONDS && closeUnix <= now + MAX_HORIZON_SECONDS)) problems.push("Close time: between 5 minutes and 30 days from now");
     if (!(timeoutUnix > closeUnix && timeoutUnix <= closeUnix + MAX_TIMEOUT_AFTER_CLOSE_SECONDS)) problems.push("Timeout: after the close time and at most 365 days after it");
     if (mode === "paste" && !isAttestorKey(oracleKey)) problems.push("Oracle: paste an x-only key (64 hex) or a 0x10/0x11 ECDSA key (68 hex: secp256k1 or P-256)");
-    if (holdings && holdings.plainSats < lock + CARRIER_SATS) problems.push(`Funds: needs ${sats(lock + CARRIER_SATS)} in spendable coins; you have ${sats(holdings.plainSats)}`);
+    if (holdings && holdings.plainSats < lock + CARRIER_SATS) problems.push(`Funds: you need ${sats(lock + CARRIER_SATS)} in your balance; you have ${sats(holdings.plainSats)}`);
 
     const start = () => onStart({
         marketId: hex.encode(crypto.getRandomValues(new Uint8Array(16))),
@@ -161,7 +161,7 @@ function Form({ session, onStart }: { session: Session; onStart(d: CreateDraft):
                         </small>
                     </label>
                 </div>
-                <p className="muted small">The oracle can resolve only after close. If nobody has resolved it by the timeout, anyone can settle the market as invalid: every complete set pays 50/50.</p>
+                <p className="muted small">The oracle can resolve only after close. If nobody has resolved it by the timeout, anyone can settle the market as invalid: every share pays half.</p>
             </Panel>
             <Panel title="Oracle">
                 <fieldset className="choices">
@@ -178,9 +178,9 @@ function Form({ session, onStart }: { session: Session; onStart(d: CreateDraft):
             </Panel>
             <Panel title="Cost">
                 <dl className="kv">
-                    <dt>Vault lock</dt><dd>{sats(lock)}: base {n(VAULT_BASE_SATS)} plus one complete set at {n(unit)}</dd>
+                    <dt>Vault lock</dt><dd>{sats(lock)}: base {n(VAULT_BASE_SATS)} plus one pair of shares at {n(unit)}</dd>
                     <dt>You receive</dt><dd>1 {a || "A"} + 1 {b || "B"}, together always worth {sats(unit)}</dd>
-                    <dt>Capacity</dt><dd>the vault holds at most {n(MAX_SETS)} complete sets, including yours</dd>
+                    <dt>Capacity</dt><dd>the vault holds at most {n(MAX_SETS)} pairs of shares, including yours</dd>
                     <dt>Transactions</dt><dd>two, signed here: asset issuance, then vault funding</dd>
                 </dl>
             </Panel>

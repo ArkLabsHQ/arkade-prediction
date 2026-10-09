@@ -167,7 +167,7 @@ export function Copy({ text, label = "Copy" }: { text: string; label?: string })
 }
 
 export function StatusBadge({ m }: { m: MarketJson }) {
-    const label = m.status === "resolved" && m.vault.outcome ? `resolved: ${outcomeName(m, m.vault.outcome)}` : m.status;
+    const label = m.status === "resolved" && m.vault.outcome ? `resolved: ${outcomeName(m, m.vault.outcome)}` : m.status === "halted" ? "paused" : m.status;
     return <span className={`badge s-${m.status}`}>{label}</span>;
 }
 

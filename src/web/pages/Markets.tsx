@@ -93,11 +93,11 @@ export function Markets() {
                 <div>
                     <div className="eyebrow">Bitcoin-settled prediction markets · {config.network}</div>
                     <h1>Call it. <em>Settle in sats.</em></h1>
-                    <p>Every share is backed by BTC locked in an Arkade covenant. A winning share pays {n(config.unitSats)} sats; the price is the crowd's odds.</p>
+                    <p>Pick a side and bet in sats. Each winning share pays {n(config.unitSats)} sats, backed by bitcoin locked up front. The price is the crowd's odds.</p>
                     <div className="stats">
                         <div className="stat"><b>{tradeable.length}</b><span>Live markets</span></div>
                         <div className="stat"><b>{n(sum((m) => m.stats.volumeSats))}</b><span>Volume (sats)</span></div>
-                        <div className="stat"><b>{n(sum((m) => m.stats.collateralSats))}</b><span>Collateral (sats)</span></div>
+                        <div className="stat"><b>{n(sum((m) => m.stats.collateralSats))}</b><span>Bitcoin locked (sats)</span></div>
                     </div>
                 </div>
                 <Logo className="art" color="var(--orange-hi)" />
@@ -192,7 +192,7 @@ function Card({ m, now, i }: { m: MarketJson; now: number; i: number }) {
             <PixBar p={chance?.p ?? null} />
             <div className="foot-line">
                 <span>{n(m.stats.volumeSats)} sats vol · {m.stats.trades} trades</span>
-                {chance?.from === "reference" && <span title={`${provider ?? "Source"} price, not executable here`}>{provider ?? "Source"} odds</span>}
+                {chance?.from === "reference" && <span title={`${provider ?? "Source"} odds, for reference only`}>{provider ?? "Source"} odds</span>}
             </div>
         </article>
     );
@@ -206,8 +206,8 @@ function Odd({ m, k, href }: { m: MarketJson; k: 0 | 1; href: string }) {
     const refs = m.source?.referencePrices;
     const ref = refs?.find((r) => r.outcome === label)?.price ?? (refs?.[0] && k === 1 ? String(1 - Number(refs[0].price)) : refs?.[0]?.price);
     const odds = ask && unit > 0 ? `${Math.round((Number(ask) / unit) * 100)}%` : ref ? `${Math.round(Number(ref) * 100)}%` : "—";
-    const sub = ask ? `${n(ask)} sats` : ref ? "ref · no asks" : "no asks";
-    const desc = ask ? `${label}: best ask ${n(ask)} sats, ${odds} implied` : `${label}: no asks${ref ? `, source odds ${refPct(ref)}` : ""}`;
+    const sub = ask ? `${n(ask)} sats` : ref ? "ref · no offers" : "no offers";
+    const desc = ask ? `${label}: bet at ${n(ask)} sats, ${odds} chance` : `${label}: no offers${ref ? `, source odds ${refPct(ref)}` : ""}`;
     return (
         <Link to={m.status === "open" ? `${href}?o=${o}` : href} className={`odd ${k === 0 ? "a" : "b"}${ask ? "" : " dry"}`} label={desc}>
             <span className="lbl">{label}</span>

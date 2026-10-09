@@ -47,7 +47,7 @@ export function MarketPage({ id }: { id: string }) {
                     <StatusBadge m={m} />
                     <span className={`src p-${m.source?.provider ?? "custom"}`}>{providerName(m) ? `${providerName(m)} mirror` : "Custom market"}</span>
                     <span>Closes <Time t={m.closeAt} now={now} /> · {when(m.closeAt)}</span>
-                    <span>Collateral BTC: a winning share pays {n(unit)} sats</span>
+                    <span>Each winning share pays {n(unit)} sats</span>
                     {m.oracle.policy === "dev-oracle" && <span className="badge dev">dev oracle</span>}
                     {isReplay(m) && <span className="badge dev">historical replay</span>}
                 </div>
@@ -57,14 +57,14 @@ export function MarketPage({ id }: { id: string }) {
                         {m.resolution.status === "certified"
                             ? `The oracle certified the outcome before the close${m.resolution.detail ? `: ${m.resolution.detail}` : ""}`
                             : m.resolution.detail || "The source market resolved early"}
-                        . Trading is halted; payouts open after the close.
+                        . Betting is paused; winnings can be collected after the close.
                     </p>
                 )}
                 {isReplay(m) && <p className="notice">Historical replay: this mirrors a Polymarket market that has already resolved, to exercise settlement on a test network. Its outcome is public.</p>}
                 {awaiting && (
                     <p className="notice warn">
-                        Closed, awaiting resolution: {m.resolution.status}{m.resolution.detail ? `. ${m.resolution.detail}` : ""}.
-                        {m.terms && m.terms.timeoutAtUnix !== "0" && ` If nobody resolves it by ${when(fromUnix(m.terms.timeoutAtUnix))}, every complete set splits 50/50.`}
+                        Closed, waiting for the result: {m.resolution.status}{m.resolution.detail ? `. ${m.resolution.detail}` : ""}.
+                        {m.terms && m.terms.timeoutAtUnix !== "0" && ` If nobody resolves it by ${when(fromUnix(m.terms.timeoutAtUnix))}, every share pays half.`}
                     </p>
                 )}
                 {m.oracle.policy === "dev-oracle" && <p className="notice">This market is resolved by a development oracle the operator controls. It exists for testing only.</p>}
@@ -72,9 +72,9 @@ export function MarketPage({ id }: { id: string }) {
             <div className="mcols">
                 <div className="stack mtop">
                     <Quotes m={m} unit={unit} />
-                    <Panel title="Order book">
+                    <Panel title="All prices">
                         {offers.data ? <Books m={m} offers={offers.data} unit={unit} mine={session?.script} now={now} />
-                            : offers.error ? <ErrorBox error={offers.error} onRetry={offers.reload} /> : <Loading what="order book" />}
+                            : offers.error ? <ErrorBox error={offers.error} onRetry={offers.reload} /> : <Loading what="prices" />}
                     </Panel>
                 </div>
                 <div className="stack mrest">
@@ -82,14 +82,19 @@ export function MarketPage({ id }: { id: string }) {
                         {trades.data ? <Trades m={m} trades={trades.data} unit={unit} now={now} />
                             : trades.error ? <ErrorBox error={trades.error} onRetry={trades.reload} /> : <Loading what="trades" />}
                     </Panel>
-                    <Panel title="Question and rules">
+                    <Panel title="Rules">
                         <p className="prose strong">{m.question}</p>
                         <p className="prose">{m.rules || "No rules text was provided."}</p>
                         <p className="muted small">Outcomes: “{m.outcomes[0]}” and “{m.outcomes[1]}”. Market text is shown exactly as submitted.</p>
                     </Panel>
-                    <Oracle m={m} />
-                    <Vault m={m} />
-                    {m.source && <Source s={m.source} />}
+                    <details>
+                        <summary>How this market settles (technical details)</summary>
+                        <div className="stack">
+                            <Oracle m={m} />
+                            <Vault m={m} />
+                            {m.source && <Source s={m.source} provider={providerName(m) ?? m.source.provider} />}
+                        </div>
+                    </details>
                 </div>
                 <aside className="stack mside" aria-label="Trading">
                     <TradePanels m={m} offers={offers.data} onChanged={reload} />
@@ -112,16 +117,16 @@ function Quotes({ m, unit }: { m: MarketJson; unit: string }) {
                         <div key={o} className={`quote-card ${i === 0 ? "a" : "b"}`}>
                             <div className="olabel">{m.outcomes[i]}</div>
                             <div className="big">{s === null ? "—" : `${s}%`}</div>
-                            <div className="qline"><span className="muted">Bid</span> <span className="bid num">{q.bid ? n(q.bid) : "—"}</span> <span className="muted">Ask</span> <span className="ask num">{q.ask ? n(q.ask) : "—"}</span></div>
-                            {!q.bid && !q.ask && <div className="muted small">No liquidity</div>}
+                            <div className="qline"><span className="muted">Cash out</span> <span className="bid num">{q.bid ? n(q.bid) : "—"}</span> <span className="muted">Bet</span> <span className="ask num">{q.ask ? n(q.ask) : "—"}</span></div>
+                            {!q.bid && !q.ask && <div className="muted small">No prices yet</div>}
                         </div>
                     );
                 })}
             </div>
             <PixBar p={chance?.p ?? null} />
             <p className="muted small">
-                {chance?.from === "resolved" ? "Resolved." : chance?.from === "reference" ? `${providerName(m) ?? "The source"}'s odds for reference; nothing is executable here until someone posts an order.`
-                    : chance ? `Midpoint of the best ${m.outcomes[0]} bid and ask, in sats per ${n(unit)}-sat share.` : "No orders yet."}
+                {chance?.from === "resolved" ? "Resolved." : chance?.from === "reference" ? `${providerName(m) ?? "The source"}'s odds, for reference only. You can bet here once someone posts a price.`
+                    : chance ? `Chance of ${m.outcomes[0]}, halfway between its bet and cash-out prices. Prices are in sats; a winning share pays ${n(unit)}.` : "No prices yet."}
             </p>
         </section>
     );
@@ -144,15 +149,15 @@ function Books(props: { m: MarketJson; offers: OfferJson[]; unit: string; mine?:
                 return (
                     <div key={o} className="book">
                         <h3>{props.m.outcomes[i]}</h3>
-                        {live.length === 0 ? <p className="state">No liquidity</p> : (
+                        {live.length === 0 ? <p className="state">No prices yet</p> : (
                             <div className="table-wrap">
                                 <table className="data compact">
                                     <thead>
-                                        <tr><th scope="col">Side</th><th scope="col" className="num">Price</th><th scope="col" className="num">Implied</th><th scope="col" className="num">Shares</th><th scope="col" className="num">Min fill</th><th scope="col">Expires</th></tr>
+                                        <tr><th scope="col">You can</th><th scope="col" className="num">Price</th><th scope="col" className="num">Chance</th><th scope="col" className="num">Shares</th><th scope="col" className="num">Smallest fill</th><th scope="col">Expires</th></tr>
                                     </thead>
                                     <tbody>
                                         {asks.map((x) => <BookRow key={x.id} o={x} unit={props.unit} mine={props.mine} now={props.now} />)}
-                                        <tr className="spread"><td colSpan={6}>{spread === null ? "One-sided book" : `Spread ${n(spread)} sats`}</td></tr>
+                                        <tr className="spread"><td colSpan={6}>{spread === null ? "Prices on one side only" : `Gap ${n(spread)} sats`}</td></tr>
                                         {bids.map((x) => <BookRow key={x.id} o={x} unit={props.unit} mine={props.mine} now={props.now} />)}
                                     </tbody>
                                 </table>
@@ -169,7 +174,7 @@ function BookRow({ o, unit, mine, now }: { o: OfferJson; unit: string; mine?: st
     const ask = o.terms.side === "sell";
     return (
         <tr className={ask ? "ask-row" : "bid-row"}>
-            <td>{ask ? "Ask" : "Bid"}{o.terms.makerScript === mine && <span className="badge mine">yours</span>}</td>
+            <td>{ask ? "Bet" : "Cash out"}{o.terms.makerScript === mine && <span className="badge mine">yours</span>}</td>
             <td className={`num ${ask ? "ask" : "bid"}`}>{n(o.terms.priceSats)}</td>
             <td className="num muted">{pct(o.terms.priceSats, unit)}</td>
             <td className="num">{n(o.remaining)}</td>
@@ -185,14 +190,14 @@ function Trades({ m, trades, unit, now }: { m: MarketJson; trades: TradeJson[]; 
         <div className="table-wrap">
             <table className="data compact">
                 <thead>
-                    <tr><th scope="col">Time</th><th scope="col">Outcome</th><th scope="col">Taker</th><th scope="col" className="num">Shares</th><th scope="col" className="num">Price</th><th scope="col">Tx</th></tr>
+                    <tr><th scope="col">Time</th><th scope="col">Outcome</th><th scope="col">Type</th><th scope="col" className="num">Shares</th><th scope="col" className="num">Price</th><th scope="col">Tx</th></tr>
                 </thead>
                 <tbody>
                     {trades.map((t, i) => (
                         <tr key={`${t.txid}:${t.offerId ?? ""}:${i}`}>
                             <td><Time t={t.at} now={now} /></td>
                             <td>{m.outcomes[t.outcome === "yes" ? 0 : 1]}</td>
-                            <td>{t.kind === "mint-match" ? "mint match" : t.makerSide === "sell" ? "bought" : "sold"}</td>
+                            <td>{t.kind === "mint-match" ? "new pair" : t.makerSide === "sell" ? "bought" : "sold"}</td>
                             <td className="num">{n(t.qty)}</td>
                             <td className="num">{n(t.priceSats)} <span className="muted">{pct(t.priceSats, unit)}</span></td>
                             <td><Txid txid={t.txid} /></td>
@@ -206,7 +211,7 @@ function Trades({ m, trades, unit, now }: { m: MarketJson; trades: TradeJson[]; 
 
 function Oracle({ m }: { m: MarketJson }) {
     return (
-        <Panel title="Oracle and resolution">
+        <Panel title="Who decides the result">
             <dl className="kv">
                 <dt>Policy</dt><dd>{POLICY[m.oracle.policy]}{m.oracle.label ? ` (${m.oracle.label})` : ""}</dd>
                 <dt>Keys</dt><dd className="mono break">{m.oracle.keys.join("\n") || "—"}</dd>
@@ -244,12 +249,12 @@ function Vault({ m }: { m: MarketJson }) {
                 <dt>Collateral</dt><dd>{m.vault.valueSats ? sats(m.vault.valueSats) : "—"}</dd>
                 <dt>Vault coin</dt><dd className="mono break">{m.vault.outpoint ?? "—"}</dd>
                 <dt>Coin expiry</dt><dd>{m.vault.expiresAt ? when(m.vault.expiresAt) : "—"}</dd>
-                <dt>Open interest</dt><dd>{n(m.stats.openInterestSets)} sets, volume {sats(m.stats.volumeSats)} in {m.stats.trades} trades</dd>
+                <dt>Open interest</dt><dd>{n(m.stats.openInterestSets)} pairs, volume {sats(m.stats.volumeSats)} in {m.stats.trades} trades</dd>
                 {t && (
                     <>
-                        <dt>Unit</dt><dd>{sats(t.unitSats)} per complete set (1 {m.outcomes[0]} + 1 {m.outcomes[1]})</dd>
+                        <dt>Unit</dt><dd>{sats(t.unitSats)} per pair (1 {m.outcomes[0]} + 1 {m.outcomes[1]})</dd>
                         <dt>Cap</dt><dd>{sats(t.capSats)} in the vault</dd>
-                        <dt>Timeout</dt><dd>{t.timeoutAtUnix === "0" ? "None" : `${when(fromUnix(t.timeoutAtUnix))}: unresolved markets then split 50/50 per set`}</dd>
+                        <dt>Timeout</dt><dd>{t.timeoutAtUnix === "0" ? "None" : `${when(fromUnix(t.timeoutAtUnix))}: if still unresolved, every share pays half`}</dd>
                         <dt>Exit delay</dt><dd>{t.exitDelaySeconds} s</dd>
                         <dt>Binding</dt><dd className="mono break">{t.binding}</dd>
                         <dt>Asset ids</dt>
@@ -261,12 +266,12 @@ function Vault({ m }: { m: MarketJson }) {
     );
 }
 
-function Source({ s }: { s: SourceJson }) {
+function Source({ s, provider }: { s: SourceJson; provider: string }) {
     const href = safeHref(s.url);
     return (
-        <Panel title="Source">
+        <Panel title="Source market">
             <dl className="kv">
-                <dt>Provider</dt><dd>Polymarket {href ? <a href={href} target="_blank" rel="noopener noreferrer">{s.slug}</a> : s.slug}</dd>
+                <dt>Provider</dt><dd>{provider} {href ? <a href={href} target="_blank" rel="noopener noreferrer">{s.slug}</a> : s.slug}</dd>
                 <dt>Source status</dt><dd>{s.sourceStatus ?? "—"}</dd>
                 <dt>Resolution source</dt><dd className="prose">{s.resolutionSource || "—"}</dd>
                 <dt>Protocol</dt><dd>{s.protocol}</dd>
@@ -276,7 +281,7 @@ function Source({ s }: { s: SourceJson }) {
             </dl>
             {s.referencePrices && s.referencePrices.length > 0 && (
                 <>
-                    <h3>Polymarket reference (not executable here)</h3>
+                    <h3>{provider} odds (for reference only)</h3>
                     <table className="data compact">
                         <thead><tr><th scope="col">Outcome</th><th scope="col" className="num">Reference</th><th scope="col">As of</th></tr></thead>
                         <tbody>{s.referencePrices.map((r) => <tr key={r.outcome}><td>{r.outcome}</td><td className="num">{refPct(r.price)}</td><td>{when(r.asOf)}</td></tr>)}</tbody>
