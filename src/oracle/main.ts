@@ -11,6 +11,8 @@ import type { MarketAssets } from "../core/market.js";
 import { attestorSetProblem } from "./request.js";
 import type { CertificateJson } from "../shared/api.js";
 import { createPolymarketProvider } from "../server/sources/polymarket/index.js";
+import { createKalshiProvider } from "../server/sources/kalshi/index.js";
+import { createManifoldProvider } from "../server/sources/manifold/index.js";
 import type { MarketSourceProvider } from "../server/sources/types.js";
 import { definitionMismatch } from "../server/sources/definition.js";
 
@@ -52,18 +54,23 @@ const pubkey = hex.encode(attestorPublicKey(scheme, hex.decode(secret)));
 const dataDir = env.ORACLE_DATA_DIR ?? "/data/oracle";
 mkdirSync(dataDir, { recursive: true });
 const rpcUrls = (env.POLYGON_RPC_URLS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
-if (rpcUrls.length < 2) throw new Error("POLYGON_RPC_URLS needs at least two providers");
+if (rpcUrls.length === 1) throw new Error("POLYGON_RPC_URLS needs at least two providers");
 const providers: MarketSourceProvider[] = [
-    createPolymarketProvider({
-        gammaUrl: env.POLYMARKET_GAMMA_URL ?? "https://gamma-api.polymarket.com",
-        rpcUrls,
-        resolverAllowlist: (env.POLYMARKET_RESOLVERS ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean),
-    }),
+    ...(rpcUrls.length >= 2
+        ? [createPolymarketProvider({
+              gammaUrl: env.POLYMARKET_GAMMA_URL ?? "https://gamma-api.polymarket.com",
+              rpcUrls,
+              resolverAllowlist: (env.POLYMARKET_RESOLVERS ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean),
+          })]
+        : []),
+    ...(env.KALSHI_ENABLED === "true" ? [createKalshiProvider({ apiUrl: env.KALSHI_API_URL || undefined })] : []),
+    ...(env.MANIFOLD_ENABLED === "true" ? [createManifoldProvider({ apiUrl: env.MANIFOLD_API_URL || undefined })] : []),
 ];
+if (providers.length === 0) throw new Error("no source enabled: set POLYGON_RPC_URLS, KALSHI_ENABLED or MANIFOLD_ENABLED");
 const log = (msg: string, extra: Record<string, unknown> = {}) => console.log(JSON.stringify({ ts: new Date().toISOString(), service: "attestor", msg, ...extra }));
 
 const app = new Hono();
-app.get("/info", (c) => c.json({ pubkey, epoch, profile: providers[0]!.profile, profiles: providers.map((p) => p.profile), deployment: pins }));
+app.get("/info", (c) => c.json({ pubkey, epoch, profiles: providers.map((p) => p.profile), deployment: pins }));
 app.get("/health", (c) => c.json({ ok: true }));
 
 /**

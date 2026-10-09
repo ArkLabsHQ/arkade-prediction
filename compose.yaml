@@ -49,8 +49,20 @@ services:
       POLYMARKET_GAMMA_URL: ${POLYMARKET_GAMMA_URL:-https://gamma-api.polymarket.com}
       POLYGON_RPC_URLS: ${POLYGON_RPC_URLS:-}
       POLYMARKET_RESOLVERS: ${POLYMARKET_RESOLVERS:-}
+      KALSHI_ENABLED: ${KALSHI_ENABLED:-false}
+      KALSHI_API_URL: ${KALSHI_API_URL:-https://api.elections.kalshi.com/trade-api/v2}
+      MANIFOLD_ENABLED: ${MANIFOLD_ENABLED:-false}
+      MANIFOLD_API_URL: ${MANIFOLD_API_URL:-https://api.manifold.markets/v0}
+      UPDOWN_ENABLED: ${UPDOWN_ENABLED:-false}
+      UPDOWN_SETTLEMENT: ${UPDOWN_SETTLEMENT:-redstone}
+      UPDOWN_MAX_ACTIVE: ${UPDOWN_MAX_ACTIVE:-4}
+      UPDOWN_WINDOWS: ${UPDOWN_WINDOWS:-15m,4h}
+      UPDOWN_ASSETS: ${UPDOWN_ASSETS:-BTC,ETH,SOL,XRP,DOGE,BNB}
+      UPDOWN_LEAD_SECONDS: ${UPDOWN_LEAD_SECONDS:-7200}
+      UPDOWN_TIMEOUT_SECONDS: ${UPDOWN_TIMEOUT_SECONDS:-3600}
       IMPORT_TAGS: ${IMPORT_TAGS:-}
       IMPORT_MAX_ACTIVE: ${IMPORT_MAX_ACTIVE:-5}
+      IMPORT_MAX_PER_SECTION: ${IMPORT_MAX_PER_SECTION:-0}
       IMPORT_MIN_HORIZON_SECONDS: ${IMPORT_MIN_HORIZON_SECONDS:-3600}
       IMPORT_MAX_HORIZON_SECONDS: ${IMPORT_MAX_HORIZON_SECONDS:-2592000}
       IMPORT_INTERVAL_SECONDS: ${IMPORT_INTERVAL_SECONDS:-600}
@@ -90,6 +102,10 @@ services:
       POLYMARKET_GAMMA_URL: ${POLYMARKET_GAMMA_URL:-https://gamma-api.polymarket.com}
       POLYGON_RPC_URLS: ${POLYGON_RPC_URLS:-}
       POLYMARKET_RESOLVERS: ${POLYMARKET_RESOLVERS:-}
+      KALSHI_ENABLED: ${KALSHI_ENABLED:-false}
+      KALSHI_API_URL: ${KALSHI_API_URL:-https://api.elections.kalshi.com/trade-api/v2}
+      MANIFOLD_ENABLED: ${MANIFOLD_ENABLED:-false}
+      MANIFOLD_API_URL: ${MANIFOLD_API_URL:-https://api.manifold.markets/v0}
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:37410/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
       interval: 30s

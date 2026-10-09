@@ -24,6 +24,10 @@ x-attestor-env: &attestor-env
   POLYMARKET_GAMMA_URL: ${POLYMARKET_GAMMA_URL:-https://gamma-api.polymarket.com}
   POLYGON_RPC_URLS: ${POLYGON_RPC_URLS:-}
   POLYMARKET_RESOLVERS: ${POLYMARKET_RESOLVERS:-}
+  KALSHI_ENABLED: ${KALSHI_ENABLED:-false}
+  KALSHI_API_URL: ${KALSHI_API_URL:-https://api.elections.kalshi.com/trade-api/v2}
+  MANIFOLD_ENABLED: ${MANIFOLD_ENABLED:-false}
+  MANIFOLD_API_URL: ${MANIFOLD_API_URL:-https://api.manifold.markets/v0}
 
 services:
   oracle-2:

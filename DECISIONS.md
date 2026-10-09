@@ -197,3 +197,11 @@ Each entry: decision, reason, rejected alternatives. Newest last.
     under the earlier contracts are marked `legacy` (migration 5): never filled or quoted, only cancelled,
     settled or repriced onto the new contracts. An LP ask whose leftover is under 330 at the new price is not
     repriced.
+45. **Kalshi and Manifold mirrors beside Polymarket.** Sources are providers in a list (importer, resolver,
+    attestor); imported markets keep `kind='polymarket'` meaning "mirror" and `source_provider` names the source,
+    because rebuilding the `markets` table to widen its CHECK constraint on a live SQLite was the riskier change.
+    Kalshi pages open markets inside a close window (its `/events` listing has no useful order) and settles on
+    Kalshi's `finalized` yes/no; scalar settlements are unsupported. Manifold is play money resolved by each market's
+    creator, so it needs `MIN_TRADERS` bettors and a probabilistic (MKT) or CANCEL resolution maps to INVALID 50/50.
+    Both read the source twice and require agreement; that catches a torn read, not a dishonest source, and the
+    attestor's trust is the source's. Every market carries a browse `section` from its tags and question.

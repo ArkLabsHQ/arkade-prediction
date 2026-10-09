@@ -19,6 +19,8 @@ import { Workflows } from "./workflows.js";
 import { importOnce, replayHistorical } from "./importer.js";
 import { resolutionTick } from "./resolver.js";
 import { createPolymarketProvider } from "./sources/polymarket/index.js";
+import { createKalshiProvider } from "./sources/kalshi/index.js";
+import { createManifoldProvider } from "./sources/manifold/index.js";
 import type { MarketSourceProvider } from "./sources/types.js";
 import { captureTick } from "./rounds.js";
 import { discoverUpDown, importUpDown, upcomingSlugs } from "./updown.js";
@@ -133,6 +135,8 @@ async function main(): Promise<void> {
         ...(cfg.POLYMARKET_ENABLED
             ? [createPolymarketProvider({ gammaUrl: cfg.POLYMARKET_GAMMA_URL, rpcUrls: cfg.POLYGON_RPC_URLS, resolverAllowlist: cfg.POLYMARKET_RESOLVERS.map((r) => r.toLowerCase()) })]
             : []),
+        ...(cfg.KALSHI_ENABLED ? [createKalshiProvider({ apiUrl: cfg.KALSHI_API_URL })] : []),
+        ...(cfg.MANIFOLD_ENABLED ? [createManifoldProvider({ apiUrl: cfg.MANIFOLD_API_URL })] : []),
     ];
     const polymarket = providers.find((p) => p.name === "polymarket");
     const sourceDeps = providers.length > 0 ? { ...deps, wf, providers, timeoutDays: cfg.IMPORT_TIMEOUT_DAYS, log } : undefined;
