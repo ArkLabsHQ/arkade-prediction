@@ -220,3 +220,14 @@ Each entry: decision, reason, rejected alternatives. Newest last.
     on chain), and exposes no view naming a condition's reporter. Its only authenticator would be the reporting
     account, which rotates, so it is dropped from the resolver allowlist and `UPDOWN_SETTLEMENT=redstone`
     (in-covenant RedStone rounds with pinned signers) stays the Up/Down path.
+47. **Trustless Polymarket settlement: Ethereum + SP1-Helios, receipts, one Groth16 proof (spikes done).** Polygon
+    checkpoints on Ethereum commit each block's receiptsRoot, not its stateRoot, so a payout is proven from the CTF
+    `ConditionResolution` receipt: receipt → receiptsRoot → Bor checkpoint leaf → `RootChain.headerBlocks[id]` in
+    Ethereum storage (ctf-payout lib, verified natively). SP1-Helios v1.3.0 (same sp1-sdk 6.8.1, Fulu-ready) proves
+    that storage slot from Ethereum consensus, anchored on a sync-committee hash; 26.6M cycles with no committee
+    update, about 22–30M more per ~27 h period, so a 30-day market is about 640M cycles. Recursion composes: an outer
+    program verifying an inner compressed proof wraps to the same five-input Groth16 the covenant verifies, and a
+    market vault with proof-resolved leaves (spike `zk_market_vault.ark`) settles YES on our proof and refuses the
+    other side or another condition. Local CPU proving of Helios ran out of 30 GB of memory, so production proving
+    goes to the Succinct prover network or a larger machine. The vault must pin the sync-committee anchor and the
+    inner program key itself; upstream checks those in a Solidity contract we do not use.
