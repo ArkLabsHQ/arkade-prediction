@@ -123,7 +123,7 @@ async function main(): Promise<void> {
             health: h,
             importLag: { lastRun: getMeta(db, "import.lastRun") ?? null, lastError: getMeta(db, "import.lastError") ?? null },
             oracleLag: all(db, "SELECT id, question, close_at FROM markets WHERE status IN ('halted','closed','resolving') AND close_at < ? ORDER BY close_at LIMIT 50", Math.floor(Date.now() / 1000)),
-            workflows: { failed: wf.list({ state: "failed", limit: 50 }), inFlight: wf.list({ state: "submitting", limit: 50 }), pending: wf.list({ state: "pending", limit: 50 }) },
+            workflows: { failed: wf.list({ state: "failed", limit: 50 }), inFlight: wf.list({ state: "submitting", limit: 50 }), pending: wf.list({ state: "pending", limit: 50 }), done: wf.list({ state: "done", limit: 30 }) },
             liquidity: all(db, "SELECT market_id, outcome, side, COUNT(*) offers, SUM(CAST(remaining AS INTEGER)) units FROM offers WHERE status = 'open' GROUP BY market_id, outcome, side"),
             expiries: all(db, "SELECT id, vault_expires_at FROM markets WHERE vault_expires_at IS NOT NULL ORDER BY vault_expires_at LIMIT 20"),
             wallets: {

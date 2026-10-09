@@ -91,7 +91,7 @@ interface OverviewJson {
     health: Record<string, Check> | Failed;
     importLag: { lastRun: string | null; lastError: string | null };
     oracleLag: { id: string; question: string; close_at: number }[];
-    workflows: { failed: Wf[]; inFlight: Wf[]; pending: Wf[] };
+    workflows: { failed: Wf[]; inFlight: Wf[]; pending: Wf[]; done?: Wf[] };
     liquidity: { market_id: string; outcome: string; side: string; offers: number; units: number }[];
     expiries: { id: string; vault_expires_at: string }[];
     wallets: Record<"operator" | "lp", { address: string; available: number } | Failed | null>;
@@ -132,6 +132,7 @@ function Dashboard({ o }: { o: OverviewJson }) {
             <WorkflowTable title={`Failed workflows (${wf.failed.length})`} rows={wf.failed} />
             <WorkflowTable title={`Submitting (${wf.inFlight.length})`} rows={wf.inFlight} />
             <WorkflowTable title={`Pending (${wf.pending.length})`} rows={wf.pending} />
+            <WorkflowTable title="Recently done" rows={wf.done ?? []} />
             <section>
                 <h3>Awaiting resolution ({o.oracleLag.length})</h3>
                 {o.oracleLag.length === 0 ? <p className="muted">None.</p> : (
@@ -153,13 +154,13 @@ function WorkflowTable({ title, rows }: { title: string; rows: Wf[] }) {
             <h3>{title}</h3>
             <div className="table-wrap">
                 <table className="data compact">
-                    <thead><tr><th scope="col">Kind</th><th scope="col">Market</th><th scope="col">Tries</th><th scope="col">Last error</th></tr></thead>
+                    <thead><tr><th scope="col">Kind</th><th scope="col">Market</th><th scope="col">Tries</th><th scope="col">Last error / tx</th></tr></thead>
                     <tbody>{rows.map((w) => (
                         <tr key={w.id}>
                             <td className="mono small">{w.kind}</td>
                             <td>{w.marketId ? <Link to={`/markets/${w.marketId}`} className="mono small">{w.marketId.slice(0, 8)}</Link> : "—"}</td>
                             <td className="num">{w.attempts}</td>
-                            <td className="small break">{w.error ?? ""}</td>
+                            <td className="small break">{w.error ?? (w.txid ? <span className="mono">{w.txid.slice(0, 16)}…</span> : "")}</td>
                         </tr>
                     ))}</tbody>
                 </table>
