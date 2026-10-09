@@ -60,7 +60,7 @@ the full-suite log is `docs/evidence/e2e-regtest.txt`.
 | 17 | Mutinynet readiness (read-only) | PASS | `docs/evidence/mutinynet-preflight.txt` | `node --env-file=.env.mutinynet.example --import tsx scripts/preflight.ts` |
 | 17a | Early source resolution detected (batched finalized reads) and trading halted | PASS | `docs/evidence/early-resolution-screen.txt` (live), `test/e2e/halted-market.test.ts`, `test/unit/server/resolver.test.ts` | `node --import tsx scripts/live/early-resolution-check.ts` |
 | 17b | Independent reviews: collateral, oracle, orders, durability | DONE | `docs/reviews.md` (3 high, 11 medium, 9 low: each fixed or documented) | — |
-| 18 | Mutinynet transactions: import, activation, LP liquidity, trade, resolve, redeem | PASS | `docs/evidence/mutinynet-funded.txt` | `node --env-file=<env> --import tsx scripts/mutinynet-flow.ts` (app running) |
+| 18 | Mutinynet transactions: import, activation, LP liquidity, trade, resolve, redeem; imported market resolved by the attestor from Polygon | PASS | `docs/evidence/mutinynet-funded.txt` | `node --env-file=<env> --import tsx scripts/mutinynet-flow.ts` (app running) |
 | 19 | Hosted Dokploy deployment | NOT RUN | image and compose tested locally (#12) | `docs/operations.md` |
 | 20 | Threshold oracle: 2-of-3 attestors enforced in the vault | PASS | `test/e2e/threshold-oracle.test.ts`, `docs/evidence/polymarket-live.txt` (3 attestor processes) | `threshold-oracle.test.ts` |
 | 21 | Categorical markets, nonzero-fee renewal | NOT RUN (not implemented) | `PLAN.md` D4 | — |

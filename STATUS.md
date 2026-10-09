@@ -25,6 +25,8 @@ Updated: 2026-10-08 (session 1). Branch `main`, local commits only (nothing push
 - Mutinynet funded run, single container: 2 imported markets activated with LP asks posted; an LP ask taken;
   a custom market minted, certified, resolved by the keeper and redeemed (3000 sats); no failed workflows
   (`mutinynet-funded.txt`). Two Polygon providers were too few when one timed out; the starter env lists three.
+- Deployed single container resolved imported market "Buccaneers vs. Cowboys" (Polymarket 3951230): attestor
+  certified YES from the finalized CTF payout within minutes of UMA settling; keeper resolved the vault.
 - Flakes named and fixed in test infrastructure (not app code): emulator log latency in the covenant-refusal
   check, test-server start deadline on a loaded host, faucet coins inheriting an old batch expiry, and arkd
   liquidity drained by unswept batches on a stack that mines only on demand (DECISIONS 31), and a body-limit unit
@@ -32,6 +34,6 @@ Updated: 2026-10-08 (session 1). Branch `main`, local commits only (nothing push
   The faucet's back-to-back sends could spend change arkd had not created yet (`VTXO_NOT_FOUND`); it retries.
 
 ## Not done (needs authorization or is out of scope)
-- Hosted Dokploy deployment; resolution of an imported market (needs the Polymarket market to settle).
+- Edge protection of the deployed admin port (deployer action); LP repricing as source odds move.
 - Categorical markets, nonzero-fee renewal (PLAN D4).
 - Residual risks: `docs/threat-model.md` §7.

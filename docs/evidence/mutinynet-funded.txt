@@ -30,3 +30,11 @@ With 3 providers (drpc, 1rpc, publicnode) on the same data dir: no screen failur
 MUTINYNET FLOW OK
 flow EXIT=0
 # yesBurn=3: 1 seed set from openVault + 2 minted; payout 3 x 1000 sats.
+
+## Imported market resolved on the deployed single container (prediction.mutinynet.arkade.sh, 2026-10-09)
+# Polymarket 3951230 "Buccaneers vs. Cowboys" -> market 3a07a227b6884435f2a7c758884c4931; read from the public API, polled by .tmp watcher.
+02:53 closed | unresolved | open |  | payoutDenominator is 0 at finalized block 95206069 (0xbb1f70da633df3a0a4e94cf0978e9415a4631e58085949aad1c51c1d73faef48) on 2 providers; gamm || pm closed=false uma=undefined px=["0.9625", "0.0375"]
+03:35 closed | unresolved | open |  | payoutDenominator is 0 at finalized block 95207778 (0xd541030a70e8027e0e401917a7fce30b13932f27c8d7e36d42b67b64c2e043f5) on 2 providers; gamma umaResolutionStatu || pm closed=false uma=proposed
+03:40 resolved | resolved | resolved | yes | resolved yes in c6abd8af97c46dd32965c28ff24f26c4699f93ca38f7c74a8fbc0be1ac73d3b0 || pm closed=true uma=resolved
+certificate: outcome yes, signer 906f419db2e96f388af3b3ed3137fb25db6bea1bceb8f14fd08684b83420b5fa, source block 95207857 (0x46e088f4c8327cbc572a9be9aa419b31e768491eae47ecaa5be9ee018b444698), issued 2026-10-09T03:36:40.317Z
+vault: phase resolved, outcome yes, 7000 sats at c6abd8af97c46dd32965c28ff24f26c4699f93ca38f7c74a8fbc0be1ac73d3b0:0
