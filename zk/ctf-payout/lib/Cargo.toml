@@ -1,0 +1,12 @@
+[package]
+name = "ctf-payout-lib"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+alloy-primitives = { workspace = true }
+alloy-rlp = { workspace = true }
+alloy-sol-types = { workspace = true }
+alloy-trie = { workspace = true }
+serde = { workspace = true }
+hex-literal = "0.4"

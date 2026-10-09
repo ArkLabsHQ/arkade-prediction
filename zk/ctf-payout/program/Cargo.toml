@@ -1,0 +1,9 @@
+[package]
+name = "ctf-payout-program"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+alloy-sol-types = { workspace = true }
+sp1-zkvm = "6.0.1"
+ctf-payout-lib = { path = "../lib" }
