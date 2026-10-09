@@ -4,7 +4,7 @@ import type { OfferJson } from "../shared/api.js";
 import { planFill } from "./fills.js";
 
 let seq = 0;
-function offer(side: "sell" | "buy", price: number, remaining: number, o: { minFill?: number; expires?: number; maker?: string } = {}): OfferJson {
+function offer(side: "sell" | "buy", price: number, remaining: number, o: { minFill?: number; expires?: number; maker?: string; legacy?: boolean } = {}): OfferJson {
     seq++;
     return {
         id: `o${seq}`, marketId: "m", outcome: "yes", script: "", status: "open", updatedAt: "",
@@ -14,6 +14,7 @@ function offer(side: "sell" | "buy", price: number, remaining: number, o: { minF
         terms: {
             side, maker: "", makerScript: o.maker ?? "maker", assetId: "a", priceSats: String(price),
             minFill: String(o.minFill ?? 1), expiresAtUnix: String(o.expires ?? 0), reserveSats: "330", exitDelaySeconds: "512",
+            ...(o.legacy ? { legacy: true } : {}),
         },
     };
 }
@@ -38,4 +39,10 @@ assert.deepEqual(legs(p), [[450n, 2n]]);
 assert.equal(p.qty, 2n);
 
 assert.equal(planFill([], "buy", 1n, NOW).legs.length, 0);
+
+// 330-sat rules: no fill under 330 sats, no remainder under 330 sats left behind, legacy offers never fill.
+assert.equal(planFill([offer("sell", 100, 10)], "buy", 3n, NOW).legs.length, 0);
+assert.deepEqual(legs(planFill([offer("sell", 100, 10)], "buy", 9n, NOW)), [[100n, 6n]]);
+assert.deepEqual(legs(planFill([offer("sell", 100, 10)], "buy", 10n, NOW)), [[100n, 10n]]);
+assert.equal(planFill([offer("sell", 600, 5, { legacy: true })], "buy", 1n, NOW).legs.length, 0);
 console.log("fills: ok");

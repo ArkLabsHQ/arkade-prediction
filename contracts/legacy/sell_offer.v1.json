@@ -87,32 +87,6 @@
           "OP_EQUAL",
           "OP_ENDIF",
           "OP_VERIFY",
-          "OP_8",
-          "OP_PICK",
-          "OP_6",
-          "OP_PICK",
-          "OP_MUL",
-          "330",
-          "OP_GREATERTHANOREQUAL",
-          "OP_VERIFY",
-          "OP_8",
-          "OP_PICK",
-          "OP_OVER",
-          "OP_EQUAL",
-          "OP_IF",
-          "OP_1",
-          "OP_ELSE",
-          "OP_DUP",
-          "OP_9",
-          "OP_PICK",
-          "OP_SUB",
-          "OP_6",
-          "OP_PICK",
-          "OP_MUL",
-          "330",
-          "OP_GREATERTHANOREQUAL",
-          "OP_ENDIF",
-          "OP_VERIFY",
           "OP_7",
           "OP_PICK",
           "0",
@@ -401,7 +375,7 @@
   "source": {
     "entry": "sell_offer.ark",
     "files": {
-      "sell_offer.ark": "pragma arkade ^0.1.0;\n\n// Standing offer to sell `asset` at `price` sats per unit. The continuation at the offer's own input\n// index keeps the unsold units and accumulates proceeds, so two offers can never share one output.\ncontract SellOffer(\n  pubkey maker,\n  bytes32 makerProgram,\n  bytes32 assetTxid, int assetGidx,\n  int price,\n  int minFill,\n  int expiresAt,\n  int exit\n) {\n  // The fill that sells the last unit pays the maker directly instead of leaving an empty offer.\n  // Every fill is worth at least 330 sats (dust) and never leaves a remainder worth less.\n  function fill(int qty) {\n    int i = this.activeInputIndex;\n    int remaining = tx.inputs[i].assets.lookup(assetTxid, assetGidx);\n    require(qty > 0 && qty <= remaining, \"qty\");\n    require(qty >= minFill || qty == remaining, \"below min fill\");\n    require(qty * price >= 330, \"below min bet\");\n    require(qty == remaining || (remaining - qty) * price >= 330, \"dust remainder\");\n    require(expiresAt == 0 || !checkTime(expiresAt), \"expired\");\n    require(tx.outputs[i].witnessVersion == 1, \"output version\");\n    require(tx.outputs[i].value >= tx.input.current.value + qty * price, \"proceeds\");\n    require(\n      (qty == remaining && tx.outputs[i].scriptPubKey == makerProgram && tx.outputs[i].assets.length == 0) ||\n        (qty < remaining && tx.outputs[i].scriptPubKey == tx.input.current.scriptPubKey &&\n          tx.outputs[i].assets.length == 1 && tx.outputs[i].assets.lookup(assetTxid, assetGidx) == remaining - qty),\n      \"remainder\"\n    );\n  }\n\n  // Anyone may return an expired offer to the maker. No asset opcodes: OP_TUNNEL also covers an asset-free offer.\n  function settle() {\n    int i = this.activeInputIndex;\n    require(expiresAt > 0 && checkTime(expiresAt), \"still live\");\n    require(tx.outputs[i].scriptPubKey == makerProgram, \"maker\");\n    require(tx.outputs[i].witnessVersion == 1, \"maker version\");\n    require(this.tunnel(i, {scriptPubKey: false, value: true, assets: true}), \"settle\");\n  }\n\n  function renew() {\n    require(tx.version == 2, \"intent only\");\n    require(this.tunnel(this.activeInputIndex - 1), \"tunnel\");\n  }\n\n  function cancel(signature makerSig, signature serverSig) tapscript {\n    require(checkMultisig([maker, server], [makerSig, serverSig]));\n  }\n\n  function unilateral(signature makerSig) tapscript {\n    require(older(exit));\n    require(checkSig(makerSig, maker));\n  }\n}\n"
+      "sell_offer.ark": "pragma arkade ^0.1.0;\n\n// Standing offer to sell `asset` at `price` sats per unit. The continuation at the offer's own input\n// index keeps the unsold units and accumulates proceeds, so two offers can never share one output.\ncontract SellOffer(\n  pubkey maker,\n  bytes32 makerProgram,\n  bytes32 assetTxid, int assetGidx,\n  int price,\n  int minFill,\n  int expiresAt,\n  int exit\n) {\n  // The fill that sells the last unit pays the maker directly instead of leaving an empty offer.\n  function fill(int qty) {\n    int i = this.activeInputIndex;\n    int remaining = tx.inputs[i].assets.lookup(assetTxid, assetGidx);\n    require(qty > 0 && qty <= remaining, \"qty\");\n    require(qty >= minFill || qty == remaining, \"below min fill\");\n    require(expiresAt == 0 || !checkTime(expiresAt), \"expired\");\n    require(tx.outputs[i].witnessVersion == 1, \"output version\");\n    require(tx.outputs[i].value >= tx.input.current.value + qty * price, \"proceeds\");\n    require(\n      (qty == remaining && tx.outputs[i].scriptPubKey == makerProgram && tx.outputs[i].assets.length == 0) ||\n        (qty < remaining && tx.outputs[i].scriptPubKey == tx.input.current.scriptPubKey &&\n          tx.outputs[i].assets.length == 1 && tx.outputs[i].assets.lookup(assetTxid, assetGidx) == remaining - qty),\n      \"remainder\"\n    );\n  }\n\n  // Anyone may return an expired offer to the maker. No asset opcodes: OP_TUNNEL also covers an asset-free offer.\n  function settle() {\n    int i = this.activeInputIndex;\n    require(expiresAt > 0 && checkTime(expiresAt), \"still live\");\n    require(tx.outputs[i].scriptPubKey == makerProgram, \"maker\");\n    require(tx.outputs[i].witnessVersion == 1, \"maker version\");\n    require(this.tunnel(i, {scriptPubKey: false, value: true, assets: true}), \"settle\");\n  }\n\n  function renew() {\n    require(tx.version == 2, \"intent only\");\n    require(this.tunnel(this.activeInputIndex - 1), \"tunnel\");\n  }\n\n  function cancel(signature makerSig, signature serverSig) tapscript {\n    require(checkMultisig([maker, server], [makerSig, serverSig]));\n  }\n\n  function unilateral(signature makerSig) tapscript {\n    require(older(exit));\n    require(checkSig(makerSig, maker));\n  }\n}\n"
     }
   },
   "compiler": {
@@ -411,6 +385,6 @@
       "optimize": true
     }
   },
-  "updatedAt": "2026-10-09T08:58:25.642870500+00:00",
-  "fingerprint": "sha256:2d9b4bd32887b3832b348ae4127d62fd32d9351cb6199fa2a40d40d3e3287687"
+  "updatedAt": "2026-10-07T17:54:51.802551200+00:00",
+  "fingerprint": "sha256:406580fd0f705e3472079a8e93e36da6edf09802646885cb3b9abf7e5994be2c"
 }

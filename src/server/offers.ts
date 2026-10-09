@@ -93,6 +93,7 @@ export async function registerOffer(d: Deps, req: PostOfferRequest): Promise<Off
     } catch {
         throw new HttpError(400, "terms", "malformed offer terms");
     }
+    if (parsed.legacy) throw new HttpError(400, "terms", "new offers use the current offer contracts");
     if (parsed.priceSats <= 0n || parsed.priceSats >= terms.unitSats) throw new HttpError(400, "price", "price must be between 1 and unit-1 sats");
     if (parsed.minFill <= 0n) throw new HttpError(400, "min-fill", "min fill must be positive");
     if (parsed.exitDelaySeconds < d.net.exitDelaySeconds) throw new HttpError(400, "exit-delay", "exit delay below the operator minimum");

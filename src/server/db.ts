@@ -57,6 +57,8 @@ const MIGRATIONS: string[] = [
     `CREATE TABLE price_rounds (
         feed TEXT NOT NULL, round_ms INTEGER NOT NULL, packages TEXT NOT NULL, captured_at TEXT NOT NULL,
         PRIMARY KEY (feed, round_ms));`,
+    // Offers funded before the 330-sat fill rules keep their old scripts.
+    `UPDATE offers SET terms = json_set(terms, '$.legacy', json('true'));`,
 ];
 
 export type Db = DatabaseSync;

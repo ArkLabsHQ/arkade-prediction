@@ -161,7 +161,7 @@ export function listMarkets(db: Db, f: { status?: string; kind?: string; q?: str
 
 function bookOf(db: Db, marketId: string) {
     const best = (outcome: string, side: string, agg: "MIN" | "MAX") =>
-        one<{ p: number | null }>(db, `SELECT ${agg}(CAST(json_extract(terms, '$.priceSats') AS INTEGER)) p FROM offers WHERE market_id = ? AND outcome = ? AND side = ? AND status = 'open'`, marketId, outcome, side)?.p ?? null;
+        one<{ p: number | null }>(db, `SELECT ${agg}(CAST(json_extract(terms, '$.priceSats') AS INTEGER)) p FROM offers WHERE market_id = ? AND outcome = ? AND side = ? AND status = 'open' AND json_extract(terms, '$.legacy') IS NULL`, marketId, outcome, side)?.p ?? null;
     const side = (o: string) => ({ bid: best(o, "buy", "MAX")?.toString() ?? null, ask: best(o, "sell", "MIN")?.toString() ?? null });
     return { yes: side("yes"), no: side("no") };
 }

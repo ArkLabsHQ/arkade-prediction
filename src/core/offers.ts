@@ -1,5 +1,7 @@
 import sellOfferArtifact from "../../contracts/artifacts/sell_offer.json" with { type: "json" };
 import buyOfferArtifact from "../../contracts/artifacts/buy_offer.json" with { type: "json" };
+import sellOfferV1Artifact from "../../contracts/legacy/sell_offer.v1.json" with { type: "json" };
+import buyOfferV1Artifact from "../../contracts/legacy/buy_offer.v1.json" with { type: "json" };
 import { DUST_SATS } from "./arkadeTx.js";
 import { assetScriptArgs } from "./assets.js";
 import type { ArkadeClient, Contract } from "./market.js";
@@ -8,6 +10,12 @@ import { loadProgram, type ContractArtifact } from "./programs.js";
 export const OFFER_PROGRAMS = {
     sell: loadProgram(sellOfferArtifact as ContractArtifact),
     buy: loadProgram(buyOfferArtifact as ContractArtifact),
+};
+
+/** Offers funded before the 330-sat fill rules: they can be cancelled, settled or repriced, never filled. */
+const LEGACY_PROGRAMS = {
+    sell: loadProgram(sellOfferV1Artifact as ContractArtifact),
+    buy: loadProgram(buyOfferV1Artifact as ContractArtifact),
 };
 
 export const OFFER_TEMPLATE = { sell: sellOfferArtifact.fingerprint, buy: buyOfferArtifact.fingerprint };
@@ -28,6 +36,7 @@ export interface OfferTerms {
     /** Buy offers: sats that must remain as carrier. */
     reserveSats: bigint;
     exitDelaySeconds: bigint;
+    legacy?: boolean;
 }
 
 export function offerContract(ark: ArkadeClient, t: OfferTerms): Contract {
@@ -45,9 +54,10 @@ export function offerContract(ark: ArkadeClient, t: OfferTerms): Contract {
         expiresAt: t.expiresAt,
         exit: t.exitDelaySeconds,
     };
+    const programs = t.legacy ? LEGACY_PROGRAMS : OFFER_PROGRAMS;
     return t.side === "sell"
-        ? ark.contract(OFFER_PROGRAMS.sell, common)
-        : ark.contract(OFFER_PROGRAMS.buy, { ...common, reserve: t.reserveSats });
+        ? ark.contract(programs.sell, common)
+        : ark.contract(programs.buy, { ...common, reserve: t.reserveSats });
 }
 
 /** Smallest bet or offer, in sats. */
@@ -61,6 +71,23 @@ export function offerTooSmall(t: Pick<OfferTerms, "priceSats" | "minFill">, size
     if (size * t.priceSats < MIN_BET_SATS) return `An offer must be worth at least ${MIN_BET_SATS} sats`;
     if (t.minFill * t.priceSats < MIN_BET_SATS) return `Min fill must be worth at least ${MIN_BET_SATS} sats (${minFillFor(t.priceSats)} shares at this price)`;
     return undefined;
+}
+
+/** A buy offer left with `left` sats of budget closes to its maker: no further legal fill fits. */
+export const buyCloses = (t: Pick<OfferTerms, "priceSats" | "minFill">, left: bigint) => left < t.minFill * t.priceSats || left < MIN_BET_SATS;
+
+/**
+ * `fill` in sell_offer.ark / buy_offer.ark: whether a fill of `qty` passes, given the units a sell offer holds
+ * or the value of a buy offer's coin.
+ */
+export function fillAllowed(t: Pick<OfferTerms, "side" | "priceSats" | "minFill" | "reserveSats" | "legacy">, held: { units: bigint; value: bigint }, qty: bigint): boolean {
+    if (t.legacy || qty <= 0n || qty * t.priceSats < MIN_BET_SATS) return false;
+    if (t.side === "sell") {
+        const rest = held.units - qty;
+        return rest >= 0n && (qty >= t.minFill || rest === 0n) && (rest === 0n || rest * t.priceSats >= MIN_BET_SATS);
+    }
+    const left = held.value - qty * t.priceSats - t.reserveSats;
+    return left >= 0n && (qty >= t.minFill || buyCloses(t, left));
 }
 
 /** Sats a taker pays (sell side) or receives (buy side) for `qty` units. */

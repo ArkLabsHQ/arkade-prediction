@@ -111,6 +111,8 @@ export interface OfferTermsJson {
     expiresAtUnix: string;
     reserveSats: string;
     exitDelaySeconds: string;
+    /** Funded under the pre-330-sat offer contracts (see OfferTerms.legacy). */
+    legacy?: boolean;
 }
 
 export interface CoinJson {
@@ -254,6 +256,7 @@ export function offerTermsFromJson(t: OfferTermsJson): OfferTerms {
         expiresAt: big(t.expiresAtUnix),
         reserveSats: big(t.reserveSats),
         exitDelaySeconds: big(t.exitDelaySeconds),
+        ...(t.legacy ? { legacy: true } : {}),
     };
 }
 
@@ -268,6 +271,7 @@ export function offerTermsToJson(t: OfferTerms): OfferTermsJson {
         expiresAtUnix: t.expiresAt.toString(),
         reserveSats: t.reserveSats.toString(),
         exitDelaySeconds: t.exitDelaySeconds.toString(),
+        ...(t.legacy ? { legacy: true } : {}),
     };
 }
 

@@ -12,6 +12,7 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
 FROM deps AS build
 COPY tsconfig.json vite.config.ts index.html ./
 COPY contracts/artifacts ./contracts/artifacts
+COPY contracts/legacy ./contracts/legacy
 COPY src ./src
 RUN pnpm exec tsc --noEmit -p . && pnpm run build
 

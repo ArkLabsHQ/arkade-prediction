@@ -11,7 +11,7 @@ import { marketContracts, oracleSlots, PRICE_SIGNER_SLOTS, type PriceTerms, type
 import { REDSTONE_PRIMARY_SIGNERS, feedIdBytes, latestPackages, packageSignerKey, priceReport } from "../core/redstone.js";
 import { storedRound } from "./rounds.js";
 import { sha256 } from "@noble/hashes/sha2.js";
-import { MIN_BET_SATS, minFillFor, offerContract } from "../core/offers.js";
+import { MIN_BET_SATS, fillAllowed, minFillFor, offerContract, type OfferTerms } from "../core/offers.js";
 import { renewCovenantVtxos, type RenewTarget } from "../core/renewal.js";
 import { coinFromJson, offerTermsFromJson, offerTermsToJson, termsToJson, type CoinJson, type OfferTermsJson } from "../shared/api.js";
 import { all, now, run, type Db } from "./db.js";
@@ -177,7 +177,8 @@ export class Keeper {
             const target = lpAsks(JSON.parse(m.source_snapshot).referencePrices, JSON.parse(m.outcomes) as string[], terms.unitSats, none)[o.outcome as "yes" | "no"];
             const price = BigInt((JSON.parse(o.terms) as OfferTermsJson).priceSats);
             const gap = target > price ? target - price : price - target;
-            if (target === 0n || gap * 10_000n < terms.unitSats * REPRICE_BPS || BigInt(o.remaining) * target < MIN_BET_SATS) continue;
+            const legacy = !!(JSON.parse(o.terms) as OfferTermsJson).legacy;
+            if (target === 0n || (!legacy && gap * 10_000n < terms.unitSats * REPRICE_BPS) || BigInt(o.remaining) * target < MIN_BET_SATS) continue;
             this.d.wf.enqueue(`reprice:${o.id}`, "lp-reprice", o.market_id, { offerId: o.id, price: target.toString() });
         }
     }
@@ -605,6 +606,7 @@ interface Bid {
     reserve: bigint;
     value: bigint;
     remaining: bigint;
+    terms: OfferTerms;
 }
 
 function asBid(o: { id: string; outcome: string; terms: string; coin: string | null; remaining: string }): Bid {
@@ -612,15 +614,11 @@ function asBid(o: { id: string; outcome: string; terms: string; coin: string | n
     const c: CoinJson = JSON.parse(o.coin!);
     return {
         id: o.id, outcome: o.outcome, txid: c.txid, price: BigInt(t.priceSats), minFill: BigInt(t.minFill),
-        reserve: BigInt(t.reserveSats), value: BigInt(c.valueSats), remaining: BigInt(o.remaining),
+        reserve: BigInt(t.reserveSats), value: BigInt(c.valueSats), remaining: BigInt(o.remaining), terms: offerTermsFromJson(t),
     };
 }
 
-/** `fill` in buy_offer.ark: the budget left must stay positive, and min fill is waived only for the last fill. */
-function bidTakes(b: Bid, qty: bigint): boolean {
-    const left = b.value - qty * b.price - b.reserve;
-    return qty > 0n && left >= 0n && (qty >= b.minFill || left < b.minFill * b.price);
-}
+const bidTakes = (b: Bid, qty: bigint) => fillAllowed(b.terms, { units: 0n, value: b.value }, qty);
 
 /** The best-priced pair can be unfillable (min fill above what the other side absorbs), which stalled matching. */
 function bestMintMatch(bids: Bid[], unitSats: bigint, room: bigint): { yes: Bid; no: Bid; qty: bigint } | undefined {

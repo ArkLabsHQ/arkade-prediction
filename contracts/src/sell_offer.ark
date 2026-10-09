@@ -12,11 +12,14 @@ contract SellOffer(
   int exit
 ) {
   // The fill that sells the last unit pays the maker directly instead of leaving an empty offer.
+  // Every fill is worth at least 330 sats (dust) and never leaves a remainder worth less.
   function fill(int qty) {
     int i = this.activeInputIndex;
     int remaining = tx.inputs[i].assets.lookup(assetTxid, assetGidx);
     require(qty > 0 && qty <= remaining, "qty");
     require(qty >= minFill || qty == remaining, "below min fill");
+    require(qty * price >= 330, "below min bet");
+    require(qty == remaining || (remaining - qty) * price >= 330, "dust remainder");
     require(expiresAt == 0 || !checkTime(expiresAt), "expired");
     require(tx.outputs[i].witnessVersion == 1, "output version");
     require(tx.outputs[i].value >= tx.input.current.value + qty * price, "proceeds");

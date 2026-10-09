@@ -12,7 +12,8 @@ contract BuyOffer(
   int reserve,
   int exit
 ) {
-  // The fill that leaves less than one unit of budget pays the maker directly.
+  // Every fill spends at least 330 sats (dust). The fill that leaves less budget than the next legal fill
+  // (min fill, and at least 330 sats) pays the maker directly.
   function fill(int qty) {
     int i = this.activeInputIndex;
     int spend = qty * price;
@@ -23,13 +24,14 @@ contract BuyOffer(
     }
     require(qty > 0 && left >= 0, "qty");
     require(expiresAt == 0 || !checkTime(expiresAt), "expired");
-    require(qty >= minFill || left < minFill * price, "below min fill");
+    require(spend >= 330, "below min bet");
+    require(qty >= minFill || left < minFill * price || left < 330, "below min fill");
     require(tx.outputs[i].witnessVersion == 1, "output version");
     require(tx.outputs[i].value >= tx.input.current.value - spend, "overspend");
     require(tx.outputs[i].assets.length == 1 && tx.outputs[i].assets.lookup(assetTxid, assetGidx) == held + qty, "delivery");
     require(
-      (left < price && tx.outputs[i].scriptPubKey == makerProgram) ||
-        (left >= price && tx.outputs[i].scriptPubKey == tx.input.current.scriptPubKey),
+      ((left < minFill * price || left < 330) && tx.outputs[i].scriptPubKey == makerProgram) ||
+        (left >= minFill * price && left >= 330 && tx.outputs[i].scriptPubKey == tx.input.current.scriptPubKey),
       "continuation"
     );
   }

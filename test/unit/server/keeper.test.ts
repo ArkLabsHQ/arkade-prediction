@@ -234,10 +234,14 @@ describe("LP repricing", () => {
         ask("close", "pm", "no", 830n);
         ask("other", "pm", "yes", 550n, P2TR("cc"));
         ask("customAsk", "custom", "yes", 550n);
+        ask("legacy", "pm", "no", 830n);
+        run(h.db, "UPDATE offers SET terms = json_set(terms, '$.legacy', json('true')) WHERE id = 'legacy:0'");
 
         await inner(h.keeper).plan();
         const reprices = h.wf.list({}).filter((w) => w.kind === "lp-reprice");
-        expect(reprices.map((w) => [w.id, w.payload.price])).toEqual([["reprice:drifted:0", "220"]]);
+        // A legacy ask moves onto the current contracts even when its price has not drifted.
+        expect(reprices.map((w) => w.id).sort()).toEqual(["reprice:drifted:0", "reprice:legacy:0"]);
+        expect(reprices.find((w) => w.id === "reprice:drifted:0")!.payload.price).toBe("220");
     });
 });
 

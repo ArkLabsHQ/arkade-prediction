@@ -13,7 +13,7 @@ import {
 } from "./arkadeTx.js";
 import { assetIdOf } from "./assets.js";
 import { genesisPacket, marketContracts, type ArkadeClient, type Contract, type MarketAssets, type VaultTerms } from "./market.js";
-import { MIN_BET_SATS, offerContract, offerTooSmall, type OfferTerms } from "./offers.js";
+import { MIN_BET_SATS, buyCloses, fillAllowed, offerContract, offerTooSmall, type OfferTerms } from "./offers.js";
 import { BINARY_VECTORS, redemptionPayout, type BinaryOutcome } from "./payout.js";
 
 export const CARRIER_SATS = DUST_SATS;
@@ -400,6 +400,7 @@ function legOutput(ctx: Ctx, leg: Leg): OutputSpec {
     const { terms, coin } = leg.offer;
     const value = BigInt(coin.value);
     const held = amountOf(coin.assets, terms.assetId);
+    if (!fillAllowed(terms, { units: held, value }, leg.qty)) throw new Error(`offer refuses a fill of ${leg.qty}`);
     const offerScript = () => offerContract(ctx.ark, terms).pkScript;
     if (terms.side === "sell") {
         const paid = leg.qty * terms.priceSats;
@@ -413,7 +414,7 @@ function legOutput(ctx: Ctx, leg: Leg): OutputSpec {
     const left = value - spend - terms.reserveSats;
     if (left < 0n) throw new Error("fill exceeds offer budget");
     const assets = [{ assetId: terms.assetId, amount: held + leg.qty }];
-    return left < terms.priceSats
+    return buyCloses(terms, left)
         ? { script: terms.makerScript, amount: value - spend, assets }
         : { script: offerScript(), amount: value - spend, assets };
 }

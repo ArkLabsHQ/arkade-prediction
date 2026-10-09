@@ -65,6 +65,39 @@ describe("funded standing offers", () => {
         expect((await coinAt(tA.makerScript, "lp proceeds", fill2.txid)).value).toBe(Number(CARRIER + 6000n));
         expect(await assetBalance(carol!, m.assets.yes)).toBe(7n);
 
+        // 330-sat rules: sell offer D (6 YES @ 200) refuses a sub-330 fill and a fill leaving a sub-330 remainder.
+        const tD = await terms(lp!, { side: "sell", assetId: m.assets.yes, priceSats: 200n });
+        const D = offerContract(ark, tD);
+        const dCoin = await coinAt(D.pkScript, "offer D", await walletSend(ark, lp!, [{ script: D.pkScript, amount: CARRIER, assets: [{ assetId: m.assets.yes, amount: 6n }] }]));
+        const takeD = async (qty: bigint) => {
+            const tin = await walletInputs(bob!, (c) => !c.assets?.length);
+            return send([{ kind: "covenant", coin: dCoin, contract: D, fn: "fill", args: { qty } }, ...tin], [
+                { script: D.pkScript, amount: CARRIER + qty * 200n, assets: [{ assetId: m.assets.yes, amount: 6n - qty }] },
+                { script: await scriptOf(bob!), amount: CARRIER, assets: [{ assetId: m.assets.yes, amount: qty }] },
+                { script: await scriptOf(bob!), amount: sumValue(tin) - qty * 200n - CARRIER },
+            ], bob);
+        };
+        await expectCovenantRejection(takeD(1n), "fill under 330 sats");
+        await expectCovenantRejection(takeD(5n), "remainder under 330 sats");
+        await takeD(2n);
+
+        // Buy offer H (Frank: NO @ 100, budget 1000): a fill leaving 200 sats of budget must close to the maker.
+        const tH = await terms(frank!, { side: "buy", assetId: m.assets.no, priceSats: 100n });
+        const H = offerContract(ark, tH);
+        const hCoin = await coinAt(H.pkScript, "offer H", await walletSend(ark, frank!, [{ script: H.pkScript, amount: 1000n + CARRIER }]));
+        const sellIntoH = async (qty: bigint, to: Uint8Array) => {
+            const lin = await walletInputs(lp!, (c) => !!c.assets?.length);
+            const held = (id: string) => lin.reduce((s, i) => s + (i.coin.assets ?? []).filter((a) => a.assetId === id).reduce((t, a) => t + a.amount, 0n), 0n);
+            const rest = [{ assetId: m.assets.no, amount: held(m.assets.no) - qty }, { assetId: m.assets.yes, amount: held(m.assets.yes) }].filter((a) => a.amount > 0n);
+            return send([{ kind: "covenant", coin: hCoin, contract: H, fn: "fill", args: { qty } }, ...lin], [
+                { script: to, amount: BigInt(hCoin.value) - qty * 100n, assets: [{ assetId: m.assets.no, amount: qty }] },
+                { script: await scriptOf(lp!), amount: sumValue(lin) + qty * 100n, assets: rest },
+            ], lp);
+        };
+        await expectCovenantRejection(sellIntoH(3n, H.pkScript), "bid fill under 330 sats");
+        await expectCovenantRejection(sellIntoH(8n, H.pkScript), "bid kept open with 200 sats of budget");
+        await sellIntoH(8n, tH.makerScript);
+
         // Buy offer B (Dave): NO @ 350, budget 3500. Dave goes offline; the LP sells 4 NO into it.
         const tB = await terms(dave!, { side: "buy", assetId: m.assets.no, priceSats: 350n });
         const B = offerContract(ark, tB);

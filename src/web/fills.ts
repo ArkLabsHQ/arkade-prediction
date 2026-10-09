@@ -1,3 +1,4 @@
+import { fillAllowed, minFillFor } from "../core/offers.js";
 import type { OfferJson } from "../shared/api.js";
 
 export interface Leg {
@@ -15,26 +16,30 @@ export interface Plan {
     depth: bigint;
 }
 
-/** Open, funded, unexpired (30 s margin for emulator clock skew) and not the taker's own. */
+/** Open, current-contract, funded, unexpired (30 s margin for emulator clock skew) and not the taker's own. */
 export function fillable(o: OfferJson, nowUnix: number, takerScript?: string): boolean {
     const exp = BigInt(o.terms.expiresAtUnix);
-    return o.status === "open" && o.coin !== null && BigInt(o.remaining) > 0n
+    return o.status === "open" && !o.terms.legacy && o.coin !== null && BigInt(o.remaining) > 0n
         && (exp === 0n || exp > BigInt(nowUnix + 30)) && o.terms.makerScript !== takerScript;
 }
 
-/** min(want, remaining) if the SellOffer/BuyOffer covenant accepts that fill, else 0n. */
+/** The largest fill up to `want` the SellOffer/BuyOffer covenant accepts, else 0n. */
 export function legalTake(o: OfferJson, want: bigint): bigint {
-    const t = o.terms;
+    const t = {
+        side: o.terms.side, priceSats: BigInt(o.terms.priceSats), minFill: BigInt(o.terms.minFill),
+        reserveSats: BigInt(o.terms.reserveSats), legacy: o.terms.legacy,
+    };
     const remaining = BigInt(o.remaining);
-    const min = BigInt(t.minFill);
-    const price = BigInt(t.priceSats);
+    const held = {
+        units: remaining,
+        value: o.coin ? BigInt(o.coin.valueSats) : remaining * t.priceSats + t.reserveSats,
+    };
     const q = want < remaining ? want : remaining;
     if (q <= 0n) return 0n;
-    if (t.side === "sell") return q >= min || q === remaining ? q : 0n;
-    const reserve = BigInt(t.reserveSats);
-    const value = o.coin ? BigInt(o.coin.valueSats) : remaining * price + reserve;
-    const left = value - reserve - q * price;
-    return left >= 0n && (q >= min || left < min * price) ? q : 0n;
+    if (fillAllowed(t, held, q)) return q;
+    // A sell fill that would leave under 330 sats behind can shrink to leave exactly enough.
+    const shrunk = remaining - minFillFor(t.priceSats);
+    return t.side === "sell" && shrunk < q && fillAllowed(t, held, shrunk) ? shrunk : 0n;
 }
 
 /** Buying walks asks cheapest first, selling walks bids richest first. Never overfills, never invents a price. */

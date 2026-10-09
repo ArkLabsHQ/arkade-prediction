@@ -190,6 +190,9 @@ Each entry: decision, reason, rejected alternatives. Newest last.
     output under `DUST_SATS` (330, the operator's `dust`). Change, carriers, reserves and match surplus already
     stay at or above it; the guard makes that a rule rather than a property of each builder.
     Bets and offers have the same floor, `MIN_BET_SATS`: a fill must be worth at least 330 sats, and a new offer
-    must be worth that in total and per minimum fill, so its min fill defaults to `ceil(330 / price)`. The
-    covenants still let the last remainder of an offer go below its min fill; a taker can only take it alongside
-    other legs that bring the bet to 330. An LP ask whose leftover is under 330 at the new price is not repriced.
+    must be worth that in total and per minimum fill, so its min fill defaults to `ceil(330 / price)`. The offer
+    covenants enforce it too: every fill moves at least 330 sats, a sell fill takes all or leaves at least 330
+    sats of units, and a buy offer closes to its maker once its budget is under max(330, min fill). Offers funded
+    under the earlier contracts are marked `legacy` (migration 5): never filled or quoted, only cancelled,
+    settled or repriced onto the new contracts. An LP ask whose leftover is under 330 at the new price is not
+    repriced.
