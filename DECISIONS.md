@@ -130,3 +130,6 @@ Each entry: decision, reason, rejected alternatives. Newest last.
     can change. A `negRiskAdapter` key is added to the hashed protocol only for those markets, so no existing
     `versionHash` moves. Discovery is ordered by 24-hour volume, and the LP's opening asks are the source's
     reference price plus 2% per side (fixed asks remain the fallback, and both legs must sum above the unit).
+    Sports markets close at Polymarket's `endDate`, which is the game start (`gameStartTime`); Polymarket clears
+    its own book then (`clearBookOnStart`), and our LP never reprices, so in-play trading would only let informed
+    takers drain it. Resolution still follows the game, from the finalized CTF payout.
