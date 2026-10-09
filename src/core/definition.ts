@@ -1,7 +1,7 @@
 import { hex } from "@scure/base";
 import { bindingHash, type MarketBinding } from "./attestation.js";
 import { canonicalJson, sha256Hex } from "./encoding.js";
-import { TEMPLATE, type MarketAssets } from "./market.js";
+import { templateFor, type MarketAssets } from "./market.js";
 
 /** Immutable terms a market is funded under. Source identity is included for imported markets. */
 export interface MarketDefinition {
@@ -36,7 +36,7 @@ export function marketBinding(b: BindingInput): MarketBinding {
     return {
         schema: 1,
         deployment: { network: b.network, arkSigner: hex.encode(b.arkSigner), emulatorSigner: hex.encode(b.emulatorSigner) },
-        template: TEMPLATE,
+        template: templateFor(b.oracleKeys),
         marketId: b.marketId,
         definitionHash: definitionHash(b.definition),
         collateral: { kind: "BTC", unitSats: b.unitSats },

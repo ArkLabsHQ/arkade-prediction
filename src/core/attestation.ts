@@ -1,4 +1,5 @@
-import { schnorr } from "@noble/curves/secp256k1.js";
+import { p256 } from "@noble/curves/nist.js";
+import { schnorr, secp256k1 } from "@noble/curves/secp256k1.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { BINARY_VECTORS, assertVector, type BinaryOutcome, type PayoutVector } from "./payout.js";
 import { bytesOf, concatBytes, num2bin, taggedJsonHash } from "./encoding.js";
@@ -47,13 +48,38 @@ export function outcomeOfVector(v: PayoutVector): BinaryOutcome {
     throw new Error("vector is not a supported binary payout vector");
 }
 
-export function signAttestation(privateKey: Uint8Array, message: Uint8Array): Uint8Array {
-    return schnorr.sign(message, privateKey);
+/**
+ * Attestor key encodings the emulator's OP_CHECKSIGFROMSTACK accepts: 32-byte x-only (BIP340 Schnorr), or a
+ * 0x10 (ECDSA/secp256k1) / 0x11 (ECDSA/P-256) prefix plus a 33-byte compressed key. ECDSA signs the 32-byte
+ * message as given (no prehash) and is 64-byte compact r||s.
+ */
+export type AttestorScheme = "schnorr" | "ecdsa-secp256k1" | "ecdsa-p256";
+const ECDSA = { "ecdsa-secp256k1": { prefix: 0x10, curve: secp256k1 }, "ecdsa-p256": { prefix: 0x11, curve: p256 } } as const;
+
+export function attestorScheme(key: Uint8Array): AttestorScheme | undefined {
+    if (key.length === 32) return "schnorr";
+    if (key.length !== 34) return undefined;
+    return (Object.keys(ECDSA) as (keyof typeof ECDSA)[]).find((s) => ECDSA[s].prefix === key[0]);
 }
 
-export function verifyAttestation(signature: Uint8Array, xOnlyKey: Uint8Array, message: Uint8Array): boolean {
+export const isAttestorKeyHex = (k: string) => /^([0-9a-f]{64}|1[01][0-9a-f]{66})$/.test(k);
+
+export function attestorPublicKey(scheme: AttestorScheme, privateKey: Uint8Array): Uint8Array {
+    if (scheme === "schnorr") return schnorr.getPublicKey(privateKey);
+    return Uint8Array.from([ECDSA[scheme].prefix, ...ECDSA[scheme].curve.getPublicKey(privateKey, true)]);
+}
+
+export function signAttestation(privateKey: Uint8Array, message: Uint8Array, scheme: AttestorScheme = "schnorr"): Uint8Array {
+    if (scheme === "schnorr") return schnorr.sign(message, privateKey);
+    return ECDSA[scheme].curve.sign(message, privateKey, { prehash: false });
+}
+
+export function verifyAttestation(signature: Uint8Array, key: Uint8Array, message: Uint8Array): boolean {
     try {
-        return schnorr.verify(signature, message, xOnlyKey);
+        const scheme = attestorScheme(key);
+        if (scheme === "schnorr") return schnorr.verify(signature, message, key);
+        // High-S is accepted, as the emulator does: KMS and HSM signers do not normalise S.
+        return !!scheme && ECDSA[scheme].curve.verify(signature, message, key.slice(1), { prehash: false, lowS: false });
     } catch {
         return false;
     }

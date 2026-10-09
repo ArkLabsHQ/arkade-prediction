@@ -2,11 +2,10 @@ import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
-import { schnorr } from "@noble/curves/secp256k1.js";
 import { hex } from "@scure/base";
 import { RestArkProvider, networks, resolveEmulatorPubkey } from "@arkade-os/sdk";
 import { defaultEndpoints } from "../core/endpoints.js";
-import { attestationMessage, evidenceDigest, outcomeOfVector, signAttestation } from "../core/attestation.js";
+import { attestationMessage, attestorPublicKey, evidenceDigest, outcomeOfVector, signAttestation, type AttestorScheme } from "../core/attestation.js";
 import { bindingOf, type MarketDefinition } from "../core/definition.js";
 import type { MarketAssets } from "../core/market.js";
 import { attestorSetProblem } from "./request.js";
@@ -46,7 +45,9 @@ const pins = {
 };
 if (!/^[0-9a-f]{64}$/.test(pins.arkSigner)) throw new Error("set ARK_SERVER_URL (or ARK_SIGNER_XONLY) so the attestor knows the operator key");
 const epoch = Number(env.ORACLE_EPOCH ?? 1);
-const pubkey = hex.encode(schnorr.getPublicKey(hex.decode(secret)));
+const scheme = (env.ORACLE_KEY_SCHEME || "schnorr") as AttestorScheme;
+if (!["schnorr", "ecdsa-secp256k1", "ecdsa-p256"].includes(scheme)) throw new Error("ORACLE_KEY_SCHEME must be schnorr, ecdsa-secp256k1 or ecdsa-p256");
+const pubkey = hex.encode(attestorPublicKey(scheme, hex.decode(secret)));
 const dataDir = env.ORACLE_DATA_DIR ?? "/data/oracle";
 mkdirSync(dataDir, { recursive: true });
 const rpcUrls = (env.POLYGON_RPC_URLS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
@@ -99,7 +100,7 @@ app.post("/attest", async (c) => {
     });
     const evidenceDoc = evidenceRecord(live, evidence);
     const digest = evidenceDigest(evidenceDoc);
-    const signature = signAttestation(hex.decode(secret), attestationMessage(binding, digest, vector));
+    const signature = signAttestation(hex.decode(secret), attestationMessage(binding, digest, vector), scheme);
     const cert: CertificateJson = {
         outcome, numerators: vector.numerators.map(String), denominator: vector.denominator.toString(), evidenceDigest: hex.encode(digest),
         signature: hex.encode(signature), signer: pubkey,

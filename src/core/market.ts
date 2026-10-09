@@ -1,13 +1,16 @@
 import { arkade, asset } from "@arkade-os/sdk";
 import { hex } from "@scure/base";
 import marketVaultArtifact from "../../contracts/artifacts/market_vault.json" with { type: "json" };
+import marketVaultAnyKeyArtifact from "../../contracts/artifacts/market_vault_anykey.json" with { type: "json" };
 import resolvedVaultArtifact from "../../contracts/artifacts/resolved_vault.json" with { type: "json" };
 import { assetScriptArgs } from "./assets.js";
+import { attestorScheme } from "./attestation.js";
 import { BINARY_VECTORS, type BinaryOutcome } from "./payout.js";
 import { loadProgram, type ContractArtifact } from "./programs.js";
 
 export const PROGRAMS = {
     marketVault: loadProgram(marketVaultArtifact as ContractArtifact),
+    marketVaultAnyKey: loadProgram(marketVaultAnyKeyArtifact as ContractArtifact),
     resolvedVault: loadProgram(resolvedVaultArtifact as ContractArtifact),
 };
 
@@ -15,6 +18,11 @@ export const TEMPLATE = {
     marketVault: marketVaultArtifact.fingerprint,
     resolvedVault: resolvedVaultArtifact.fingerprint,
 };
+
+/** All-Schnorr attestor sets keep the original vault, so existing markets are unchanged; ECDSA keys need the bytes[3] variant. */
+const needsAnyKey = (keys: (Uint8Array | string)[]) => keys.some((k) => (typeof k === "string" ? k.length !== 64 : k.length !== 32));
+export const templateFor = (keys: (Uint8Array | string)[]) =>
+    needsAnyKey(keys) ? { ...TEMPLATE, marketVault: marketVaultAnyKeyArtifact.fingerprint } : TEMPLATE;
 
 /** BIP341 NUMS point H: no known discrete log, so a leaf locked to it can never be signed. */
 export const NUMS_KEY = hex.decode("50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0");
@@ -47,7 +55,7 @@ export const ORACLE_SLOTS = 3;
  */
 export function oracleSlots(keys: Uint8Array[], threshold: number): Uint8Array[] {
     if (keys.length === 0 || keys.length > ORACLE_SLOTS) throw new Error(`1 to ${ORACLE_SLOTS} attestor keys`);
-    if (keys.some((k) => k.length !== 32)) throw new Error("attestor keys are 32-byte x-only keys");
+    if (keys.some((k) => !attestorScheme(k))) throw new Error("attestor keys are 32-byte x-only or 34-byte 0x10/0x11 ECDSA keys");
     if (!Number.isInteger(threshold) || threshold < 1 || threshold > ORACLE_SLOTS) throw new Error(`threshold must be 1..${ORACLE_SLOTS}`);
     const distinct = new Set(keys.map((k) => hex.encode(k))).size;
     if (threshold > 1 && distinct !== ORACLE_SLOTS) throw new Error(`a threshold above 1 needs ${ORACLE_SLOTS} distinct attestor keys`);
@@ -103,7 +111,7 @@ export function marketContracts(ark: ArkadeClient, terms: VaultTerms) {
         no: resolvedVault(ark, terms, "no"),
         invalid: resolvedVault(ark, terms, "invalid"),
     };
-    const vault = ark.contract(PROGRAMS.marketVault, {
+    const vault = ark.contract(needsAnyKey(oracles) ? PROGRAMS.marketVaultAnyKey : PROGRAMS.marketVault, {
         ...assetArgs(terms.assets),
         unit: terms.unitSats,
         capValue: terms.capSats,

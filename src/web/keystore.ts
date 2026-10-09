@@ -1,4 +1,6 @@
-import { schnorr } from "@noble/curves/secp256k1.js";
+import { p256 } from "@noble/curves/nist.js";
+import { schnorr, secp256k1 } from "@noble/curves/secp256k1.js";
+import { isAttestorKeyHex } from "../core/attestation.js";
 import { base64, hex } from "@scure/base";
 
 const STORAGE_KEY = "apm.keystore.v1";
@@ -87,10 +89,12 @@ export function forgetKeystore(): void {
     localStorage.removeItem(STORAGE_KEY);
 }
 
-export function isXOnlyKey(k: string): boolean {
-    if (!/^[0-9a-f]{64}$/.test(k)) return false;
+/** A key the vault's attestor slots accept, and a valid point on its curve. */
+export function isAttestorKey(k: string): boolean {
+    if (!isAttestorKeyHex(k)) return false;
     try {
-        schnorr.utils.lift_x(BigInt(`0x${k}`));
+        if (k.length === 64) schnorr.utils.lift_x(BigInt(`0x${k}`));
+        else (k.startsWith("10") ? secp256k1 : p256).Point.fromHex(k.slice(2));
         return true;
     } catch {
         return false;

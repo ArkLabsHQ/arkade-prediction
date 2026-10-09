@@ -1,4 +1,5 @@
 import { hex } from "@scure/base";
+import { isAttestorKeyHex } from "../core/attestation.js";
 import { ORACLE_SLOTS, oracleSlots } from "../core/market.js";
 
 /** Why this attestor must refuse the request's attestor set or block (undefined if it may proceed). */
@@ -8,8 +9,8 @@ export function attestorSetProblem(
 ): { code: string; error: string } | undefined {
     const keys = Array.isArray(req.oracle?.keys) ? (req.oracle.keys as unknown[]) : [];
     try {
-        if (keys.length !== ORACLE_SLOTS || !keys.every((k) => typeof k === "string" && /^[0-9a-f]{64}$/.test(k))) {
-            throw new Error(`${ORACLE_SLOTS} 32-byte attestor slots expected`);
+        if (keys.length !== ORACLE_SLOTS || !keys.every((k) => typeof k === "string" && isAttestorKeyHex(k))) {
+            throw new Error(`${ORACLE_SLOTS} attestor slots expected (x-only or 0x10/0x11 ECDSA keys)`);
         }
         oracleSlots((keys as string[]).map((k) => hex.decode(k)), Number(req.oracle?.threshold));
     } catch (err) {

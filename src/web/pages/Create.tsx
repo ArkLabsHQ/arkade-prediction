@@ -6,7 +6,7 @@ import { enc } from "../api.js";
 import { MAX_SETS, VAULT_BASE_SATS, clearDraft, loadDraft, runCreate, saveDraft, type Chain, type CreateDraft, type Session } from "../chain.js";
 import { useApp } from "../ctx.js";
 import { fromUnix, n, sats, when } from "../format.js";
-import { isXOnlyKey } from "../keystore.js";
+import { isAttestorKey } from "../keystore.js";
 import { ActionStatus, Copy, LockedNotice, Panel, Txid, navigate, useAction } from "../ui.js";
 
 // The server only checks these at registration, after the vault is funded, so they are enforced here first.
@@ -109,7 +109,7 @@ function Form({ session, onStart }: { session: Session; onStart(d: CreateDraft):
     if (category.trim().length > MAX_LABEL) problems.push(`Category: at most ${MAX_LABEL} characters`);
     if (!(closeUnix >= now + MIN_LEAD_SECONDS && closeUnix <= now + MAX_HORIZON_SECONDS)) problems.push("Close time: between 5 minutes and 30 days from now");
     if (!(timeoutUnix > closeUnix && timeoutUnix <= closeUnix + MAX_TIMEOUT_AFTER_CLOSE_SECONDS)) problems.push("Timeout: after the close time and at most 365 days after it");
-    if (mode === "paste" && !isXOnlyKey(oracleKey)) problems.push("Oracle: paste a valid 32-byte x-only public key (64 hex characters)");
+    if (mode === "paste" && !isAttestorKey(oracleKey)) problems.push("Oracle: paste an x-only key (64 hex) or a 0x10/0x11 ECDSA key (68 hex: secp256k1 or P-256)");
     if (holdings && holdings.plainSats < lock + CARRIER_SATS) problems.push(`Funds: needs ${sats(lock + CARRIER_SATS)} in spendable coins; you have ${sats(holdings.plainSats)}`);
 
     const start = () => onStart({
@@ -171,7 +171,7 @@ function Form({ session, onStart }: { session: Session; onStart(d: CreateDraft):
                 </fieldset>
                 {mode === "paste" && (
                     <label className="field">
-                        <span>Oracle public key (x-only, hex)</span>
+                        <span>Oracle public key (hex: x-only, or ECDSA secp256k1 / P-256)</span>
                         <input className="mono" autoComplete="off" spellCheck={false} value={pasted} onChange={(e) => setPasted(e.target.value)} />
                     </label>
                 )}

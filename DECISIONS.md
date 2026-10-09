@@ -138,3 +138,8 @@ Each entry: decision, reason, rejected alternatives. Newest last.
     Import skips markets whose `gameStartTime` has passed (`started`) or whose reference price is at least 0.98
     (`decided`): a halted import holds an `IMPORT_MAX_ACTIVE` slot until its close, which for sports can be a week
     after the game (Polymarket 5175509 was activated after it had already settled).
+37. **ECDSA attestor keys.** Attestor slots also take the emulator's extended keys (0x10 ECDSA/secp256k1, 0x11
+    ECDSA/P-256, each + a compressed key), so HSM, cloud-KMS or passkey attestors can sign our 32-byte attestation
+    message. The SDK checks `pubkey` parameters for 32 bytes, so such sets use `market_vault_anykey` (the vault with
+    `bytes[3] oracles`, derived by `contracts/build.mjs`); all-Schnorr sets keep the original vault byte for byte,
+    so existing markets need no migration. High-S ECDSA is accepted, as the emulator does.

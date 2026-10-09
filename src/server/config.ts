@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { schnorr } from "@noble/curves/secp256k1.js";
+import { attestorPublicKey, isAttestorKeyHex } from "../core/attestation.js";
 import { hex } from "@scure/base";
 import { defaultEndpoints } from "../core/endpoints.js";
 import { oracleSlots } from "../core/market.js";
@@ -49,7 +49,8 @@ const schema = z.object({
     DATA_DIR: z.string().default("/data"),
     ORACLE_URL: noCredentials.optional(),
     ORACLE_URLS: csv.refine((urls) => urls.every((u) => URL.canParse(u) && !new URL(u).username && !new URL(u).password), "attestor URLs must be URLs without credentials"),
-    ORACLE_PUBKEYS: csv,
+    ORACLE_PUBKEYS: csv.refine((keys) => keys.every(isAttestorKeyHex), "attestor keys are x-only (64 hex) or 0x10/0x11 ECDSA (68 hex)"),
+    ORACLE_KEY_SCHEME: z.enum(["schnorr", "ecdsa-secp256k1", "ecdsa-p256"]).default("schnorr"),
     ORACLE_THRESHOLD: int(1),
     ORACLE_EPOCH: int(1),
     POLYMARKET_ENABLED: bool,
@@ -106,7 +107,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     const attestorSecret = secret(env, "ORACLE_SECRET_KEY");
     if ((c.POLYMARKET_ENABLED || attestorSecret) && c.POLYGON_RPC_URLS.length < 2) throw new Error("POLYGON_RPC_URLS needs at least two providers");
     if (attestorSecret !== undefined && !/^[0-9a-f]{64}$/.test(attestorSecret)) throw new Error("ORACLE_SECRET_KEY must be 32-byte hex");
-    const embeddedKey = attestorSecret && hex.encode(schnorr.getPublicKey(hex.decode(attestorSecret)));
+    const embeddedKey = attestorSecret && hex.encode(attestorPublicKey(c.ORACLE_KEY_SCHEME, hex.decode(attestorSecret)));
     const oraclePubkeys = c.ORACLE_PUBKEYS.length > 0 ? c.ORACLE_PUBKEYS : embeddedKey ? [embeddedKey] : [];
     if (oraclePubkeys.length > 0) oracleSlots(oraclePubkeys.map((k) => hex.decode(k)), c.ORACLE_THRESHOLD);
     const defaults = defaultEndpoints(c.APM_NETWORK);

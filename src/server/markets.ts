@@ -1,3 +1,4 @@
+import { isAttestorKeyHex } from "../core/attestation.js";
 import { hex } from "@scure/base";
 import { AuditError, auditGenesis as auditMarketGenesis } from "../core/audit.js";
 import { bindingOf, definitionHash, type MarketDefinition } from "../core/definition.js";
@@ -114,7 +115,7 @@ export async function registerCustomMarket(d: Deps, req: CreateMarketRequest): P
     const policy = req.oracle?.policy;
     if (policy !== "external-key" && policy !== "dev-oracle") throw new HttpError(400, "oracle-policy", "unsupported oracle policy");
     const keys = Array.isArray(req.oracle.keys) ? req.oracle.keys : [];
-    if (!keys.every((k) => typeof k === "string" && /^[0-9a-f]{64}$/.test(k))) throw new HttpError(400, "oracle-key", "oracle keys must be 32-byte x-only hex");
+    if (!keys.every((k) => typeof k === "string" && isAttestorKeyHex(k))) throw new HttpError(400, "oracle-key", "oracle keys must be x-only (64 hex) or 0x10/0x11 ECDSA (68 hex)");
     if (policy === "dev-oracle" && (d.cfg.APM_NETWORK !== "regtest" || keys.some((k) => k !== d.devOracleKey))) throw new HttpError(400, "oracle-policy", "dev oracle is regtest-only and must use the server dev key");
     let slots: string[];
     try {
