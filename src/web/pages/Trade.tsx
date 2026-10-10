@@ -79,6 +79,7 @@ function Ticket({ m, chain, session, onChanged, offers }: Live & { offers?: Offe
 
     const nowUnix = Math.floor(Date.now() / 1000);
     const resting = book.filter((o) => o.terms.side === (side === "buy" ? "sell" : "buy") && fillable(o, nowUnix, session.script));
+    const otherAsks = (offers ?? []).some((o) => o.terms.assetId === assetOf(m, outcome === "yes" ? "no" : "yes") && o.terms.side === "sell" && fillable(o, nowUnix, session.script));
     // Smallest size the book fills, when the one entered falls under the 330-sat minimum or an offer's min fill.
     const minShares = plan && plan.legs.length === 0 && resting.length > 0 && qty
         ? Array.from({ length: 400 }, (_, i) => qty + BigInt(i + 1)).find((q) => planFill(book, side, q, nowUnix, session.script).qty === q) ?? null
@@ -88,6 +89,7 @@ function Ticket({ m, chain, session, onChanged, offers }: Live & { offers?: Offe
     let blocker: string | null = null;
     if (!offers) blocker = "Loading prices";
     else if (!qty) blocker = "Enter a whole number of shares";
+    else if (resting.length === 0 && side === "buy" && otherAsks) blocker = `${label} is sold out: everyone has been betting it. Set your own price below; it fills when someone takes the other side.`;
     else if (resting.length === 0) blocker = `No one is ${side === "buy" ? "offering" : "buying"} ${label} right now. The house stops quoting once an event starts; set your own price below instead.`;
     else if (!plan || plan.legs.length === 0) blocker = minShares ? `${minimum} is ${sats(MIN_BET_SATS)}: ${n(minShares)} shares at this price` : "No one is matching this many shares right now";
     else if (plan.qty < qty) blocker = `Only ${n(plan.qty)} of ${n(qty)} shares are available right now (${n(plan.depth)} on offer, some only in bigger chunks)`;

@@ -120,7 +120,8 @@ function Quotes({ m, unit }: { m: MarketJson; unit: string }) {
                             <div className="olabel">{m.outcomes[i]}</div>
                             <div className="big">{s === null ? "—" : `${s}%`}</div>
                             <div className="qline"><span className="muted">Cash out</span> <span className="bid num">{q.bid ? n(q.bid) : "—"}</span> <span className="muted">Bet</span> <span className="ask num">{q.ask ? n(q.ask) : "—"}</span></div>
-                            {!q.bid && !q.ask && <div className="muted small">No prices yet</div>}
+                            {!q.ask && m.book[o === "yes" ? "no" : "yes"].ask ? <div className="muted small">Sold out: set your own price</div>
+                                : !q.bid && !q.ask && <div className="muted small">No prices yet</div>}
                         </div>
                     );
                 })}

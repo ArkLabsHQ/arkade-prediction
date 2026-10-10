@@ -208,8 +208,9 @@ function Odd({ m, k, href }: { m: MarketJson; k: 0 | 1; href: string }) {
     const refs = m.source?.referencePrices;
     const ref = refs?.find((r) => r.outcome === label)?.price ?? (refs?.[0] && k === 1 ? String(1 - Number(refs[0].price)) : refs?.[0]?.price);
     const odds = ask && unit > 0 ? `${Math.round((Number(ask) / unit) * 100)}%` : ref ? `${Math.round(Number(ref) * 100)}%` : "—";
-    const sub = ask ? `${n(ask)} sats` : ref ? "ref · no offers" : "no offers";
-    const desc = ask ? `${label}: bet at ${n(ask)} sats, ${odds} chance` : `${label}: no offers${ref ? `, source odds ${refPct(ref)}` : ""}`;
+    const soldOut = !ask && !!m.book[k === 0 ? "no" : "yes"].ask;
+    const sub = ask ? `${n(ask)} sats` : soldOut ? "sold out" : ref ? "ref · no offers" : "no offers";
+    const desc = ask ? `${label}: bet at ${n(ask)} sats, ${odds} chance` : `${label}: ${soldOut ? "sold out" : "no offers"}${ref ? `, source odds ${refPct(ref)}` : ""}`;
     return (
         <Link to={m.status === "open" ? `${href}?o=${o}` : href} className={`odd ${k === 0 ? "a" : "b"}${ask ? "" : " dry"}`} label={desc}>
             <span className="lbl">{label}</span>
