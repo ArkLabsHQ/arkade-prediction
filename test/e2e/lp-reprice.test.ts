@@ -1,8 +1,8 @@
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import type { Ctx } from "../../src/core/actions.js";
+import { takeOffers, type Ctx } from "../../src/core/actions.js";
 import { openDb, run } from "../../src/server/db.js";
-import type { OfferJson } from "../../src/shared/api.js";
+import { coinFromJson, offerTermsFromJson, type OfferJson } from "../../src/shared/api.js";
 import { connectArkade, faucet, indexerProvider, waitFor } from "./env.js";
 import { faucetTrader, registeredMarket } from "./flows.js";
 import { network } from "./market.js";
@@ -49,5 +49,38 @@ describe("LP repricing", () => {
         }
         expect(repriced.every((o) => !first.some((f) => f.id === o.id))).toBe(true);
         console.log(`repriced ${m.marketId}: ${first.map((o) => o.terms.priceSats).join("/")} -> ${repriced.map((o) => `${o.outcome}@${o.terms.priceSats}`).join(", ")}`);
+    });
+
+    it("bids on a busy mirror so a holder can sell back without another user", { timeout: 900_000 }, async () => {
+        const ark = await connectArkade();
+        const ctx: Ctx = { ark, net: network(ark), indexer: indexerProvider };
+        const s = await startServer({ port: 37416, env: { LP_BID_SETS: "3" } });
+        servers.push(s);
+        const ov = await s.api<{ wallets: { operator: { address: string }; lp: { address: string } } }>("/api/admin/overview", { admin: true });
+        await faucet(ov.body.wallets.operator.address, 100_000);
+        await faucet(ov.body.wallets.lp.address, 100_000);
+        const alice = await faucetTrader(s, 40_000);
+        const m = await registeredMarket(s, ctx, alice, 3600);
+        const open = async () => (await s.api<{ offers: OfferJson[] }>(`/api/markets/${m.marketId}/offers?status=open`)).body.offers;
+
+        const db = openDb(join(s.dataDir, "apm.sqlite"));
+        run(db, "UPDATE markets SET kind = 'polymarket', outcomes = ?, source_snapshot = ? WHERE id = ?", JSON.stringify(["Yes", "No"]),
+            JSON.stringify({ provider: "polymarket", slug: "busy", volume24h: 50_000, referencePrices: [{ outcome: "Yes", price: "0.6" }, { outcome: "No", price: "0.4" }] }), m.marketId);
+        db.close();
+
+        const bids = await waitFor(async () => {
+            const offers = await open();
+            const quotes = offers.map((o) => `${o.terms.side}:${o.outcome}:${o.terms.priceSats}:${o.remaining}`).sort();
+            return quotes.join(",") === "buy:no:380:3,buy:yes:580:3" && offers;
+        }, { what: "LP bids", timeoutMs: 300_000, intervalMs: 3000 });
+
+        // Alice holds the seed set from opening the vault and cashes out one YES into the LP's bid.
+        const yesBid = bids.find((o) => o.outcome === "yes")!;
+        const before = (await alice.party.coins()).reduce((t, c) => t + BigInt(c.value), 0n);
+        const { notional } = await takeOffers(ctx, alice.party, [{ offer: { terms: offerTermsFromJson(yesBid.terms), coin: coinFromJson(yesBid.coin!) }, qty: 1n }], { minReceiveSats: 580n });
+        expect(notional).toBe(580n);
+        await waitFor(async () => (await alice.party.coins()).reduce((t, c) => t + BigInt(c.value), 0n) === before + 580n, { what: "sale proceeds" });
+        const after = await waitFor(async () => (await open()).find((o) => o.terms.side === "buy" && o.outcome === "yes" && o.remaining === "2"), { what: "LP bid partially filled", timeoutMs: 120_000, intervalMs: 3000 });
+        expect(after.coin!.assets).toEqual([{ assetId: m.terms.assets.yes, amount: "1" }]);
     });
 });

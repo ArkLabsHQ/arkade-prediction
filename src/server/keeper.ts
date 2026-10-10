@@ -122,6 +122,7 @@ export class Keeper {
         this.planReprices(offers, nowS);
         this.retryLpBootstraps(nowS);
         this.planLpBootstraps(nowS);
+        this.planLpBids(offers, nowS);
         await this.planOwnRedemptions(offers);
         const boxes = await this.boxCoins();
         this.planRenewals(offers, nowS, boxes);
@@ -192,17 +193,37 @@ export class Keeper {
         const lp = this.d.lp && hex.encode(this.d.lp.script);
         if (!lp) return;
         for (const o of offers) {
-            if (o.maker_script !== lp || o.side !== "sell" || !o.coin) continue;
+            if (o.maker_script !== lp || !o.coin) continue;
             const m = getMarket(this.d.db, o.market_id);
             const terms = m && marketTerms(m);
             if (!m || !terms || m.kind !== "polymarket" || m.oracle_policy === "redstone" || m.status !== "open" || m.close_at - nowS < LP_MIN_WINDOW_SECONDS || !m.source_snapshot) continue;
+            const ref = JSON.parse(m.source_snapshot).referencePrices;
+            const outcome = o.outcome as "yes" | "no";
             const none = { yes: 0n, no: 0n };
-            const target = lpAsks(JSON.parse(m.source_snapshot).referencePrices, JSON.parse(m.outcomes) as string[], terms.unitSats, none)[o.outcome as "yes" | "no"];
+            const target = o.side === "sell"
+                ? lpAsks(ref, JSON.parse(m.outcomes) as string[], terms.unitSats, none)[outcome]
+                : (lpBids(ref, JSON.parse(m.outcomes) as string[], terms.unitSats) ?? none)[outcome];
             const price = BigInt((JSON.parse(o.terms) as OfferTermsJson).priceSats);
             const gap = target > price ? target - price : price - target;
             const legacy = !!(JSON.parse(o.terms) as OfferTermsJson).legacy;
             if (target === 0n || (!legacy && gap * 10_000n < terms.unitSats * REPRICE_BPS) || BigInt(o.remaining) * target < MIN_BET_SATS) continue;
+            // Quotes move one at a time: wait for the LP's other quotes to move rather than cross them.
+            if (crossesLp(offers, lp, { id: o.id, marketId: o.market_id, outcome, side: o.side, price: target }, terms.unitSats)) continue;
             this.d.wf.enqueue(`reprice:${o.id}`, "lp-reprice", o.market_id, { offerId: o.id, price: target.toString() });
+        }
+    }
+
+    /** One bid per outcome on each wanted mirror, so holders can sell back before resolution; re-armed after a failure. */
+    private planLpBids(offers: ReturnType<typeof openOffers>, nowS: number): void {
+        const lp = this.d.lp && hex.encode(this.d.lp.script);
+        if (!lp || !(this.d.cfg.LP_BID_SETS > 0)) return;
+        for (const m of all<MarketRow>(this.d.db, "SELECT * FROM markets WHERE kind = 'polymarket' AND status = 'open' AND terms IS NOT NULL AND source_snapshot IS NOT NULL AND oracle_policy IS NOT 'redstone'")) {
+            const terms = marketTerms(m);
+            const done = this.d.wf.get(`lp:${m.id}:bids`)?.state;
+            if (!terms || (done && done !== "failed") || quotesUntil(m) - nowS < LP_MIN_WINDOW_SECONDS || !this.lpWanted(m)) continue;
+            const bids = lpBids(JSON.parse(m.source_snapshot!).referencePrices, JSON.parse(m.outcomes) as string[], terms.unitSats);
+            if (!bids || (["yes", "no"] as const).some((outcome) => crossesLp(offers, lp, { marketId: m.id, outcome, side: "buy", price: bids[outcome] }, terms.unitSats))) continue;
+            this.d.wf.enqueue(`lp:${m.id}:bids`, "lp-liquidity", m.id, { side: "buy", sets: String(this.d.cfg.LP_BID_SETS), yesBid: String(bids.yes), noBid: String(bids.no) });
         }
     }
 
@@ -456,30 +477,31 @@ export class Keeper {
         if (market.status !== "open" || until - nowS < LP_MIN_WINDOW_SECONDS) return undefined;
         const p = wf.payload as Record<string, unknown>;
         const sets = BigInt(p.sets as string);
-        if (!p.minted) {
+        const side = p.side === "buy" ? "buy" : "sell";
+        if (side === "sell" && !p.minted) {
             this.mark(wf, { step: "minted" });
             const { txid } = await mintSets(ctx, lp, terms, sets);
             this.mark(wf, { minted: txid, step: null, inputs: null, finalCheckpoints: null });
         }
         const lpKey = await lp.identity.xOnlyPublicKey();
         for (const outcome of ["yes", "no"] as const) {
-            const price = BigInt(p[`${outcome}Ask`] as string);
+            const price = BigInt(p[`${outcome}${side === "buy" ? "Bid" : "Ask"}`] as string);
             const tk = `${outcome}Terms`;
             const fk = `${outcome}FundingTxid`;
             // Same price band registerOffer enforces: a price it would reject must not fund an offer first.
             if (price <= 0n || price >= terms.unitSats || sets * price < MIN_BET_SATS || p[`${outcome}Registered`]) continue;
-            // Terms written before a failed attempt keep their expiry; re-derive them if it has gone stale and nothing is funded yet.
-            const stale = (t: unknown) => !t || BigInt((t as OfferTermsJson).expiresAtUnix) <= BigInt(nowS + LP_MIN_WINDOW_SECONDS);
+            // Terms written before a failed attempt keep their expiry and price; re-derive them if either has moved and nothing is funded yet.
+            const stale = (t: unknown) => !t || BigInt((t as OfferTermsJson).expiresAtUnix) <= BigInt(nowS + LP_MIN_WINDOW_SECONDS) || (t as OfferTermsJson).priceSats !== String(price);
             if (!p[fk] && stale(p[tk])) {
                 p[tk] = offerTermsToJson({
-                    side: "sell", maker: lpKey, makerScript: lp.script, assetId: terms.assets[outcome], priceSats: price,
+                    side, maker: lpKey, makerScript: lp.script, assetId: terms.assets[outcome], priceSats: price,
                     minFill: minFillFor(price), expiresAt: lpExpiry(quotesUntil(market), nowS), reserveSats: 330n, exitDelaySeconds: this.d.net.exitDelaySeconds,
                 });
                 this.mark(wf, { [tk]: p[tk] });
             }
             const offerTerms = offerTermsFromJson(p[tk] as OfferTermsJson);
             if (!p[fk]) {
-                await waitForAsset(lp, offerTerms.assetId, sets);
+                if (side === "sell") await waitForAsset(lp, offerTerms.assetId, sets);
                 this.mark(wf, { step: fk });
                 const { txid } = await postOffer(ctx, lp, offerTerms, sets);
                 p[fk] = txid;
@@ -496,7 +518,7 @@ export class Keeper {
         return undefined;
     }
 
-    /** Cancels one LP ask and re-posts what was left of it at the new price. */
+    /** Cancels one LP quote and re-posts what was left of it at the new price. */
     private async reprice(wf: Workflow, ctx: Ctx): Promise<string | undefined> {
         const lp = this.d.lp;
         const market = wf.marketId ? getMarket(this.d.db, wf.marketId) : undefined;
@@ -507,24 +529,26 @@ export class Keeper {
             const offer = await refreshOffer(this.d, p.offerId as string);
             // A leftover too small to re-post stays on the book at the old price rather than leave it.
             if (offer.status !== "open" || !offer.coin || BigInt(offer.remaining) * BigInt(p.price as string) < MIN_BET_SATS) return undefined;
-            this.mark(wf, { qty: offer.remaining, assetId: offerTermsFromJson(offer.terms).assetId, step: "cancelled" });
-            const { txid } = await cancelOffer(ctx, lp, { terms: offerTermsFromJson(offer.terms), coin: coinFromJson(offer.coin) });
+            const old = offerTermsFromJson(offer.terms);
+            this.mark(wf, { qty: offer.remaining, assetId: old.assetId, side: old.side, step: "cancelled" });
+            const { txid } = await cancelOffer(ctx, lp, { terms: old, coin: coinFromJson(offer.coin) });
             this.mark(wf, { cancelled: txid, step: null, inputs: null, finalCheckpoints: null });
-            Object.assign(p, { qty: offer.remaining, assetId: offerTermsFromJson(offer.terms).assetId, cancelled: txid });
+            Object.assign(p, { qty: offer.remaining, assetId: old.assetId, side: old.side, cancelled: txid });
         }
+        const side = p.side === "buy" ? "buy" : "sell";
         const nowS = Math.floor(Date.now() / 1000);
         if (market.status !== "open" || market.close_at - nowS < LP_MIN_WINDOW_SECONDS) return undefined;
         const qty = BigInt(p.qty as string);
         if (!p.funded && (!p.terms || BigInt((p.terms as OfferTermsJson).expiresAtUnix) <= BigInt(nowS + LP_MIN_WINDOW_SECONDS))) {
             p.terms = offerTermsToJson({
-                side: "sell", maker: await lp.identity.xOnlyPublicKey(), makerScript: lp.script, assetId: p.assetId as string, priceSats: BigInt(p.price as string),
+                side, maker: await lp.identity.xOnlyPublicKey(), makerScript: lp.script, assetId: p.assetId as string, priceSats: BigInt(p.price as string),
                 minFill: minFillFor(BigInt(p.price as string)), expiresAt: lpExpiry(quotesUntil(market), nowS), reserveSats: 330n, exitDelaySeconds: this.d.net.exitDelaySeconds,
             });
             this.mark(wf, { terms: p.terms });
         }
         const offerTerms = offerTermsFromJson(p.terms as OfferTermsJson);
         if (!p.funded) {
-            await waitForAsset(lp, offerTerms.assetId, qty);
+            if (side === "sell") await waitForAsset(lp, offerTerms.assetId, qty);
             this.mark(wf, { step: "funded" });
             const { txid } = await postOffer(ctx, lp, offerTerms, qty);
             p.funded = txid;
@@ -703,6 +727,34 @@ export function lpAsks(ref: { outcome: string; price: string }[] | null | undefi
     const no = ask(prices[1]!);
     // Asks summing to the unit or less would let anyone buy both legs and merge them for a profit.
     return yes + no > unit ? { yes, no } : fallback;
+}
+
+/**
+ * LP bids: the source price minus the half-spread, quoted only beside source-priced asks. Bids summing to the
+ * unit would let anyone mint a set and sell both legs to the LP, and let the keeper mint-match the LP with itself.
+ */
+export function lpBids(ref: { outcome: string; price: string }[] | null | undefined, outcomes: string[], unit: bigint): { yes: bigint; no: bigint } | undefined {
+    const asks = lpAsks(ref, outcomes, unit, { yes: 0n, no: 0n });
+    if (asks.yes === 0n) return undefined;
+    const bid = (x: string) => {
+        const v = BigInt(Math.round(Number(x) * Number(unit))) - (unit * LP_HALF_SPREAD_BPS) / 10_000n;
+        return v < 1n ? 1n : v >= unit ? unit - 1n : v;
+    };
+    const yes = bid(ref!.find((r) => r.outcome === outcomes[0])!.price);
+    const no = bid(ref!.find((r) => r.outcome === outcomes[1])!.price);
+    return yes < asks.yes && no < asks.no && yes + no < unit ? { yes, no } : undefined;
+}
+
+/** Whether `q` would cross one of the LP's own live quotes: its ask on the same outcome, or its bid on the other. */
+function crossesLp(offers: ReturnType<typeof openOffers>, lp: string, q: { id?: string; marketId: string; outcome: string; side: string; price: bigint }, unit: bigint): boolean {
+    return offers.some((o) => {
+        if (o.id === q.id || o.maker_script !== lp || o.market_id !== q.marketId || !o.coin) return false;
+        const t: OfferTermsJson = JSON.parse(o.terms);
+        if (t.legacy) return false;
+        const price = BigInt(t.priceSats);
+        if (o.outcome === q.outcome) return o.side !== q.side && (q.side === "buy" ? q.price >= price : q.price <= price);
+        return q.side === "buy" && o.side === "buy" && q.price + price >= unit;
+    });
 }
 
 type UpDownRounds = { feed: string; startAtMs: number; endAtMs: number };

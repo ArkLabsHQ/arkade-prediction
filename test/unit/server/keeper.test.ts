@@ -341,6 +341,58 @@ describe("LP busy-only bootstraps", () => {
     });
 });
 
+describe("LP bids", () => {
+    const lpScript = P2TR("bb");
+    const lp = { script: Uint8Array.from(Buffer.from(lpScript, "hex")), coins: async () => [] };
+    const cfg = (bidSets: number) => ({ APM_NETWORK: "regtest", RENEW_THRESHOLD_SECONDS: 3600, MARKET_UNIT_SATS: 1000, LP_BOOTSTRAP_SETS: 0, LP_BUSY_ONLY: true, LP_BID_SETS: bidSets });
+    const mirror = (h: ReturnType<typeof harness>, id: string, volume24h: number, yes = "0.6", no = "0.4") => {
+        insertMarket(h.db, { id });
+        run(h.db, "UPDATE markets SET kind = 'polymarket', source_snapshot = ? WHERE id = ?",
+            JSON.stringify({ provider: "polymarket", slug: id, volume24h, referencePrices: [{ outcome: "Yes", price: yes }, { outcome: "No", price: no }] }), id);
+    };
+    const quote = (h: ReturnType<typeof harness>, id: string, marketId: string, outcome: "yes" | "no", side: "buy" | "sell", priceSats: bigint) => {
+        insertBuyOffer(h.db, { id, marketId, outcome, priceSats, remaining: 3n, makerScript: lpScript });
+        if (side === "sell") run(h.db, "UPDATE offers SET side = 'sell', terms = json_set(terms, '$.side', 'sell') WHERE id = ?", `${id}:0`);
+    };
+    const kinds = (h: ReturnType<typeof harness>, kind: string) => h.wf.list({}).filter((w) => w.kind === kind);
+
+    it("bids on busy mirrors only, below the source price", async () => {
+        const h = harness({ lp, cfg: cfg(5) } as never);
+        mirror(h, "busy", 50_000);
+        mirror(h, "quiet", 10);
+        await inner(h.keeper).plan();
+        expect(kinds(h, "lp-liquidity").map((w) => [w.id, w.payload])).toEqual([["lp:busy:bids", { side: "buy", sets: "5", yesBid: "580", noBid: "380" }]]);
+    });
+
+    it("posts no bids with LP_BID_SETS=0", async () => {
+        const h = harness({ lp, cfg: cfg(0) } as never);
+        mirror(h, "busy", 50_000);
+        await inner(h.keeper).plan();
+        expect(kinds(h, "lp-liquidity")).toEqual([]);
+    });
+
+    it("holds bids that would cross the LP's own live ask", async () => {
+        const h = harness({ lp, cfg: cfg(5) } as never);
+        mirror(h, "busy", 50_000);
+        quote(h, "staleAsk", "busy", "yes", "sell", 570n);
+        await inner(h.keeper).plan();
+        expect(kinds(h, "lp-liquidity")).toEqual([]);
+    });
+
+    it("reprices drifted bids, moving first the one that keeps the LP's bids under a unit", async () => {
+        const h = harness({ lp, cfg: cfg(0) } as never);
+        mirror(h, "pm", 50_000, "0.2", "0.8");
+        quote(h, "yesBid", "pm", "yes", "buy", 50n);
+        quote(h, "noBid", "pm", "no", "buy", 900n);
+        await inner(h.keeper).plan();
+        expect(kinds(h, "lp-reprice").map((w) => [w.id, w.payload.price])).toEqual([["reprice:noBid:0", "780"]]);
+
+        run(h.db, "UPDATE offers SET status = 'cancelled' WHERE id = 'noBid:0'");
+        await inner(h.keeper).plan();
+        expect(kinds(h, "lp-reprice").map((w) => [w.id, w.payload.price]).sort()).toEqual([["reprice:noBid:0", "780"], ["reprice:yesBid:0", "180"]]);
+    });
+});
+
 describe("workflow priority", () => {
     it("runs a resolution, then an activation, ahead of a backlog of older liquidity retries", () => {
         const h = harness({});

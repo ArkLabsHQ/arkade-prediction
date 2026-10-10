@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { hex } from "@scure/base";
-import { lpAsks, lpExpiry } from "../../../src/server/keeper.js";
+import { lpAsks, lpBids, lpExpiry } from "../../../src/server/keeper.js";
 import { ASSETS, harness, insertMarket, P2TR } from "./harness.js";
 import { run } from "../../../src/server/db.js";
 import type { OfferTermsJson } from "../../../src/shared/api.js";
 
 interface PostArgs { marketId: string; terms: OfferTermsJson; fundingTxid: string }
-const calls: { mints: bigint[]; posts: { expiresAt: bigint; priceSats: bigint }[]; registers: PostArgs[] } = {
-    mints: [], posts: [], registers: [],
+const calls: { mints: bigint[]; posts: { expiresAt: bigint; priceSats: bigint; side: string; size: bigint }[]; registers: PostArgs[]; cancels: string[] } = {
+    mints: [], posts: [], registers: [], cancels: [],
 };
 let failNextRegister: string | undefined;
 
@@ -17,9 +17,13 @@ vi.mock("../../../src/core/actions.js", async (orig) => ({
         calls.mints.push(n);
         return { txid: `MINT_${n}` };
     },
-    postOffer: async (_c: unknown, _p: unknown, terms: { expiresAt: bigint; priceSats: bigint }) => {
-        calls.posts.push({ expiresAt: terms.expiresAt, priceSats: terms.priceSats });
+    postOffer: async (_c: unknown, _p: unknown, terms: { expiresAt: bigint; priceSats: bigint; side: string }, size: bigint) => {
+        calls.posts.push({ expiresAt: terms.expiresAt, priceSats: terms.priceSats, side: terms.side, size });
         return { txid: `POST_${calls.posts.length}` };
+    },
+    cancelOffer: async (_c: unknown, _p: unknown, offer: { coin: { txid: string } }) => {
+        calls.cancels.push(offer.coin.txid);
+        return { txid: "CANCEL" };
     },
 }));
 
@@ -39,6 +43,11 @@ vi.mock("../../../src/server/offers.js", async (orig) => ({
         calls.registers.push(req);
         return {};
     },
+    refreshOffer: async (_d: unknown, id: string) => ({
+        id, status: "open", remaining: "4",
+        terms: { side: "buy", maker: "11".repeat(32), makerScript: P2TR("bb"), assetId: ASSETS.yes, priceSats: "300", minFill: "2", expiresAtUnix: "0", reserveSats: "330", exitDelaySeconds: "512" },
+        coin: { txid: "BID", vout: 0, valueSats: "1530", assets: [], expiresAt: null },
+    }),
 }));
 
 const lp = {
@@ -53,6 +62,7 @@ beforeEach(() => {
     calls.mints = [];
     calls.posts = [];
     calls.registers = [];
+    calls.cancels = [];
     failNextRegister = undefined;
 });
 
@@ -131,6 +141,23 @@ describe("LP liquidity", () => {
         expect(calls.registers[0]!.terms.expiresAtUnix).toBe(String(calls.posts[0]!.expiresAt));
     });
 
+    it("bids for both outcomes without minting, locking sats behind a 330-sat reserve", async () => {
+        const h = setup(nowS() + 3600);
+        await h.keeper.execute(h.wf.enqueue("lp:m1:bids", "lp-liquidity", "m1", { side: "buy", sets: "5", yesBid: "100", noBid: "580" }));
+        expect(h.wf.get("lp:m1:bids")!.state).toBe("done");
+        expect(calls.mints).toEqual([]);
+        expect(calls.posts.map((p) => [p.side, p.priceSats, p.size])).toEqual([["buy", 100n, 5n], ["buy", 580n, 5n]]);
+        expect(calls.registers.map((r) => [r.terms.side, r.terms.minFill, r.terms.reserveSats])).toEqual([["buy", "4", "330"], ["buy", "1", "330"]]);
+    });
+
+    it("reprices an LP bid as a bid: cancels it and re-posts the shares left at the new price", async () => {
+        const h = setup(nowS() + 3600);
+        await h.keeper.execute(h.wf.enqueue("reprice:BID:0", "lp-reprice", "m1", { offerId: "BID:0", price: "180" }));
+        expect(calls.cancels).toEqual(["BID"]);
+        expect(calls.posts.map((p) => [p.side, p.priceSats, p.size])).toEqual([["buy", 180n, 4n]]);
+        expect(calls.registers[0]!.terms).toMatchObject({ side: "buy", priceSats: "180", minFill: "2", assetId: ASSETS.yes });
+    });
+
     it("treats a duplicate registration as already registered", async () => {
         const h = setup(nowS() + 3600);
         failNextRegister = "an identical live offer exists; vary the expiry";
@@ -166,5 +193,35 @@ describe("LP opening asks", () => {
         expect(lpAsks(null, ["Yes", "No"], 1000n, fixed)).toBe(fixed);
         expect(lpAsks(ref("0.5", "0.5"), ["A", "B"], 1000n, fixed)).toBe(fixed);
         expect(lpAsks(ref("0.2", "0.2"), ["Yes", "No"], 1000n, fixed)).toBe(fixed);
+    });
+});
+
+describe("LP bids", () => {
+    const ref = (yes: string, no: string) => [{ outcome: "Yes", price: yes }, { outcome: "No", price: no }];
+    const none = { yes: 0n, no: 0n };
+
+    it("quotes the source price minus the half-spread, under the LP's own asks and summing under a unit", () => {
+        expect(lpBids(ref("0.6", "0.4"), ["Yes", "No"], 1000n)).toEqual({ yes: 580n, no: 380n });
+        for (let yes = 0; yes <= 1000; yes += 5) {
+            const r = ref(String(yes / 1000), String(1 - yes / 1000));
+            const bids = lpBids(r, ["Yes", "No"], 1000n);
+            const asks = lpAsks(r, ["Yes", "No"], 1000n, none);
+            if (!bids) continue;
+            expect(bids.yes).toBeLessThan(asks.yes);
+            expect(bids.no).toBeLessThan(asks.no);
+            expect(bids.yes + bids.no).toBeLessThan(1000n);
+            expect(bids.yes >= 1n && bids.no >= 1n).toBe(true);
+        }
+    });
+
+    it("clamps a near-certain side to one sat", () => {
+        expect(lpBids(ref("0.005", "0.995"), ["Yes", "No"], 1000n)).toEqual({ yes: 1n, no: 975n });
+    });
+
+    it("quotes nothing without usable source prices, beside fallback asks, or when the bids would sum to a unit", () => {
+        expect(lpBids(null, ["Yes", "No"], 1000n)).toBeUndefined();
+        expect(lpBids(ref("0.5", "0.5"), ["A", "B"], 1000n)).toBeUndefined();
+        expect(lpBids(ref("0.6", "0.3"), ["Yes", "No"], 1000n)).toBeUndefined();
+        expect(lpBids(ref("0.55", "0.5"), ["Yes", "No"], 1000n)).toBeUndefined();
     });
 });

@@ -84,7 +84,8 @@ One container runs the UI/API, the keeper and a local 1-of-1 attestor (started b
 6. **Deploy** and check `GET /api/health/ready`.
 7. **Fund** the operator and LP addresses shown in the admin console (`/api/admin/overview` on 37401) with
    Mutinynet test sats: per imported market the operator locks `MARKET_BASE_SATS` + one seed set + carriers;
-   the LP locks `LP_BOOTSTRAP_SETS x MARKET_UNIT_SATS` + carriers.
+   the LP locks `LP_BOOTSTRAP_SETS x MARKET_UNIT_SATS` + carriers, and with `LP_BID_SETS` set,
+   `LP_BID_SETS x bid price` + a 330-sat reserve per outcome.
 
 Not yet executed on Mutinynet: steps 6 to 8 (no hosted deployment has been made).
 

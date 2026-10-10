@@ -112,6 +112,8 @@ const schema = z.object({
     LP_ASK_YES_SATS: int(0),
     LP_ASK_NO_SATS: int(0),
     LP_BUSY_ONLY: bool.default(true),
+    // Shares per outcome the LP bids for on each wanted mirror, so holders can cash out early; 0 = no bids.
+    LP_BID_SETS: int(0),
     DEV_ENDPOINTS: bool,
     WORKERS: z.enum(["all", "none"]).default("all"),
     LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
