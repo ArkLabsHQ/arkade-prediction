@@ -168,7 +168,17 @@ function changeOutput(party: Party, inputs: InputSpec[], satsLeft: bigint, spent
     if (satsLeft < 0n) throw new Error("insufficient sats");
     if (assets.length === 0 && satsLeft === 0n) return [];
     if (satsLeft < CARRIER_SATS) throw new Error(`change of ${satsLeft} sats is below the ${CARRIER_SATS}-sat carrier`);
+    // Sats sharing a coin with assets are unspendable for a party that keeps them apart.
+    if (party.keepAssetsApart && assets.length && satsLeft >= 2n * CARRIER_SATS) {
+        return [{ script: party.script, amount: CARRIER_SATS, assets }, { script: party.script, amount: satsLeft - CARRIER_SATS, assets: [] }];
+    }
     return [{ script: party.script, amount: satsLeft, assets }];
+}
+
+/** Moves a coin's assets onto a carrier and frees the rest of its sats. */
+export async function splitAssets(ctx: Ctx, party: Party, coin: WalletCoin): Promise<{ txid: string }> {
+    const inputs: InputSpec[] = [{ kind: "wallet", coin }];
+    return execute(ctx, inputs, changeOutput({ ...party, keepAssetsApart: true }, inputs, BigInt(coin.value)), party);
 }
 
 export async function execute(ctx: Ctx, inputs: InputSpec[], outputs: OutputSpec[], signer?: Party): Promise<{ txid: string }> {
@@ -206,7 +216,10 @@ export async function issueMarketAssets(ctx: Ctx, creator: Party, marketId: stri
         asset.AssetGroup.create(asset.AssetId.fromString(id), null, ins, [asset.AssetOutput.create(0, ins.reduce((s, x) => s + x.input.amount, 0n))], []),
     );
     const packet = asset.Packet.create([...genesisPacket(marketId, 0, seedSets).groups, ...transfers]);
-    const built = await buildArkadeTx(ctx.net, inputs.map((i) => ({ ...i, coin: { ...i.coin, assets: [] } })) as InputSpec[], [{ script: creator.script, amount: value }], { packet });
+    const outs = creator.keepAssetsApart && value >= 2n * CARRIER_SATS
+        ? [{ script: creator.script, amount: CARRIER_SATS }, { script: creator.script, amount: value - CARRIER_SATS }]
+        : [{ script: creator.script, amount: value }];
+    const built = await buildArkadeTx(ctx.net, inputs.map((i) => ({ ...i, coin: { ...i.coin, assets: [] } })) as InputSpec[], outs, { packet });
     await signInputs(built, creator.identity, built.signerInputs);
     await ctx.beforeSubmit?.({ txid: built.arkTx.id, inputs: inputs.map((i) => `${i.coin.txid}:${i.coin.vout}`) });
     const { txid } = await submitArkadeTx(ctx.net, built, (cp) => creator.identity.sign(cp, [0]), ctx.beforeFinalize);

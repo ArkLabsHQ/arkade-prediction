@@ -4,7 +4,7 @@ import { assetIdOf } from "../core/assets.js";
 import { sha256Hex } from "../core/encoding.js";
 import {
     cancelOffer, issueMarketAssets, mintMatch, mintSets, openVault, postOffer, redeemAll, resolveMarket, resolvePriceMarket, settleExpiredOffer,
-    timeoutMarket, type Ctx, type LiveOffer, type Party,
+    splitAssets, timeoutMarket, type Ctx, type LiveOffer, type Party,
 } from "../core/actions.js";
 import { bindingOf, type MarketDefinition } from "../core/definition.js";
 import { marketContracts, oracleSlots, PRICE_SIGNER_SLOTS, type PriceTerms, type VaultTerms } from "../core/market.js";
@@ -123,6 +123,7 @@ export class Keeper {
         this.planReprices(offers, nowS);
         this.retryLpBootstraps(nowS);
         this.retryActivations(nowS);
+        await this.planSplits();
         this.planLpBootstraps(nowS);
         this.planLpBids(offers, nowS);
         await this.planOwnRedemptions(offers);
@@ -192,6 +193,18 @@ export class Keeper {
             if (!RETRYABLE_ACTIVATION.test(wf.error ?? "")) continue;
             const m = getMarket(this.d.db, wf.market_id);
             if (m?.status === "activating" && m.close_at - nowS > LP_MIN_WINDOW_SECONDS) this.d.wf.enqueue(wf.id, "activate", wf.market_id, {});
+        }
+    }
+
+    /** Frees operator sats stuck beside assets; a CTRL still owed to its vault tx is never moved. */
+    private async planSplits(): Promise<void> {
+        const op = this.d.operator;
+        if (!op) return;
+        const owed = new Set(all<{ payload: string }>(this.d.db, "SELECT payload FROM workflows WHERE kind = 'activate' AND state != 'done'")
+            .map((w) => JSON.parse(w.payload).genesisTxid as string | null).filter((g): g is string => !!g).map((g) => assetIdOf(g, 0)));
+        for (const c of await op.coins()) {
+            if (!c.assets?.length || BigInt(c.value) < 2n * MIN_BET_SATS || c.assets.some((a) => owed.has(a.assetId))) continue;
+            this.d.wf.enqueue(`split:${c.txid}:${c.vout}`, "split", null, { txid: c.txid, vout: c.vout });
         }
     }
 
@@ -451,6 +464,11 @@ export class Keeper {
                 return this.reprice(wf, ctx);
             case "activate":
                 return this.activate(wf, ctx);
+            case "split": {
+                if (!this.d.operator) throw new Error("operator wallet missing");
+                const coin = (await this.d.operator.coins()).find((c) => c.txid === wf.payload.txid && c.vout === wf.payload.vout);
+                return coin && (await splitAssets(ctx, this.d.operator, coin)).txid;
+            }
             default:
                 throw new Error(`unknown workflow kind ${wf.kind}`);
         }

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { assetIdOf } from "../../../src/core/assets.js";
 import { all, openDb, run } from "../../../src/server/db.js";
 import { WriterLease } from "../../../src/server/lease.js";
 import { ASSETS, harness, inner, insertBuyOffer, insertMarket, P2TR, tempDb } from "./harness.js";
@@ -459,5 +460,17 @@ describe("activation retry", () => {
         await inner(h.keeper).plan();
         expect(h.wf.get("activate:funds")).toMatchObject({ state: "pending", payload: { genesisTxid: "aa".repeat(32), rearms: 1 } });
         expect(h.wf.get("activate:audit")!.state).toBe("failed");
+    });
+});
+
+describe("operator coin splits", () => {
+    it("splits coins whose sats sit beside assets, but never one holding a CTRL owed to its vault", async () => {
+        const g = "aa".repeat(32);
+        const coin = (txid: string, value: number, assetId?: string) => ({ txid, vout: 0, value, assets: assetId ? [{ assetId, amount: 1n }] : [] });
+        const coins = [coin("owed", 5000, assetIdOf(g, 0)), coin("trapped", 5000, "other"), coin("carrier", 330, "other"), coin("plain", 5000)];
+        const h = harness({ operator: { coins: async () => coins } } as never);
+        h.wf.enqueue("activate:m", "activate", null, { genesisTxid: g });
+        await inner(h.keeper).plan();
+        expect(all<{ id: string }>(h.db, "SELECT id FROM workflows WHERE kind = 'split'").map((w) => w.id)).toEqual(["split:trapped:0"]);
     });
 });
