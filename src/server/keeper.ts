@@ -600,11 +600,17 @@ export class Keeper {
         const operator = this.d.operator;
         const market = wf.marketId ? getMarket(this.d.db, wf.marketId) : undefined;
         if (!operator || !market) throw new Error("operator wallet or market missing");
+        let p = wf.payload as { genesisTxid?: string; vaultTxid?: string; inputs?: string[]; signers?: string[] };
+        // In-flight vault txs reconcile before this runs, so any other CTRL spender is foreign and the genesis can never pass the audit.
+        const spender = p.genesisTxid && (await this.d.net.indexer.getVtxos({ outpoints: [{ txid: p.genesisTxid, vout: 0 }] })).vtxos[0]?.arkTxId;
+        if (spender && spender !== p.vaultTxid) {
+            this.mark(wf, { genesisTxid: null, vaultTxid: null });
+            throw new Error(`genesis ${p.genesisTxid} lost its CTRL to ${spender}; the next attempt issues a fresh genesis`);
+        }
         const updown = market.oracle_policy === "redstone" ? (JSON.parse(market.source_snapshot!).updown as UpDownRounds) : undefined;
         if (!updown && this.d.cfg.ORACLE_PUBKEYS.length === 0) throw new Error("ORACLE_PUBKEYS is empty");
         const oracleKeys = updown ? [] : oracleSlots(this.d.cfg.ORACLE_PUBKEYS.map((k) => hex.decode(k)), this.d.cfg.ORACLE_THRESHOLD);
         const oracleThreshold = updown ? PRICE_QUORUM : this.d.cfg.ORACLE_THRESHOLD;
-        let p = wf.payload as { genesisTxid?: string; vaultTxid?: string; inputs?: string[]; signers?: string[] };
         // The signer set fixes the vault address, so it is chosen once and kept across retries.
         if (updown && !p.signers) {
             const keys = [...new Set((await latestPackages(updown.feed)).map((pkg) => hex.encode(packageSignerKey(pkg))))].sort();

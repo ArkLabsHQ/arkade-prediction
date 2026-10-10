@@ -133,6 +133,20 @@ describe("in-flight reconciliation", () => {
         expect(seen?.step).toBeNull();
         expect(h.wf.get("activate:x")!.state).toBe("done");
     });
+
+    it("drops a genesis whose CTRL another tx spent, so the next attempt issues a fresh one", async () => {
+        const h = harness({ operator: {} } as never);
+        insertMarket(h.db, { id: "g", status: "activating" });
+        const w = h.wf.enqueue("activate:g", "activate", "g", {});
+        h.wf.transition(w, "pending", { payload: { genesisTxid: "G", vaultTxid: "V" } });
+        h.fakes.vtxos = [{ txid: "G", vout: 0, isSpent: true, arkTxId: "OTHER_GENESIS" }];
+        await h.keeper.execute(h.wf.get("activate:g")!);
+        expect(h.wf.get("activate:g")).toMatchObject({ state: "pending", payload: { genesisTxid: null, vaultTxid: null } });
+
+        h.wf.transition(h.wf.get("activate:g")!, "pending", { payload: { genesisTxid: "G", vaultTxid: "OTHER_GENESIS" } });
+        await h.keeper.execute(h.wf.get("activate:g")!);
+        expect(h.wf.get("activate:g")!.payload.genesisTxid).toBe("G");
+    });
 });
 
 describe("writer lease heartbeat", () => {
