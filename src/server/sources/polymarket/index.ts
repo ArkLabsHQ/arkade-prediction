@@ -1,7 +1,5 @@
-import { keccak_256 } from "@noble/hashes/sha3.js";
-import { hex } from "@scure/base";
-import { canonicalJson, concatBytes, sha256Hex } from "../../../core/encoding.js";
-import { BINARY_VECTORS } from "../../../core/payout.js";
+import { canonicalJson, sha256Hex } from "../../../core/encoding.js";
+import { ADDRESS, BYTES32, createCtfReader, deriveConditionId, hexOf, isRec, isSupportedVector, str } from "../ctf.js";
 import type {
     Eligibility,
     EligibilityPolicy,
@@ -10,6 +8,8 @@ import type {
     ResolutionStatus,
     SourceMarket,
 } from "../types.js";
+
+export { deriveConditionId };
 
 export const PROFILE = "polymarket-ctf-v1-binary";
 export const CTF_ADDRESS = "0x4d97dcd97ec945f40cf65f87097ace5ea0476045";
@@ -45,19 +45,12 @@ export const DEFAULT_NEG_RISK_ORACLES = [
     "0x71523d0f655b41e805cec45b17163f528b59b820",
 ];
 const DEFAULT_GAMMA_URL = "https://gamma-api.polymarket.com";
-const SEL_PAYOUT_DENOMINATOR = "dd34de67";
-const SEL_PAYOUT_NUMERATORS = "0504c814";
 const SEL_QUESTIONS = "95addb90";
 const SEL_GET_ORACLE = "dafaf94a";
 /** QuestionData: `creator` is head word 10, and `ancillaryData`'s offset at word 11 pins that 12-field layout. */
 const CREATOR_WORD = 10;
 const ANCILLARY_OFFSET = 384n;
-const MAX_RETRIES = 2;
-const RETRY_BASE_MS = 250;
-const HEADERS = { accept: "application/json", "user-agent": "arkade-prediction/0.1" };
 
-const BYTES32 = /^0x[0-9a-f]{64}$/;
-const ADDRESS = /^0x[0-9a-f]{40}$/;
 const SOURCE_ID = /^\d{1,20}$/;
 const PRICE = /^(0(\.\d{1,64})?|1(\.0{1,64})?)$/;
 
@@ -72,38 +65,7 @@ export interface PolymarketProviderOptions {
     minProviders?: number;
 }
 
-type Rec = Record<string, unknown>;
 type Problem = { code: string; reason: string };
-interface RpcCall {
-    provider: string;
-    method: string;
-    params: unknown[];
-    result?: unknown;
-    error?: string;
-}
-
-class HttpError extends Error {
-    constructor(readonly status: number, url: string) {
-        super(`HTTP ${status} from ${url}`);
-    }
-}
-
-const isRec = (v: unknown): v is Rec => typeof v === "object" && v !== null && !Array.isArray(v);
-const str = (v: unknown, max: number) => (typeof v === "string" ? v.slice(0, max) : "");
-const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e)).slice(0, 300);
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-const word = (n: bigint) => n.toString(16).padStart(64, "0");
-
-function hexOf(v: unknown, re: RegExp): string | null {
-    const s = typeof v === "string" ? v.toLowerCase() : "";
-    return re.test(s) ? s : null;
-}
-
-/** keccak256(abi.encodePacked(address oracle, bytes32 questionId, uint256 2)), CTHelpers.getConditionId. */
-export function deriveConditionId(oracle: string, questionId: string): string {
-    const packed = concatBytes(hex.decode(oracle.slice(2)), hex.decode(questionId.slice(2)), hex.decode(word(2n)));
-    return `0x${hex.encode(keccak_256(packed))}`;
-}
 
 function stringArray(v: unknown, maxLen: number): string[] | null {
     let arr: unknown = v;
@@ -242,51 +204,8 @@ function identityProblem(m: SourceMarket, allow: ReadonlySet<string>): Problem |
     return null;
 }
 
-function isSupportedVector(v: { numerators: readonly bigint[]; denominator: bigint }): boolean {
-    return (
-        v.numerators.length === 2 &&
-        Object.values(BINARY_VECTORS).some((r) => r.denominator === v.denominator && r.numerators.every((n, i) => n === v.numerators[i]))
-    );
-}
-
-function quantity(r: unknown): bigint {
-    if (typeof r !== "string" || !/^0x[0-9a-f]{1,64}$/i.test(r)) throw new Error(`not a hex quantity: ${String(r).slice(0, 80)}`);
-    return BigInt(r);
-}
-
-/** Strict uint256 return word: "0x" or a short value is a failed read, never zero. */
-function uint256(r: unknown): bigint {
-    if (typeof r !== "string" || !/^0x[0-9a-f]{64}$/i.test(r)) throw new Error(`not a uint256 word: ${String(r).slice(0, 80)}`);
-    return BigInt(r);
-}
-
-function header(r: unknown): { number: bigint; hash: string } {
-    const hash = isRec(r) ? hexOf(r.hash, BYTES32) : null;
-    if (!isRec(r) || !hash) throw new Error("malformed block");
-    return { number: quantity(r.number), hash };
-}
-
-async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
-    for (let attempt = 0; ; attempt++) {
-        try {
-            return await fn();
-        } catch (e) {
-            const permanent = e instanceof HttpError && e.status < 500 && e.status !== 429;
-            if (permanent || attempt >= MAX_RETRIES) throw e;
-            await sleep(RETRY_BASE_MS * 2 ** attempt * (0.5 + Math.random()));
-        }
-    }
-}
-
-/** Runs fn per provider in parallel; failed providers are dropped, order follows `urls`. */
-async function settle<T>(urls: string[], fn: (url: string) => Promise<T>): Promise<Map<string, T>> {
-    const out = await Promise.all(urls.map((u) => fn(u).then((v): [string, T] => [u, v], () => null)));
-    return new Map(out.filter((x) => x !== null));
-}
-
 export function createPolymarketProvider(opts: PolymarketProviderOptions): MarketSourceProvider {
     const gammaUrl = (opts.gammaUrl ?? DEFAULT_GAMMA_URL).replace(/\/+$/, "");
-    const rpcUrls = [...new Set(opts.rpcUrls)];
     const minProviders = opts.minProviders ?? 2;
     const timeoutMs = opts.timeoutMs ?? 10_000;
     const doFetch = opts.fetch ?? fetch;
@@ -296,43 +215,8 @@ export function createPolymarketProvider(opts: PolymarketProviderOptions): Marke
     if (!Number.isInteger(minProviders) || minProviders < 2) throw new Error("minProviders must be an integer >= 2");
     for (const a of allow) if (!ADDRESS.test(a)) throw new Error(`invalid resolver address ${a}`);
     for (const a of [...creators, ...negRiskOracles]) if (!ADDRESS.test(a)) throw new Error(`invalid reporter address ${a}`);
-    // RPC URLs often embed API keys: logs, details and evidence name a provider only by "host#n". fetch() quotes
-    // unparsable and user:password URLs in its errors, so those are refused here.
-    const labels = new Map(
-        rpcUrls.map((u, i) => {
-            const url = URL.canParse(u) ? new URL(u) : null;
-            if (!url || url.username || url.password) throw new Error(`RPC URL #${i + 1} must be a valid URL without user:password`);
-            return [u, `${url.host}#${i + 1}`] as const;
-        }),
-    );
-    const label = (u: string) => labels.get(u) ?? "rpc";
-
-    async function getJson(url: string, init: RequestInit = { headers: HEADERS }, what = url): Promise<unknown> {
-        const res = await doFetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
-        if (!res.ok) throw new HttpError(res.status, what);
-        return res.json();
-    }
-
-    const post = (provider: string, body: unknown) =>
-        getJson(provider, { method: "POST", headers: { ...HEADERS, "content-type": "application/json" }, body: JSON.stringify(body) }, label(provider));
-
-    async function rpc<T>(log: RpcCall[], provider: string, method: string, params: unknown[], decode: (r: unknown) => T): Promise<T> {
-        try {
-            const [raw, value] = await withRetry(async () => {
-                const body = await post(provider, { jsonrpc: "2.0", id: 1, method, params });
-                if (!isRec(body) || body.id !== 1) throw new Error("malformed JSON-RPC response");
-                if (body.error !== undefined) throw new Error(`JSON-RPC error ${JSON.stringify(body.error)}`);
-                return [body.result, decode(body.result)] as const;
-            });
-            // Block bodies are trimmed to identity fields; full tx lists would bloat the evidence digest input.
-            const result = isRec(raw) ? { number: raw.number, hash: raw.hash, parentHash: raw.parentHash, timestamp: raw.timestamp } : raw;
-            log.push({ provider: label(provider), method, params, result });
-            return value;
-        } catch (e) {
-            log.push({ provider: label(provider), method, params, error: errMsg(e) });
-            throw e;
-        }
-    }
+    const ctf = createCtfReader({ rpcUrls: opts.rpcUrls, chainId: POLYGON_CHAIN_ID, ctf: CTF_ADDRESS, minProviders, timeoutMs, fetch: doFetch });
+    const { getJson, retry: withRetry } = ctf;
 
     const tagIds = new Map<string, string>();
     async function tagId(slug: string): Promise<string> {
@@ -438,18 +322,9 @@ export function createPolymarketProvider(opts: PolymarketProviderOptions): Marke
             const [what, to, data, decode, allowed] = negRisk
                 ? ["neg-risk oracle", NEG_RISK_ADAPTER, `0x${SEL_GET_ORACLE}${marketIdOf(questionId).slice(2)}`, (r: unknown) => addressAt(r, 0), negRiskOracles] as const
                 : ["question creator", oracleOf(market.protocol, allow)!, `0x${SEL_QUESTIONS}${questionId.slice(2)}`, questionCreator, creators] as const;
-            // Immutable once written, so each provider reads its own finalized head: a lagging one disagrees and
-            // fails the vet closed rather than letting the quorum settle on a stale answer.
-            const log: RpcCall[] = [];
-            const answers = await settle(rpcUrls, (u) => rpc(log, u, "eth_call", [{ to, data }, "finalized"], decode));
-            if (answers.size < minProviders) {
-                const errors = log.filter((c) => c.error).map((c) => `${c.provider}: ${c.error}`);
-                return no(`${what}: ${answers.size}/${minProviders} providers answered; ${errors.join("; ")}`);
-            }
-            const reported = new Set(answers.values());
-            if (reported.size > 1) return no(`${what} differs across providers: ${[...answers].map(([u, a]) => `${label(u)}=${a}`).join(", ")}`);
-            const [reporter] = [...reported];
-            if (!allowed.has(reporter!)) return no(`${what} ${reporter} is not allowlisted`);
+            const reporter = await ctf.agree(what, to, data, decode);
+            if (!reporter.ok) return no(reporter.reason);
+            if (!allowed.has(reporter.value)) return no(`${what} ${reporter.value} is not allowlisted`);
             return { ok: true as const };
         },
 
@@ -458,10 +333,7 @@ export function createPolymarketProvider(opts: PolymarketProviderOptions): Marke
             const bad = identityProblem(market, allow);
             if (bad) return { status: "unsupported", detail: `${bad.code}: ${bad.reason}`, observedAt };
             const { conditionId, questionId, resolver } = market.protocol;
-            const logs = new Map(rpcUrls.map((u) => [u, [] as RpcCall[]]));
-            const call = <T>(u: string, method: string, params: unknown[], decode: (r: unknown) => T) =>
-                rpc(logs.get(u) ?? [], u, method, params, decode);
-            const calls = () => [...logs.values()].flat();
+            const read = await ctf.readPayout(conditionId, opts.atBlock);
             const done = (
                 status: ResolutionStatus,
                 detail: string,
@@ -471,60 +343,13 @@ export function createPolymarketProvider(opts: PolymarketProviderOptions): Marke
                 status,
                 detail,
                 ...(chain ? { chain } : {}),
-                reads: { profile: PROFILE, ctf: CTF_ADDRESS, conditionId, questionId, resolver, gammaStatus: market.sourceStatus, payout, calls: calls() },
+                reads: { profile: PROFILE, ctf: CTF_ADDRESS, conditionId, questionId, resolver, gammaStatus: market.sourceStatus, payout, calls: read.calls },
                 observedAt,
             });
-            const quorum = <T>(m: Map<string, T>, what: string): [T, ...T[]] => {
-                if (m.size < minProviders) {
-                    const errors = calls().filter((c) => c.error).map((c) => `${c.provider} ${c.method}: ${c.error}`);
-                    throw new Error(`${what}: ${m.size}/${minProviders} providers answered; ${errors.join("; ")}`);
-                }
-                return [...m.values()] as [T, ...T[]];
-            };
-
-            const heads = await settle(rpcUrls, async (u) => ({
-                chainId: await call(u, "eth_chainId", [], quantity),
-                number: (await call(u, "eth_getBlockByNumber", ["finalized", false], header)).number,
-            }));
-            const offChain = [...heads].filter(([, h]) => h.chainId !== BigInt(POLYGON_CHAIN_ID)).map(([u]) => label(u));
-            if (offChain.length > 0) return done("inconsistent", `not on chain ${POLYGON_CHAIN_ID}: ${offChain.join(", ")}`);
-            const finalized = quorum(heads, "finalized head")
-                .map((h) => h.number)
-                .reduce((a, b) => (b < a ? b : a));
-            if (opts.atBlock !== undefined && opts.atBlock > finalized) {
-                return done("inconsistent", `block ${opts.atBlock} is not finalized on every provider yet (finalized ${finalized})`);
-            }
-            const number = opts.atBlock ?? finalized;
-            const tag = `0x${number.toString(16)}`;
-
-            const hashes = await settle([...heads.keys()], (u) =>
-                call(u, "eth_getBlockByNumber", [tag, false], (r) => {
-                    const b = header(r);
-                    if (b.number !== number) throw new Error(`asked for block ${number}, got ${b.number}`);
-                    return b.hash;
-                }),
-            );
-            if (new Set(hashes.values()).size > 1) {
-                return done("inconsistent", `block ${number} hash differs: ${[...hashes].map(([u, h]) => `${label(u)}=${h}`).join(", ")}`);
-            }
-            const [blockHash] = quorum(hashes, `block ${number} hash`);
-            const chain = { chainId: POLYGON_CHAIN_ID, blockNumber: number.toString(), blockHash, providers: [...hashes.keys()].map(label) };
-
-            const cond = conditionId.slice(2);
-            const states = await settle([...hashes.keys()], async (u) => {
-                const read = (data: string) => call(u, "eth_call", [{ to: CTF_ADDRESS, data }, tag], uint256);
-                const den = await read(`0x${SEL_PAYOUT_DENOMINATOR}${cond}`);
-                const n0 = await read(`0x${SEL_PAYOUT_NUMERATORS}${cond}${word(0n)}`);
-                const n1 = await read(`0x${SEL_PAYOUT_NUMERATORS}${cond}${word(1n)}`);
-                return [den, n0, n1] as const;
-            });
-            if (new Set([...states.values()].map((s) => s.join("/"))).size > 1) {
-                return done("inconsistent", `CTF payouts differ across providers at block ${number}`, chain);
-            }
-            const [[denominator, n0, n1]] = quorum(states, "CTF payout reads");
-            chain.providers = [...states.keys()].map(label);
-            const payout = { numerators: [n0, n1], denominator };
-            const at = `at finalized block ${number} (${blockHash}) on ${chain.providers.length} providers`;
+            if (!read.ok) return done("inconsistent", read.detail, read.chain);
+            const { chain, payout, at } = read;
+            const [n0, n1] = payout.numerators;
+            const { denominator } = payout;
             if (denominator === 0n) {
                 const s = market.sourceStatus;
                 const status = s === "proposed" || s === "disputed" ? s : "unresolved";
@@ -538,28 +363,7 @@ export function createPolymarketProvider(opts: PolymarketProviderOptions): Marke
         },
 
         async screenResolved(markets) {
-            const conds = [...new Set(markets.filter((m) => !identityProblem(m, allow)).map((m) => m.protocol.conditionId))];
-            if (conds.length === 0) return [];
-            const batch = conds.map((c, id) => ({ jsonrpc: "2.0", id, method: "eth_call", params: [{ to: CTF_ADDRESS, data: `0x${SEL_PAYOUT_DENOMINATOR}${c.slice(2)}` }, "finalized"] }));
-            const errors: string[] = [];
-            // No retries: one request per provider per pass is the budget; the next pass retries.
-            const answers = await settle(rpcUrls, async (u) => {
-                try {
-                    const body = await post(u, batch);
-                    if (!Array.isArray(body)) throw new Error("JSON-RPC batch not supported");
-                    const byId = new Map(body.filter(isRec).map((r) => [r.id, r]));
-                    return conds.map((_, id) => {
-                        const r = byId.get(id);
-                        if (!r || r.error !== undefined) throw new Error(`batch item ${id}: ${r ? JSON.stringify(r.error).slice(0, 120) : "missing"}`);
-                        return uint256(r.result) !== 0n;
-                    });
-                } catch (e) {
-                    errors.push(`${label(u)}: ${errMsg(e)}`);
-                    throw e;
-                }
-            });
-            if (answers.size < minProviders) throw new Error(`resolution screen: ${answers.size}/${minProviders} providers answered; ${errors.join("; ")}`);
-            return conds.filter((_, i) => [...answers.values()].filter((resolved) => resolved[i]).length >= minProviders);
+            return ctf.screenResolved(markets.filter((m) => !identityProblem(m, allow)).map((m) => m.protocol.conditionId));
         },
 
         verifyFinalResolution(market, evidence, profile) {
