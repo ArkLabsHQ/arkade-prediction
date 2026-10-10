@@ -205,7 +205,9 @@ function Body({ session }: { session: Session }) {
                                                 <td data-label="Order">{label}</td>
                                                 <td data-label="Price" className="num">{n(o.terms.priceSats)}</td>
                                                 <td data-label="Shares left" className="num">{n(o.remaining)}</td>
-                                                <td data-label="Status">{o.status}</td>
+                                                <td data-label="Status">{m?.vault.phase === "resolved"
+                                                    ? <span className="error-text">Market resolved: anyone can still fill this at your price. Cancel it.</span>
+                                                    : o.status}</td>
                                                 <td><CancelButton o={o} label={`${label} @ ${o.terms.priceSats}`} onDone={server.reload} /></td>
                                             </tr>
                                         );
