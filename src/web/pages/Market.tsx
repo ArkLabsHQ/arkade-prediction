@@ -73,12 +73,12 @@ export function MarketPage({ id }: { id: string }) {
             <div className="mcols">
                 <div className="stack mtop">
                     <Quotes m={m} unit={unit} />
+                </div>
+                <div className="stack mrest">
                     <Panel title="All prices">
                         {offers.data ? <Books m={m} offers={offers.data} unit={unit} mine={session?.script} now={now} />
                             : offers.error ? <ErrorBox error={offers.error} onRetry={offers.reload} /> : <Loading what="prices" />}
                     </Panel>
-                </div>
-                <div className="stack mrest">
                     <Panel title="Recent trades">
                         {trades.data ? <Trades m={m} trades={trades.data} unit={unit} now={now} />
                             : trades.error ? <ErrorBox error={trades.error} onRetry={trades.reload} /> : <Loading what="trades" />}
@@ -155,11 +155,11 @@ function Books(props: { m: MarketJson; offers: OfferJson[]; unit: string; mine?:
                             <div className="table-wrap">
                                 <table className="data compact">
                                     <thead>
-                                        <tr><th scope="col">You can</th><th scope="col" className="num">Price</th><th scope="col" className="num">Chance</th><th scope="col" className="num">Shares</th><th scope="col" className="num">Smallest fill</th><th scope="col">Expires</th></tr>
+                                        <tr><th scope="col">You can</th><th scope="col" className="num">Price</th><th scope="col" className="num">Shares</th><th scope="col" className="num">Min fill</th><th scope="col">Expires</th></tr>
                                     </thead>
                                     <tbody>
                                         {asks.map((x) => <BookRow key={x.id} o={x} unit={props.unit} mine={props.mine} now={props.now} />)}
-                                        <tr className="spread"><td colSpan={6}>{spread === null ? "Prices on one side only" : `Gap ${n(spread)} sats`}</td></tr>
+                                        <tr className="spread"><td colSpan={5}>{spread === null ? "Prices on one side only" : `Gap ${n(spread)} sats`}</td></tr>
                                         {bids.map((x) => <BookRow key={x.id} o={x} unit={props.unit} mine={props.mine} now={props.now} />)}
                                     </tbody>
                                 </table>
@@ -177,8 +177,7 @@ function BookRow({ o, unit, mine, now }: { o: OfferJson; unit: string; mine?: st
     return (
         <tr className={ask ? "ask-row" : "bid-row"}>
             <td>{ask ? "Bet" : "Cash out"}{o.terms.makerScript === mine && <span className="badge mine">yours</span>}</td>
-            <td className={`num ${ask ? "ask" : "bid"}`}>{n(o.terms.priceSats)}</td>
-            <td className="num muted">{pct(o.terms.priceSats, unit)}</td>
+            <td className="num"><span className={ask ? "ask" : "bid"}>{n(o.terms.priceSats)}</span> <span className="muted">{pct(o.terms.priceSats, unit)}</span></td>
             <td className="num">{n(o.remaining)}</td>
             <td className="num">{n(o.terms.minFill)}</td>
             <td>{o.terms.expiresAtUnix === "0" ? "never" : <Time t={fromUnix(o.terms.expiresAtUnix)} now={now} />}</td>
@@ -199,7 +198,7 @@ function Trades({ m, trades, unit, now }: { m: MarketJson; trades: TradeJson[]; 
                         <tr key={`${t.txid}:${t.offerId ?? ""}:${i}`}>
                             <td><Time t={t.at} now={now} /></td>
                             <td>{m.outcomes[t.outcome === "yes" ? 0 : 1]}</td>
-                            <td>{t.kind === "mint-match" ? "new pair" : t.makerSide === "sell" ? "bought" : "sold"}</td>
+                            <td>{t.kind === "mint-match" || t.makerSide === "sell" ? "bought" : "sold"}</td>
                             <td className="num">{n(t.qty)}</td>
                             <td className="num">{n(t.priceSats)} <span className="muted">{pct(t.priceSats, unit)}</span></td>
                             <td><Txid txid={t.txid} /></td>

@@ -31,10 +31,11 @@ export const when = (t: string | Date) => date.format(typeof t === "string" ? ne
 
 export function duration(ms: number): string {
     const a = Math.abs(ms) / 1000;
+    const two = (big: number, bu: string, small: number, su: string) => `${big}${bu}${small ? ` ${small}${su}` : ""}`;
     return a < 60 ? `${Math.round(a)}s`
         : a < 3600 ? `${Math.floor(a / 60)}m`
-        : a < 86400 ? `${Math.floor(a / 3600)}h ${Math.floor((a % 3600) / 60)}m`
-        : `${Math.floor(a / 86400)}d ${Math.floor((a % 86400) / 3600)}h`;
+        : a < 86400 ? two(Math.floor(a / 3600), "h", Math.floor((a % 3600) / 60), "m")
+        : two(Math.floor(a / 86400), "d", Math.floor((a % 86400) / 3600), "h");
 }
 
 export function rel(t: string | Date, now = Date.now()): string {

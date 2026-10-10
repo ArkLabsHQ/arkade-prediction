@@ -99,7 +99,7 @@ export function ClaimsTable({ index, holdings }: { index: Map<string, MarketJson
         <>
             {rows.length > 0 && (
                 <div className="table-wrap">
-                    <table className="data">
+                    <table className="data stacked">
                         <thead>
                             <tr><th scope="col">Market</th><th scope="col">Outcome</th><th scope="col" className="num">Shares</th><th scope="col" className="num">Cash-out price</th><th scope="col" className="num">Value (sats)</th><th scope="col">Status</th></tr>
                         </thead>
@@ -193,7 +193,7 @@ function Body({ session }: { session: Session }) {
                 {server.error && !server.data ? <ErrorBox error={server.error} onRetry={server.reload} /> : !server.data ? <Loading what="orders" />
                     : openOffers.length === 0 ? <p className="state">No open orders.</p> : (
                         <div className="table-wrap">
-                            <table className="data">
+                            <table className="data stacked">
                                 <thead><tr><th scope="col">Market</th><th scope="col">Order</th><th scope="col" className="num">Price</th><th scope="col" className="num">Shares left</th><th scope="col">Status</th><th scope="col"><span className="sr-only">Action</span></th></tr></thead>
                                 <tbody>
                                     {openOffers.map((o) => {
@@ -236,7 +236,7 @@ function Body({ session }: { session: Session }) {
                 {!server.data ? (server.error ? <ErrorBox error={server.error} onRetry={server.reload} /> : <Loading what="matched orders" />)
                     : server.data.trades.length === 0 ? <p className="state">None of your orders has been matched yet.</p> : (
                         <div className="table-wrap">
-                            <table className="data">
+                            <table className="data stacked">
                                 <thead><tr><th scope="col">Time</th><th scope="col">Market</th><th scope="col">Your order</th><th scope="col" className="num">Shares</th><th scope="col" className="num">Price</th><th scope="col">Tx</th></tr></thead>
                                 <tbody>
                                     {server.data.trades.map((t, i) => (
@@ -269,7 +269,7 @@ function Boxes({ session, index }: { session: Session; index: Map<string, Market
             {!boxes.data ? (boxes.error ? <ErrorBox error={boxes.error} onRetry={boxes.reload} /> : <Loading what="automatic payouts" />)
                 : rows.length === 0 ? <p className="state">No bets set to pay automatically.</p> : (
                     <div className="table-wrap">
-                        <table className="data">
+                        <table className="data stacked">
                             <thead><tr><th scope="col">Market</th><th scope="col">Shares</th><th scope="col">Payout</th><th scope="col"><span className="sr-only">Action</span></th></tr></thead>
                             <tbody>
                                 {rows.map(({ b, c, m }) => (
@@ -348,7 +348,7 @@ function History({ log, question }: { log: LogEntry[]; question: (id: string | n
     if (log.length === 0) return <p className="state">No actions from this browser yet.</p>;
     return (
         <div className="table-wrap">
-            <table className="data">
+            <table className="data stacked">
                 <thead><tr><th scope="col">Time</th><th scope="col">Action</th><th scope="col">Market</th><th scope="col" className="num">Shares</th><th scope="col" className="num">Sats</th><th scope="col">Status</th><th scope="col">Tx</th></tr></thead>
                 <tbody>
                     {log.map((e) => (
@@ -358,7 +358,7 @@ function History({ log, question }: { log: LogEntry[]; question: (id: string | n
                             <td data-label="Market">{e.marketId ? <Link to={`/markets/${enc(e.marketId)}`}>{question(e.marketId)}</Link> : "—"}</td>
                             <td data-label="Shares" className="num">{e.qty ? n(e.qty) : "—"}</td>
                             <td data-label="Sats" className="num">{e.sats ? n(e.sats) : "—"}</td>
-                            <td data-label="Status">{e.status}</td>
+                            <td data-label="Status">{STATUS_TEXT[e.status]}</td>
                             <td data-label="Tx">{e.txid ? <Txid txid={e.txid} /> : "—"}</td>
                         </tr>
                     ))}
