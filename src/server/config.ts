@@ -100,6 +100,7 @@ const schema = z.object({
     LP_BOOTSTRAP_SETS: int(0),
     LP_ASK_YES_SATS: int(0),
     LP_ASK_NO_SATS: int(0),
+    LP_BUSY_ONLY: bool.default(true),
     DEV_ENDPOINTS: bool,
     WORKERS: z.enum(["all", "none"]).default("all"),
     LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),

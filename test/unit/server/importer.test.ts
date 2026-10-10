@@ -8,7 +8,7 @@ const market = (versionHash: string, price: string): SourceMarket => ({
     provider: "polymarket", sourceId: "42", slug: "s", url: "", question: "q", description: "", resolutionSource: "", outcomes: ["Yes", "No"],
     endDate: null, tags: [], active: true, closed: false, archived: false, sourceStatus: null,
     protocol: { version: "v1", chainId: 137, negRisk: false, resolver: null, conditionId: "c", questionId: "q", settlementContract: "x" },
-    referencePrices: [{ outcome: "Yes", price }, { outcome: "No", price: "0.5" }], image: null, event: { title: "E", slug: "e" }, gameStartTime: null,
+    referencePrices: [{ outcome: "Yes", price }, { outcome: "No", price: "0.5" }], image: null, event: { title: "E", slug: "e" }, volume24h: Number(price) * 10_000, gameStartTime: null,
     versionHash, fetchedAt: `t-${price}`,
 });
 
@@ -21,13 +21,13 @@ describe("source refresh", () => {
         const snap = () => JSON.parse(one<{ s: string }>(db, "SELECT source_snapshot s FROM markets WHERE id = 'm'")!.s);
 
         upsertSource({ db } as never, market("v1", "0.3"), { eligible: true });
-        expect(snap()).toMatchObject({ referencePrices: [{ price: "0.3" }, { price: "0.5" }], fetchedAt: "t-0.3", event: { title: "E" }, binding: { keep: true } });
+        expect(snap()).toMatchObject({ referencePrices: [{ price: "0.3" }, { price: "0.5" }], fetchedAt: "t-0.3", volume24h: 3000, event: { title: "E" }, binding: { keep: true } });
 
         upsertSource({ db } as never, { ...market("v1", "0.4"), image: null, event: null }, { eligible: true });
         expect(snap()).toMatchObject({ referencePrices: [{ price: "0.4" }, { price: "0.5" }], event: { title: "E" } });
 
         upsertSource({ db } as never, market("v2", "0.9"), { eligible: true });
-        expect(snap().referencePrices[0].price).toBe("0.4");
+        expect(snap()).toMatchObject({ referencePrices: [{ price: "0.4" }, { price: "0.5" }], volume24h: 4000 });
     });
 
     it("refreshes a funded market that discovery did not return", async () => {

@@ -5,7 +5,7 @@ import type { Deps } from "./markets.js";
 import type { Workflows } from "./workflows.js";
 
 /** Polymarket's crypto Up/Down events, mirrored as markets settled on RedStone's signed rounds. */
-const SLUG = /^([a-z]+)-updown-(5m|15m|1h|4h)-(\d{10})$/;
+export const UPDOWN_SLUG = /^([a-z]+)-updown-(5m|15m|1h|4h)-(\d{10})$/;
 const WINDOW_MS: Record<string, number> = { "5m": 300_000, "15m": 900_000, "1h": 3_600_000, "4h": 14_400_000 };
 // Activation (genesis + vault) must land before the start round.
 const MIN_LEAD_MS = 90_000;
@@ -28,7 +28,7 @@ export function parseUpDownEvent(raw: unknown): UpDownMirror | undefined {
     if (typeof raw !== "object" || raw === null) return undefined;
     const e = raw as { slug?: unknown; markets?: unknown[] };
     const m = (Array.isArray(e.markets) ? e.markets[0] : undefined) as Record<string, unknown> | undefined;
-    const hit = typeof e.slug === "string" ? SLUG.exec(e.slug) : null;
+    const hit = typeof e.slug === "string" ? UPDOWN_SLUG.exec(e.slug) : null;
     if (!hit || !m || typeof m.id !== "string" || typeof m.question !== "string" || typeof m.endDate !== "string") return undefined;
     const [, asset, window, startUnix] = hit;
     const startAtMs = Number(startUnix) * 1000;

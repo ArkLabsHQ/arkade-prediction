@@ -104,8 +104,9 @@ describe("kalshi normalization", () => {
         expect(def.resolutionSource).toMatch(/^The New York Times https:\/\/www\.nytimes\.com\/; /);
         expect(def.versionHash).toMatch(/^[0-9a-f]{64}$/);
 
-        const repriced = await definition(T.open, { markets: { [T.open]: marketWith(T.open, { yes_bid_dollars: "0.5000", yes_ask_dollars: "0.5000" }) } });
+        const repriced = await definition(T.open, { markets: { [T.open]: marketWith(T.open, { yes_bid_dollars: "0.5000", yes_ask_dollars: "0.5000", volume_24h_fp: "12.50" }) } });
         expect(repriced.referencePrices?.[0]?.price).toBe("0.5000");
+        expect(repriced.volume24h).toBe(12.5);
         expect(repriced.versionHash).toBe(def.versionHash);
         const reworded = await definition(T.open, { markets: { [T.open]: marketWith(T.open, { rules_secondary: "Edited." }) } });
         expect(reworded.description).toMatch(/\n\nEdited\.$/);

@@ -140,7 +140,9 @@ export function createManifoldProvider(opts: { apiUrl?: string; fetch?: typeof f
             binary && typeof p === "number" && p >= 0 && p <= 1
                 ? [{ outcome: "Yes", price: p.toFixed(4) }, { outcome: "No", price: (1 - p).toFixed(4) }]
                 : null;
-        const market: SourceMarket = { ...core, referencePrices, image: null, event: null, gameStartTime: null, versionHash: sha256Hex(canonicalJson(core)), fetchedAt };
+        const v = raw.volume24Hours;
+        const volume24h = typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : null;
+        const market: SourceMarket = { ...core, referencePrices, image: null, event: null, volume24h, gameStartTime: null, versionHash: sha256Hex(canonicalJson(core)), fetchedAt };
         if (typeof raw.uniqueBettorCount === "number") traders.set(market, raw.uniqueBettorCount);
         return market;
     }

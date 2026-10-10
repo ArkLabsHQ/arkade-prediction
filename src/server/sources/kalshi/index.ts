@@ -49,6 +49,10 @@ function basisPoints(v: unknown): number | null {
     return typeof v === "string" && DOLLARS.test(v) ? Math.round(Number(v) * 10_000) : null;
 }
 
+function volumeOf(v: unknown): number | null {
+    return typeof v === "string" && /^\d{1,15}(\.\d{1,4})?$/.test(v) ? Number(v) : null;
+}
+
 function pricesOf(raw: Rec): SourceMarket["referencePrices"] {
     const bid = basisPoints(raw.yes_bid_dollars);
     const ask = basisPoints(raw.yes_ask_dollars);
@@ -116,6 +120,7 @@ function normalize(raw: unknown, event: unknown, series: Series, apiUrl: string,
         referencePrices: pricesOf(raw),
         image: null,
         event: eventTitle ? { title: eventTitle, slug: eventTicker.toLowerCase() } : null,
+        volume24h: volumeOf(raw.volume_24h_fp),
         gameStartTime: null,
         versionHash: sha256Hex(canonicalJson(core)),
         fetchedAt,
@@ -237,7 +242,7 @@ export function createKalshiProvider(opts: KalshiProviderOptions = {}): MarketSo
                 if (!e || !sr) continue;
                 try {
                     const market = normalize(m, e, sr, apiUrl, fetchedAt);
-                    if (!tag || market.tags.includes(tag)) ranked.push([Number(str((m as Rec).volume_24h_fp, 32)) || 0, market]);
+                    if (!tag || market.tags.includes(tag)) ranked.push([market.volume24h ?? 0, market]);
                 } catch {
                     // a malformed entry is skipped, not fatal to the page
                 }

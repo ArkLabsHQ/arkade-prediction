@@ -140,8 +140,9 @@ describe("polymarket normalization", () => {
         const def = await definition("559651");
         expect(def.versionHash).toBe(listed!.versionHash);
 
-        const repriced = await definition("559651", { markets: { "559651": { ...raw, outcomePrices: '["0.5", "0.5"]' } } });
+        const repriced = await definition("559651", { markets: { "559651": { ...raw, outcomePrices: '["0.5", "0.5"]', volume24hr: 1234.5 } } });
         expect(repriced.referencePrices?.[0]?.price).toBe("0.5");
+        expect([def.volume24h, repriced.volume24h]).toEqual([null, 1234.5]);
         expect(repriced.versionHash).toBe(def.versionHash);
         const reworded = await definition("559651", { markets: { "559651": { ...raw, description: `${raw.description} Edited.` } } });
         expect(reworded.versionHash).not.toBe(def.versionHash);

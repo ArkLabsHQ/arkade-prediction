@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { openDb, run } from "../../../src/server/db.js";
+import { all, openDb, run } from "../../../src/server/db.js";
 import { WriterLease } from "../../../src/server/lease.js";
 import { ASSETS, harness, inner, insertBuyOffer, insertMarket, P2TR, tempDb } from "./harness.js";
 
@@ -295,6 +295,49 @@ describe("LP bootstrap retry", () => {
         await inner(h.keeper).plan();
         expect(h.wf.get("lp:m1:bootstrap")).toMatchObject({ state: "pending", payload: { sets: "5", yesAsk: "550", rearms: 1 } });
         expect(h.wf.get("lp:gone:bootstrap")?.state).toBe("failed");
+    });
+});
+
+describe("LP busy-only bootstraps", () => {
+    const lp = { script: new Uint8Array(34), coins: async () => [] };
+    const cfg = { APM_NETWORK: "regtest", RENEW_THRESHOLD_SECONDS: 3600, MARKET_UNIT_SATS: 1000, LP_BOOTSTRAP_SETS: 5, LP_ASK_YES_SATS: 550, LP_ASK_NO_SATS: 550, LP_BUSY_ONLY: true };
+    const mirror = (h: ReturnType<typeof harness>, id: string, snapshot: object) => {
+        insertMarket(h.db, { id });
+        run(h.db, "UPDATE markets SET kind = 'polymarket', source_snapshot = ? WHERE id = ?", JSON.stringify(snapshot), id);
+    };
+    const bootstraps = (h: ReturnType<typeof harness>) =>
+        all<{ id: string }>(h.db, "SELECT id FROM workflows WHERE kind = 'lp-liquidity'").map((r) => r.id).sort();
+
+    it("seeds a busy mirrored market and an Up/Down window, not a quiet one", async () => {
+        const h = harness({ lp, cfg } as never);
+        mirror(h, "busy", { provider: "polymarket", slug: "busy", volume24h: 50_000 });
+        mirror(h, "quiet", { provider: "polymarket", slug: "quiet", volume24h: 10 });
+        mirror(h, "updown", { provider: "polymarket", slug: "btc-updown-15m-1791615600" });
+        await inner(h.keeper).plan();
+        expect(bootstraps(h)).toEqual(["lp:busy:bootstrap", "lp:updown:bootstrap"]);
+        expect(h.wf.get("lp:busy:bootstrap")!.payload).toEqual({ sets: "5", yesAsk: "550", noAsk: "550" });
+    });
+
+    it("seeds a quiet market once, after its refreshed volume turns busy", async () => {
+        const h = harness({ lp, cfg } as never);
+        mirror(h, "m", { provider: "kalshi", slug: "m", volume24h: 0 });
+        await inner(h.keeper).plan();
+        expect(bootstraps(h)).toEqual([]);
+        run(h.db, "UPDATE markets SET source_snapshot = json_set(source_snapshot, '$.volume24h', 500) WHERE id = 'm'");
+        await inner(h.keeper).plan();
+        h.wf.transition(h.wf.get("lp:m:bootstrap")!, "done", {});
+        await inner(h.keeper).plan();
+        expect(bootstraps(h)).toEqual(["lp:m:bootstrap"]);
+        expect(h.wf.get("lp:m:bootstrap")!.state).toBe("done");
+    });
+
+    it("does not re-arm a failed bootstrap on a quiet market", async () => {
+        const h = harness({ lp, cfg } as never);
+        mirror(h, "m", { provider: "manifold", slug: "m", volume24h: 1 });
+        run(h.db, "INSERT INTO workflows(id, kind, market_id, state, payload, error, created_at, updated_at) VALUES ('lp:m:bootstrap', 'lp-liquidity', 'm', 'failed', '{}', 'insufficient funds', ?, ?)",
+            "2026-01-01T00:00:00.000Z", "2026-01-01T00:00:00.000Z");
+        await inner(h.keeper).plan();
+        expect(h.wf.get("lp:m:bootstrap")!.state).toBe("failed");
     });
 });
 

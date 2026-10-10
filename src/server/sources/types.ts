@@ -43,6 +43,8 @@ export interface SourceMarket {
     /** Display only, outside versionHash: Polymarket's image (its upload bucket only) and parent event. */
     image: string | null;
     event: { title: string; slug: string } | null;
+    /** Outside versionHash: 24h volume in the source's own unit (Polymarket USD, Kalshi contracts, Manifold mana). */
+    volume24h: number | null;
     /** Sports kickoff, when the source lists one. */
     gameStartTime: string | null;
     /** sha256 of the canonical normalized snapshot; changes when any field above changes. */

@@ -107,10 +107,10 @@ export function upsertSource(d: Deps, m: SourceMarket, v: { eligible: boolean; c
             m.provider, m.sourceId, m.versionHash, snapshot, now());
         // Display fields only, and only while the definition is the one the market was funded on.
         // Gamma's single-market endpoint omits events, so a missing image or event keeps the last one seen.
-        run(d.db, `UPDATE markets SET source_snapshot = json_set(source_snapshot, '$.referencePrices', json(?), '$.fetchedAt', ?,
+        run(d.db, `UPDATE markets SET source_snapshot = json_set(source_snapshot, '$.referencePrices', json(?), '$.fetchedAt', ?, '$.volume24h', json(?),
                    '$.image', COALESCE(?, json_extract(source_snapshot, '$.image')), '$.event', COALESCE(json(?), json(json_extract(source_snapshot, '$.event'))))
                    WHERE source_provider = ? AND source_id = ? AND source_version = ?`,
-            JSON.stringify(m.referencePrices), m.fetchedAt, m.image, m.event ? JSON.stringify(m.event) : null, m.provider, m.sourceId, m.versionHash);
+            JSON.stringify(m.referencePrices), m.fetchedAt, JSON.stringify(m.volume24h ?? null), m.image, m.event ? JSON.stringify(m.event) : null, m.provider, m.sourceId, m.versionHash);
     });
 }
 

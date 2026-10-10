@@ -83,6 +83,7 @@ services:
       LP_BOOTSTRAP_SETS: ${LP_BOOTSTRAP_SETS:-0}
       LP_ASK_YES_SATS: ${LP_ASK_YES_SATS:-0}
       LP_ASK_NO_SATS: ${LP_ASK_NO_SATS:-0}
+      LP_BUSY_ONLY: ${LP_BUSY_ONLY:-true}
       DEV_ENDPOINTS: ${DEV_ENDPOINTS:-false}
       WORKERS: ${WORKERS:-all}
       LOG_LEVEL: ${LOG_LEVEL:-info}

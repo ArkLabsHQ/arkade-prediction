@@ -10,6 +10,7 @@ import { bindingOf, type MarketDefinition } from "../core/definition.js";
 import { marketContracts, oracleSlots, PRICE_SIGNER_SLOTS, type PriceTerms, type VaultTerms } from "../core/market.js";
 import { REDSTONE_PRIMARY_SIGNERS, feedIdBytes, latestPackages, packageSignerKey, priceReport } from "../core/redstone.js";
 import { storedRound } from "./rounds.js";
+import { isBusy } from "./sources/busy.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { MIN_BET_SATS, fillAllowed, minFillFor, offerContract, type OfferTerms } from "../core/offers.js";
 import { renewCovenantVtxos, type RenewTarget } from "../core/renewal.js";
@@ -120,6 +121,7 @@ export class Keeper {
         this.planCancels(offers);
         this.planReprices(offers, nowS);
         this.retryLpBootstraps(nowS);
+        this.planLpBootstraps(nowS);
         await this.planOwnRedemptions(offers);
         const boxes = await this.boxCoins();
         this.planRenewals(offers, nowS, boxes);
@@ -172,7 +174,17 @@ export class Keeper {
             "SELECT id, market_id FROM workflows WHERE kind = 'lp-liquidity' AND state = 'failed' AND id LIKE '%:bootstrap' AND market_id IS NOT NULL");
         for (const wf of failed) {
             const m = getMarket(this.d.db, wf.market_id);
-            if (m?.status === "open" && quotesUntil(m) - nowS >= LP_MIN_WINDOW_SECONDS) this.d.wf.enqueue(wf.id, "lp-liquidity", wf.market_id, {});
+            if (m?.status === "open" && quotesUntil(m) - nowS >= LP_MIN_WINDOW_SECONDS && this.lpWanted(m)) this.d.wf.enqueue(wf.id, "lp-liquidity", wf.market_id, {});
+        }
+    }
+
+    /** With LP_BUSY_ONLY, a mirrored market whose refreshed volume turns busy gets the bootstrap activation withheld. */
+    private planLpBootstraps(nowS: number): void {
+        if (!this.d.cfg.LP_BUSY_ONLY || this.d.cfg.LP_BOOTSTRAP_SETS <= 0 || !this.d.lp) return;
+        for (const m of all<MarketRow>(this.d.db, "SELECT * FROM markets WHERE kind = 'polymarket' AND status = 'open' AND terms IS NOT NULL AND source_snapshot IS NOT NULL")) {
+            const terms = marketTerms(m);
+            if (!terms || this.d.wf.get(`lp:${m.id}:bootstrap`) || quotesUntil(m) - nowS < LP_MIN_WINDOW_SECONDS || !this.lpWanted(m)) continue;
+            this.enqueueLpBootstrap(m, terms.unitSats);
         }
     }
 
@@ -583,14 +595,20 @@ export class Keeper {
         run(this.d.db, "UPDATE markets SET status = 'open', terms = ?, base_sats = ?, genesis_txid = ?, vault_txid = ?, oracle_keys = ?, oracle_threshold = ?, oracle_epoch = ?, updated_at = ? WHERE id = ? AND status = 'activating'",
             JSON.stringify(termsToJson(terms)), String(baseSats), p.genesisTxid!, p.vaultTxid!, JSON.stringify(p.signers ?? oracleKeys.map((k) => hex.encode(k))), oracleThreshold, this.d.cfg.ORACLE_EPOCH, now(), market.id);
         this.d.bus.publish("market", market.id, { status: "open" });
-        if (this.d.cfg.LP_BOOTSTRAP_SETS > 0 && this.d.lp) {
-            const ref = market.source_snapshot ? JSON.parse(market.source_snapshot).referencePrices : null;
-            const asks = lpAsks(ref, JSON.parse(market.outcomes) as string[], unit, { yes: BigInt(this.d.cfg.LP_ASK_YES_SATS), no: BigInt(this.d.cfg.LP_ASK_NO_SATS) });
-            this.d.wf.enqueue(`lp:${market.id}:bootstrap`, "lp-liquidity", market.id, {
-                sets: String(this.d.cfg.LP_BOOTSTRAP_SETS), yesAsk: String(asks.yes), noAsk: String(asks.no),
-            });
-        }
+        if (this.d.cfg.LP_BOOTSTRAP_SETS > 0 && this.d.lp && this.lpWanted(market)) this.enqueueLpBootstrap(market, unit);
         return p.vaultTxid;
+    }
+
+    private lpWanted(m: MarketRow): boolean {
+        return !this.d.cfg.LP_BUSY_ONLY || (!!m.source_snapshot && isBusy(JSON.parse(m.source_snapshot)));
+    }
+
+    private enqueueLpBootstrap(m: MarketRow, unit: bigint): void {
+        const ref = m.source_snapshot ? JSON.parse(m.source_snapshot).referencePrices : null;
+        const asks = lpAsks(ref, JSON.parse(m.outcomes) as string[], unit, { yes: BigInt(this.d.cfg.LP_ASK_YES_SATS), no: BigInt(this.d.cfg.LP_ASK_NO_SATS) });
+        this.d.wf.enqueue(`lp:${m.id}:bootstrap`, "lp-liquidity", m.id, {
+            sets: String(this.d.cfg.LP_BOOTSTRAP_SETS), yesAsk: String(asks.yes), noAsk: String(asks.no),
+        });
     }
 
     get db(): Db {

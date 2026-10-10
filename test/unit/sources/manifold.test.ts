@@ -74,7 +74,8 @@ describe("manifold normalization", () => {
     it("keeps versionHash independent of prices and fetch time", async () => {
         const raw = api.markets.CL56c9sqQp;
         const a = await market("CL56c9sqQp");
-        const b = await market("CL56c9sqQp", { markets: { CL56c9sqQp: { ...raw, probability: 0.5, uniqueBettorCount: 1 } } });
+        const b = await market("CL56c9sqQp", { markets: { CL56c9sqQp: { ...raw, probability: 0.5, uniqueBettorCount: 1, volume24Hours: 321.5 } } });
+        expect([a.volume24h, b.volume24h]).toEqual([raw.volume24Hours, 321.5]);
         const c = await market("CL56c9sqQp", { markets: { CL56c9sqQp: { ...raw, question: "edited?" } } });
         expect(b.versionHash).toBe(a.versionHash);
         expect(c.versionHash).not.toBe(a.versionHash);

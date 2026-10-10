@@ -185,7 +185,8 @@ function normalize(raw: unknown, fetchedAt: string): SourceMarket {
     // Gamma writes kickoff as "2026-10-09 00:15:00+00"; made strict ISO before parsing.
     // Sports list a kickoff; crypto Up/Down markets list the start of their price window instead.
     const kickoff = typeof raw.gameStartTime === "string" ? isoDate(raw.gameStartTime.replace(" ", "T").replace(/([+-]\d\d)$/, "$1:00")) : isoDate(raw.eventStartTime);
-    return { ...core, referencePrices, image: imageOf(raw.image), event: eventOf(raw.events), gameStartTime: kickoff, versionHash: sha256Hex(canonicalJson(core)), fetchedAt };
+    const volume24h = typeof raw.volume24hr === "number" && Number.isFinite(raw.volume24hr) && raw.volume24hr >= 0 ? raw.volume24hr : null;
+    return { ...core, referencePrices, image: imageOf(raw.image), event: eventOf(raw.events), volume24h, gameStartTime: kickoff, versionHash: sha256Hex(canonicalJson(core)), fetchedAt };
 }
 
 /**
