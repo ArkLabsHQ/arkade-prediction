@@ -348,7 +348,7 @@ describe("LP bids", () => {
     const mirror = (h: ReturnType<typeof harness>, id: string, volume24h: number, yes = "0.6", no = "0.4") => {
         insertMarket(h.db, { id });
         run(h.db, "UPDATE markets SET kind = 'polymarket', source_snapshot = ? WHERE id = ?",
-            JSON.stringify({ provider: "polymarket", slug: id, volume24h, referencePrices: [{ outcome: "Yes", price: yes }, { outcome: "No", price: no }] }), id);
+            JSON.stringify({ provider: "polymarket", slug: id, volume24h, fetchedAt: new Date().toISOString(), referencePrices: [{ outcome: "Yes", price: yes }, { outcome: "No", price: no }] }), id);
     };
     const quote = (h: ReturnType<typeof harness>, id: string, marketId: string, outcome: "yes" | "no", side: "buy" | "sell", priceSats: bigint) => {
         insertBuyOffer(h.db, { id, marketId, outcome, priceSats, remaining: 3n, makerScript: lpScript });
@@ -362,6 +362,19 @@ describe("LP bids", () => {
         mirror(h, "quiet", 10);
         await inner(h.keeper).plan();
         expect(kinds(h, "lp-liquidity").map((w) => [w.id, w.payload])).toEqual([["lp:busy:bids", { side: "buy", sets: "5", yesBid: "580", noBid: "380" }]]);
+    });
+
+    it("posts no bids on a stale or decided source price, and cancels the LP's live bid there", async () => {
+        const h = harness({ lp, cfg: cfg(5) } as never);
+        mirror(h, "stale", 50_000);
+        run(h.db, "UPDATE markets SET source_snapshot = json_set(source_snapshot, '$.fetchedAt', '2026-01-01T00:00:00.000Z') WHERE id = 'stale'");
+        mirror(h, "decided", 50_000, "0.97", "0.03");
+        mirror(h, "early", 50_000);
+        run(h.db, "UPDATE markets SET resolution_status = 'source-final' WHERE id = 'early'");
+        for (const id of ["stale", "decided", "early"]) quote(h, `bid-${id}`, id, "yes", "buy", 100n);
+        await inner(h.keeper).plan();
+        expect(kinds(h, "lp-liquidity")).toEqual([]);
+        expect(kinds(h, "cancel-offer").map((w) => w.id).sort()).toEqual(["cancel:bid-decided:0:unquotable", "cancel:bid-early:0:unquotable", "cancel:bid-stale:0:unquotable"]);
     });
 
     it("posts no bids with LP_BID_SETS=0", async () => {

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { hex } from "@scure/base";
 import { lpAsks, lpBids, lpExpiry } from "../../../src/server/keeper.js";
-import { ASSETS, harness, insertMarket, P2TR } from "./harness.js";
+import { ASSETS, harness, insertBuyOffer, insertMarket, P2TR } from "./harness.js";
 import { run } from "../../../src/server/db.js";
 import type { OfferTermsJson } from "../../../src/shared/api.js";
 
@@ -143,11 +143,22 @@ describe("LP liquidity", () => {
 
     it("bids for both outcomes without minting, locking sats behind a 330-sat reserve", async () => {
         const h = setup(nowS() + 3600);
+        run(h.db, "UPDATE markets SET source_snapshot = ? WHERE id = 'm1'", JSON.stringify({ fetchedAt: new Date().toISOString(), referencePrices: [{ outcome: "Yes", price: "0.12" }, { outcome: "No", price: "0.6" }] }));
         await h.keeper.execute(h.wf.enqueue("lp:m1:bids", "lp-liquidity", "m1", { side: "buy", sets: "5", yesBid: "100", noBid: "580" }));
         expect(h.wf.get("lp:m1:bids")!.state).toBe("done");
         expect(calls.mints).toEqual([]);
         expect(calls.posts.map((p) => [p.side, p.priceSats, p.size])).toEqual([["buy", 100n, 5n], ["buy", 580n, 5n]]);
         expect(calls.registers.map((r) => [r.terms.side, r.terms.minFill, r.terms.reserveSats])).toEqual([["buy", "4", "330"], ["buy", "1", "330"]]);
+    });
+
+    it("refuses, at funding time, a bid that would cross an ask the LP posted meanwhile", async () => {
+        const h = setup(nowS() + 3600);
+        run(h.db, "UPDATE markets SET source_snapshot = ? WHERE id = 'm1'", JSON.stringify({ fetchedAt: new Date().toISOString(), referencePrices: [{ outcome: "Yes", price: "0.12" }, { outcome: "No", price: "0.6" }] }));
+        insertBuyOffer(h.db, { id: "ASK", marketId: "m1", outcome: "yes", priceSats: 90n, remaining: 3n, makerScript: P2TR("bb") });
+        run(h.db, "UPDATE offers SET side = 'sell', terms = json_set(terms, '$.side', 'sell') WHERE id = 'ASK:0'");
+        await h.keeper.execute(h.wf.enqueue("lp:m1:bids", "lp-liquidity", "m1", { side: "buy", sets: "5", yesBid: "100", noBid: "580" }));
+        expect(h.wf.get("lp:m1:bids")).toMatchObject({ state: "pending", error: expect.stringMatching(/cross/) });
+        expect(calls.posts).toEqual([]);
     });
 
     it("reprices an LP bid as a bid: cancels it and re-posts the shares left at the new price", async () => {

@@ -197,6 +197,7 @@ export class Keeper {
             const m = getMarket(this.d.db, o.market_id);
             const terms = m && marketTerms(m);
             if (!m || !terms || m.kind !== "polymarket" || m.oracle_policy === "redstone" || m.status !== "open" || m.close_at - nowS < LP_MIN_WINDOW_SECONDS || !m.source_snapshot) continue;
+            if (o.side === "buy" && !bidQuotable(m, Date.now())) continue;
             const ref = JSON.parse(m.source_snapshot).referencePrices;
             const outcome = o.outcome as "yes" | "no";
             const none = { yes: 0n, no: 0n };
@@ -216,11 +217,21 @@ export class Keeper {
     /** One bid per outcome on each wanted mirror, so holders can sell back before resolution; re-armed after a failure. */
     private planLpBids(offers: ReturnType<typeof openOffers>, nowS: number): void {
         const lp = this.d.lp && hex.encode(this.d.lp.script);
-        if (!lp || !(this.d.cfg.LP_BID_SETS > 0)) return;
+        if (!lp) return;
+        // A bid priced from a stale or decided source would buy losing shares from anyone who knows better.
+        for (const o of offers) {
+            if (o.maker_script !== lp || o.side !== "buy" || !o.coin) continue;
+            const m = getMarket(this.d.db, o.market_id);
+            if (m?.status === "open" && !bidQuotable(m, Date.now())) this.d.wf.enqueue(`cancel:${o.id}:unquotable`, "cancel-offer", o.market_id, { offerId: o.id });
+        }
+        if (!(this.d.cfg.LP_BID_SETS > 0)) return;
+        const busyLp = new Set(all<{ market_id: string }>(this.d.db,
+            "SELECT market_id FROM workflows WHERE kind IN ('lp-liquidity', 'lp-reprice') AND state IN ('pending', 'submitting') AND market_id IS NOT NULL").map((r) => r.market_id));
         for (const m of all<MarketRow>(this.d.db, "SELECT * FROM markets WHERE kind = 'polymarket' AND status = 'open' AND terms IS NOT NULL AND source_snapshot IS NOT NULL AND oracle_policy IS NOT 'redstone'")) {
             const terms = marketTerms(m);
             const done = this.d.wf.get(`lp:${m.id}:bids`)?.state;
             if (!terms || (done && done !== "failed") || quotesUntil(m) - nowS < LP_MIN_WINDOW_SECONDS || !this.lpWanted(m)) continue;
+            if (busyLp.has(m.id) || !bidQuotable(m, Date.now())) continue;
             const bids = lpBids(JSON.parse(m.source_snapshot!).referencePrices, JSON.parse(m.outcomes) as string[], terms.unitSats);
             if (!bids || (["yes", "no"] as const).some((outcome) => crossesLp(offers, lp, { marketId: m.id, outcome, side: "buy", price: bids[outcome] }, terms.unitSats))) continue;
             this.d.wf.enqueue(`lp:${m.id}:bids`, "lp-liquidity", m.id, { side: "buy", sets: String(this.d.cfg.LP_BID_SETS), yesBid: String(bids.yes), noBid: String(bids.no) });
@@ -500,6 +511,12 @@ export class Keeper {
                 this.mark(wf, { [tk]: p[tk] });
             }
             const offerTerms = offerTermsFromJson(p[tk] as OfferTermsJson);
+            if (!p[fk] && side === "buy") {
+                // Checked again at funding time: other LP quotes on this market may have moved since this was planned.
+                const fresh = getMarket(this.d.db, market.id)!;
+                if (!bidQuotable(fresh, Date.now())) return undefined;
+                if (crossesLp(openOffers(this.d.db), hex.encode(lp.script), { marketId: market.id, outcome, side, price }, terms.unitSats)) throw new Error("bid would cross the LP's own quote; retrying later");
+            }
             if (!p[fk]) {
                 if (side === "sell") await waitForAsset(lp, offerTerms.assetId, sets);
                 this.mark(wf, { step: fk });
@@ -712,6 +729,17 @@ async function waitForCoin(k: Keeper, script: Uint8Array, txid: string, timeoutM
 }
 
 const LP_HALF_SPREAD_BPS = 200n;
+// Bids only stand on a fresh, undecided source price: twice the default import interval, and no side at 95% or more.
+const BID_MAX_PRICE_AGE_MS = 20 * 60_000;
+const BID_MAX_SIDE = 0.95;
+
+export function bidQuotable(m: Pick<MarketRow, "source_snapshot" | "resolution_status">, nowMs: number): boolean {
+    if (!m.source_snapshot || m.resolution_status === "source-final") return false;
+    const snap = JSON.parse(m.source_snapshot) as { fetchedAt?: string; referencePrices?: { price: string }[] | null };
+    const fetched = snap.fetchedAt ? Date.parse(snap.fetchedAt) : NaN;
+    if (!(nowMs - fetched <= BID_MAX_PRICE_AGE_MS)) return false;
+    return !!snap.referencePrices?.length && snap.referencePrices.every((r) => Number(r.price) < BID_MAX_SIDE);
+}
 // ponytail: fixed threshold, each reprice costs a cancel and a post; tune per market if the cost matters.
 const REPRICE_BPS = 300n;
 
