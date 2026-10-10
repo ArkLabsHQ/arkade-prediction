@@ -89,6 +89,7 @@ async function main(): Promise<void> {
     const net = await connectWithRetry();
     guardIdentity(net);
     const operator = cfg.OPERATOR_MNEMONIC ? await partyFromMnemonic(cfg, cfg.OPERATOR_MNEMONIC) : undefined;
+    if (operator) operator.party.keepAssetsApart = true;
     const lp = cfg.LP_MNEMONIC ? await partyFromMnemonic(cfg, cfg.LP_MNEMONIC) : undefined;
     const devOracleKey = cfg.DEV_ORACLE_SECRET ? hex.encode(schnorr.getPublicKey(hex.decode(cfg.DEV_ORACLE_SECRET))) : undefined;
     const keeperScript: Uint8Array = operator?.party.script ?? scriptOfAddress(await (lp?.wallet.getAddress() ?? Promise.reject(new Error("keeper needs OPERATOR_MNEMONIC or LP_MNEMONIC"))));

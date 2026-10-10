@@ -34,6 +34,11 @@ export interface Party {
     script: Uint8Array;
     /** Spendable wallet coins with their tap tree, forfeit leaf and assets. */
     coins(): Promise<WalletCoin[]>;
+    /**
+     * Never spend coins carrying assets just for their sats. The operator needs this: each market's CTRL must move
+     * straight from its genesis into its vault, and funding another market with that coin would move it first.
+     */
+    keepAssetsApart?: boolean;
     /** Called with outpoints this party just spent, so selection skips them while the indexer catches up. */
     noteSpent?(outpoints: string[]): void;
 }
@@ -142,7 +147,8 @@ async function selectOnce(party: Party, sats: bigint, need: AssetAmount[]): Prom
     }
     let value = chosen.reduce((s, c) => s + BigInt(c.value), 0n);
     // Asset-free coins first; asset-carrying coins can still fund sats because change keeps their assets.
-    const bySats = [...coins].sort((a, b) => Number(!!a.assets?.length) - Number(!!b.assets?.length) || b.value - a.value);
+    const bySats = [...coins].filter((c) => !party.keepAssetsApart || !c.assets?.length)
+        .sort((a, b) => Number(!!a.assets?.length) - Number(!!b.assets?.length) || b.value - a.value);
     for (const c of bySats) {
         if (value >= sats) break;
         take(c);
