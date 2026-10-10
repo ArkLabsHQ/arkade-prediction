@@ -241,9 +241,10 @@ Each entry: decision, reason, rejected alternatives. Newest last.
     OPINION_ENABLED). Limitless offers little beyond Polymarket today but anchors to Ethereum (a later ZK path);
     Opinion adds coverage but rotates oracles (allowlist upkeep) and has no Ethereum anchor.
 49. **LP inventory skew and capped refills.** Every share is minted as a YES/NO pair, so one-sided demand leaves
-    the LP holding the unpopular side. LP quotes now shift by `LP_SKEW_BPS` per share of net position (NO minus
-    YES, wallet plus live asks, capped at 15% of the unit) toward the side it is short. The shift keeps each pair's
-    sum, so asks stay above a unit and bids below it. A sold-out ask is re-posted from shares the LP already holds,
-    else from new sets until `LP_MAX_SETS_PER_MARKET`; that budget bounds the worst-case loss per market. Refills
-    need the same fresh, undecided source price as bids. Without the skew a refill would only feed informed flow
-    at the source price.
+    the LP holding the unpopular side. LP quotes now widen by `LP_SKEW_BPS` per share of net position (NO minus YES,
+    wallet plus live asks, capped at 15% of the unit): a higher ask on the side it is short, a lower bid on the side
+    it is long. A symmetric shift (raising the short side's bid, cutting the long side's ask) was rejected: a trader
+    could fill at the old ask and unwind into the moved quote for a profit. Quotes move one at a time, so an ask that
+    would bring the LP's two asks to a unit or less waits for the other leg. A sold-out ask is re-posted from shares
+    the LP already holds, else from new sets until `LP_MAX_SETS_PER_MARKET`, which counts every recorded mint and
+    bounds the worst-case loss per market. Refills need the same fresh, undecided source price as bids.

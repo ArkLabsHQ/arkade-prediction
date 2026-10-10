@@ -477,11 +477,28 @@ describe("operator coin splits", () => {
 });
 
 describe("LP inventory skew", () => {
-    it("shifts both quotes toward the side the LP is short, keeping their sum, capped, and refuses to leave the band", () => {
-        expect(skewed({ yes: 600n, no: 450n }, 3n, 1000n, 100n)).toEqual({ yes: 630n, no: 420n });
-        expect(skewed({ yes: 600n, no: 450n }, -2n, 1000n, 100n)).toEqual({ yes: 580n, no: 470n });
-        expect(skewed({ yes: 600n, no: 450n }, 100n, 1000n, 100n)).toEqual({ yes: 750n, no: 300n });
-        expect(skewed({ yes: 900n, no: 150n }, 15n, 1000n, 100n)).toBeUndefined();
+    it("only widens: a higher ask on the short side, a lower bid on the long side, capped and kept in band", () => {
+        expect(skewed({ yes: 620n, no: 420n }, 3n, 1000n, 100n, "sell")).toEqual({ yes: 650n, no: 420n });
+        expect(skewed({ yes: 620n, no: 420n }, -2n, 1000n, 100n, "sell")).toEqual({ yes: 620n, no: 440n });
+        expect(skewed({ yes: 580n, no: 380n }, 3n, 1000n, 100n, "buy")).toEqual({ yes: 580n, no: 350n });
+        expect(skewed({ yes: 580n, no: 380n }, -2n, 1000n, 100n, "buy")).toEqual({ yes: 560n, no: 380n });
+        expect(skewed({ yes: 620n, no: 420n }, 100n, 1000n, 100n, "sell")).toEqual({ yes: 770n, no: 420n });
+        expect(skewed({ yes: 950n, no: 70n }, 15n, 1000n, 100n, "sell")).toEqual({ yes: 999n, no: 70n });
+        expect(skewed({ yes: 50n, no: 930n }, -15n, 1000n, 100n, "buy")).toEqual({ yes: 1n, no: 930n });
+    });
+
+    it("moves the rising ask before the falling one, so the LP's asks never sum to a unit", async () => {
+        const lpScript = P2TR("bb");
+        const h = harness({ lp: { script: Uint8Array.from(Buffer.from(lpScript, "hex")), coins: async () => [] } } as never);
+        insertMarket(h.db, { id: "pm" });
+        run(h.db, "UPDATE markets SET kind = 'polymarket', source_snapshot = ? WHERE id = 'pm'",
+            JSON.stringify({ referencePrices: [{ outcome: "Yes", price: "0.7" }, { outcome: "No", price: "0.3" }] }));
+        for (const [id, outcome, price] of [["yesAsk", "yes", 620n], ["noAsk", "no", 420n]] as const) {
+            insertBuyOffer(h.db, { id, marketId: "pm", outcome, priceSats: price, remaining: 3n, makerScript: lpScript });
+            run(h.db, "UPDATE offers SET side = 'sell', terms = json_set(terms, '$.side', 'sell') WHERE id = ?", `${id}:0`);
+        }
+        await inner(h.keeper).plan();
+        expect(h.wf.list({}).filter((w) => w.kind === "lp-reprice").map((w) => [w.id, w.payload.price])).toEqual([["reprice:yesAsk:0", "720"]]);
     });
 });
 
@@ -496,7 +513,7 @@ describe("LP refills", () => {
             JSON.stringify({ fetchedAt: new Date().toISOString(), referencePrices: [{ outcome: "Yes", price: "0.6" }, { outcome: "No", price: "0.4" }] }));
         h.wf.transition(h.wf.enqueue("lp:pm:bootstrap", "lp-liquidity", "pm", { sets: "5", minted: "T" }), "done", {});
         // YES sold out; 5 unsold NO remain on the LP's ask.
-        insertBuyOffer(h.db, { id: "noAsk", marketId: "pm", outcome: "no", priceSats: 370n, remaining: 5n, makerScript: lpScript });
+        insertBuyOffer(h.db, { id: "noAsk", marketId: "pm", outcome: "no", priceSats: 420n, remaining: 5n, makerScript: lpScript });
         run(h.db, "UPDATE offers SET side = 'sell', terms = json_set(terms, '$.side', 'sell') WHERE id = 'noAsk:0'");
         return h;
     };
@@ -506,19 +523,21 @@ describe("LP refills", () => {
         const h = setup();
         await inner(h.keeper).plan();
         // Source 600 + 20 spread, then +5 net NO x 1% of the unit.
-        expect(refills(h)).toEqual([["lp:pm:refill:1", { sets: "5", yesAsk: "670", noAsk: "0" }]]);
+        expect(refills(h)).toEqual([["lp:pm:refill:1", { sets: "5", yesAsk: "670", noAsk: "0", fromWallet: false }]]);
     });
 
     it("re-offers shares the wallet already holds without minting", async () => {
         const h = setup({ yes: 5n, no: 5n });
         await inner(h.keeper).plan();
-        expect(refills(h)).toEqual([["lp:pm:refill:1", { sets: "5", yesAsk: "670", noAsk: "0", minted: "wallet" }]]);
+        expect(refills(h)).toEqual([["lp:pm:refill:1", { sets: "5", yesAsk: "670", noAsk: "0", fromWallet: true }]]);
     });
 
-    it("stops minting once the market's set budget is spent", async () => {
+    it("stops minting once the market's set budget is spent, counting a failed refill's mint", async () => {
         const h = setup();
-        h.wf.transition(h.wf.enqueue("lp:pm:refill:1", "lp-liquidity", "pm", { sets: "5", minted: "T2" }), "done", {});
+        h.wf.transition(h.wf.enqueue("lp:pm:refill:1", "lp-liquidity", "pm", { sets: "5", minted: "T2" }), "failed", { error: "post failed" });
+        run(h.db, "UPDATE workflows SET updated_at = '2026-01-01T00:00:00.000Z' WHERE id = 'lp:pm:refill:1'");
         await inner(h.keeper).plan();
+        expect(h.wf.get("lp:pm:refill:1")!.state).toBe("failed");
         expect(refills(h).map(([id]) => id)).toEqual(["lp:pm:refill:1"]);
     });
 });
