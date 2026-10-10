@@ -93,6 +93,8 @@ services:
       LP_ASK_NO_SATS: ${LP_ASK_NO_SATS:-0}
       LP_BUSY_ONLY: ${LP_BUSY_ONLY:-true}
       LP_BID_SETS: ${LP_BID_SETS:-0}
+      LP_SKEW_BPS: ${LP_SKEW_BPS:-100}
+      LP_MAX_SETS_PER_MARKET: ${LP_MAX_SETS_PER_MARKET:-0}
       DEV_ENDPOINTS: ${DEV_ENDPOINTS:-false}
       WORKERS: ${WORKERS:-all}
       LOG_LEVEL: ${LOG_LEVEL:-info}

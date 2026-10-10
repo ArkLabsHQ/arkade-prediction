@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { assetIdOf } from "../../../src/core/assets.js";
 import { all, openDb, run } from "../../../src/server/db.js";
+import { skewed } from "../../../src/server/keeper.js";
 import { WriterLease } from "../../../src/server/lease.js";
 import { ASSETS, harness, inner, insertBuyOffer, insertMarket, P2TR, tempDb } from "./harness.js";
 
@@ -220,7 +221,7 @@ describe("halted markets", () => {
 
     it("cancels the LP's open offers once per offer and plans no matches", async () => {
         const lpScript = P2TR("bb");
-        const h = harness({ lp: { script: Uint8Array.from(Buffer.from(lpScript, "hex")) } as never });
+        const h = harness({ lp: { script: Uint8Array.from(Buffer.from(lpScript, "hex")), coins: async () => [] } as never });
         insertMarket(h.db, { id: "m1", status: "halted" });
         insertBuyOffer(h.db, { id: "lpYes", marketId: "m1", outcome: "yes", priceSats: 600n, remaining: 5n, makerScript: lpScript });
         insertBuyOffer(h.db, { id: "userNo", marketId: "m1", outcome: "no", priceSats: 500n, remaining: 5n });
@@ -236,7 +237,7 @@ describe("halted markets", () => {
 describe("LP repricing", () => {
     it("moves only drifted LP asks on mirrored markets to the source price plus spread", async () => {
         const lpScript = P2TR("bb");
-        const h = harness({ lp: { script: Uint8Array.from(Buffer.from(lpScript, "hex")) } as never });
+        const h = harness({ lp: { script: Uint8Array.from(Buffer.from(lpScript, "hex")), coins: async () => [] } as never });
         insertMarket(h.db, { id: "pm" });
         insertMarket(h.db, { id: "custom" });
         run(h.db, "UPDATE markets SET kind = 'polymarket', source_snapshot = ? WHERE id = 'pm'",
@@ -315,7 +316,7 @@ describe("LP bootstrap retry", () => {
 
 describe("LP busy-only bootstraps", () => {
     const lp = { script: new Uint8Array(34), coins: async () => [] };
-    const cfg = { APM_NETWORK: "regtest", RENEW_THRESHOLD_SECONDS: 3600, MARKET_UNIT_SATS: 1000, LP_BOOTSTRAP_SETS: 5, LP_ASK_YES_SATS: 550, LP_ASK_NO_SATS: 550, LP_BUSY_ONLY: true };
+    const cfg = { APM_NETWORK: "regtest", RENEW_THRESHOLD_SECONDS: 3600, MARKET_UNIT_SATS: 1000, LP_BOOTSTRAP_SETS: 5, LP_ASK_YES_SATS: 550, LP_ASK_NO_SATS: 550, LP_BUSY_ONLY: true, LP_SKEW_BPS: 0, LP_MAX_SETS_PER_MARKET: 0 };
     const mirror = (h: ReturnType<typeof harness>, id: string, snapshot: object) => {
         insertMarket(h.db, { id });
         run(h.db, "UPDATE markets SET kind = 'polymarket', source_snapshot = ? WHERE id = ?", JSON.stringify(snapshot), id);
@@ -359,7 +360,7 @@ describe("LP busy-only bootstraps", () => {
 describe("LP bids", () => {
     const lpScript = P2TR("bb");
     const lp = { script: Uint8Array.from(Buffer.from(lpScript, "hex")), coins: async () => [] };
-    const cfg = (bidSets: number) => ({ APM_NETWORK: "regtest", RENEW_THRESHOLD_SECONDS: 3600, MARKET_UNIT_SATS: 1000, LP_BOOTSTRAP_SETS: 0, LP_BUSY_ONLY: true, LP_BID_SETS: bidSets });
+    const cfg = (bidSets: number) => ({ APM_NETWORK: "regtest", RENEW_THRESHOLD_SECONDS: 3600, MARKET_UNIT_SATS: 1000, LP_BOOTSTRAP_SETS: 0, LP_BUSY_ONLY: true, LP_BID_SETS: bidSets, LP_SKEW_BPS: 0, LP_MAX_SETS_PER_MARKET: 0 });
     const mirror = (h: ReturnType<typeof harness>, id: string, volume24h: number, yes = "0.6", no = "0.4") => {
         insertMarket(h.db, { id });
         run(h.db, "UPDATE markets SET kind = 'polymarket', source_snapshot = ? WHERE id = ?",
@@ -472,5 +473,52 @@ describe("operator coin splits", () => {
         h.wf.enqueue("activate:m", "activate", null, { genesisTxid: g });
         await inner(h.keeper).plan();
         expect(all<{ id: string }>(h.db, "SELECT id FROM workflows WHERE kind = 'split'").map((w) => w.id)).toEqual(["split:trapped:0"]);
+    });
+});
+
+describe("LP inventory skew", () => {
+    it("shifts both quotes toward the side the LP is short, keeping their sum, capped, and refuses to leave the band", () => {
+        expect(skewed({ yes: 600n, no: 450n }, 3n, 1000n, 100n)).toEqual({ yes: 630n, no: 420n });
+        expect(skewed({ yes: 600n, no: 450n }, -2n, 1000n, 100n)).toEqual({ yes: 580n, no: 470n });
+        expect(skewed({ yes: 600n, no: 450n }, 100n, 1000n, 100n)).toEqual({ yes: 750n, no: 300n });
+        expect(skewed({ yes: 900n, no: 150n }, 15n, 1000n, 100n)).toBeUndefined();
+    });
+});
+
+describe("LP refills", () => {
+    const lpScript = P2TR("bb");
+    const cfg = { APM_NETWORK: "regtest", RENEW_THRESHOLD_SECONDS: 3600, MARKET_UNIT_SATS: 1000, LP_BOOTSTRAP_SETS: 5, LP_BUSY_ONLY: false, LP_SKEW_BPS: 100, LP_MAX_SETS_PER_MARKET: 10 };
+    const setup = (wallet: { yes?: bigint; no?: bigint } = {}) => {
+        const assets = [...(wallet.yes ? [{ assetId: ASSETS.yes, amount: wallet.yes }] : []), ...(wallet.no ? [{ assetId: ASSETS.no, amount: wallet.no }] : [])];
+        const h = harness({ cfg, lp: { script: Uint8Array.from(Buffer.from(lpScript, "hex")), coins: async () => [{ txid: "cc".repeat(32), vout: 0, value: 330, assets }] } } as never);
+        insertMarket(h.db, { id: "pm" });
+        run(h.db, "UPDATE markets SET kind = 'polymarket', source_snapshot = ? WHERE id = 'pm'",
+            JSON.stringify({ fetchedAt: new Date().toISOString(), referencePrices: [{ outcome: "Yes", price: "0.6" }, { outcome: "No", price: "0.4" }] }));
+        h.wf.transition(h.wf.enqueue("lp:pm:bootstrap", "lp-liquidity", "pm", { sets: "5", minted: "T" }), "done", {});
+        // YES sold out; 5 unsold NO remain on the LP's ask.
+        insertBuyOffer(h.db, { id: "noAsk", marketId: "pm", outcome: "no", priceSats: 370n, remaining: 5n, makerScript: lpScript });
+        run(h.db, "UPDATE offers SET side = 'sell', terms = json_set(terms, '$.side', 'sell') WHERE id = 'noAsk:0'");
+        return h;
+    };
+    const refills = (h: ReturnType<typeof harness>) => h.wf.list({}).filter((w) => w.id.includes(":refill:")).map((w) => [w.id, w.payload]);
+
+    it("mints more sets for a sold-out ask, priced up by the LP's short position", async () => {
+        const h = setup();
+        await inner(h.keeper).plan();
+        // Source 600 + 20 spread, then +5 net NO x 1% of the unit.
+        expect(refills(h)).toEqual([["lp:pm:refill:1", { sets: "5", yesAsk: "670", noAsk: "0" }]]);
+    });
+
+    it("re-offers shares the wallet already holds without minting", async () => {
+        const h = setup({ yes: 5n, no: 5n });
+        await inner(h.keeper).plan();
+        expect(refills(h)).toEqual([["lp:pm:refill:1", { sets: "5", yesAsk: "670", noAsk: "0", minted: "wallet" }]]);
+    });
+
+    it("stops minting once the market's set budget is spent", async () => {
+        const h = setup();
+        h.wf.transition(h.wf.enqueue("lp:pm:refill:1", "lp-liquidity", "pm", { sets: "5", minted: "T2" }), "done", {});
+        await inner(h.keeper).plan();
+        expect(refills(h).map(([id]) => id)).toEqual(["lp:pm:refill:1"]);
     });
 });

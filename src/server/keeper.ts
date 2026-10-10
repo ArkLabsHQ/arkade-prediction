@@ -120,12 +120,15 @@ export class Keeper {
         }
         this.planMatches(offers);
         this.planCancels(offers);
-        this.planReprices(offers, nowS);
+        const held = new Map<string, bigint>();
+        for (const c of this.d.lp ? await this.d.lp.coins() : []) for (const a of c.assets ?? []) held.set(a.assetId, (held.get(a.assetId) ?? 0n) + a.amount);
+        this.planReprices(offers, nowS, held);
         this.retryLpBootstraps(nowS);
         this.retryActivations(nowS);
         await this.planSplits();
         this.planLpBootstraps(nowS);
-        this.planLpBids(offers, nowS);
+        this.planLpBids(offers, nowS, held);
+        this.planLpRefills(offers, nowS, held);
         await this.planOwnRedemptions(offers);
         const boxes = await this.boxCoins();
         this.planRenewals(offers, nowS, boxes);
@@ -218,7 +221,12 @@ export class Keeper {
         }
     }
 
-    private planReprices(offers: ReturnType<typeof openOffers>, nowS: number): void {
+    private skewFor(offers: ReturnType<typeof openOffers>, held: Map<string, bigint>, m: MarketRow, terms: VaultTerms, quotes: { yes: bigint; no: bigint }) {
+        const lp = hex.encode(this.d.lp!.script);
+        return skewed(quotes, lpNetNo(held, offers, lp, m.id, terms.assets), terms.unitSats, BigInt(this.d.cfg.LP_SKEW_BPS));
+    }
+
+    private planReprices(offers: ReturnType<typeof openOffers>, nowS: number, held: Map<string, bigint>): void {
         const lp = this.d.lp && hex.encode(this.d.lp.script);
         if (!lp) return;
         for (const o of offers) {
@@ -230,9 +238,10 @@ export class Keeper {
             const ref = JSON.parse(m.source_snapshot).referencePrices;
             const outcome = o.outcome as "yes" | "no";
             const none = { yes: 0n, no: 0n };
-            const target = o.side === "sell"
-                ? lpAsks(ref, JSON.parse(m.outcomes) as string[], terms.unitSats, none)[outcome]
-                : (lpBids(ref, JSON.parse(m.outcomes) as string[], terms.unitSats) ?? none)[outcome];
+            const base = o.side === "sell"
+                ? lpAsks(ref, JSON.parse(m.outcomes) as string[], terms.unitSats, none)
+                : (lpBids(ref, JSON.parse(m.outcomes) as string[], terms.unitSats) ?? none);
+            const target = base.yes === 0n ? 0n : (this.skewFor(offers, held, m, terms, base) ?? none)[outcome];
             const price = BigInt((JSON.parse(o.terms) as OfferTermsJson).priceSats);
             const gap = target > price ? target - price : price - target;
             const legacy = !!(JSON.parse(o.terms) as OfferTermsJson).legacy;
@@ -244,7 +253,7 @@ export class Keeper {
     }
 
     /** One bid per outcome on each wanted mirror, so holders can sell back before resolution; re-armed after a failure. */
-    private planLpBids(offers: ReturnType<typeof openOffers>, nowS: number): void {
+    private planLpBids(offers: ReturnType<typeof openOffers>, nowS: number, held: Map<string, bigint>): void {
         const lp = this.d.lp && hex.encode(this.d.lp.script);
         if (!lp) return;
         // A bid priced from a stale or decided source would buy losing shares from anyone who knows better.
@@ -261,9 +270,42 @@ export class Keeper {
             const done = this.d.wf.get(`lp:${m.id}:bids`)?.state;
             if (!terms || (done && done !== "failed") || quotesUntil(m) - nowS < LP_MIN_WINDOW_SECONDS || !this.lpWanted(m)) continue;
             if (busyLp.has(m.id) || !bidQuotable(m, Date.now())) continue;
-            const bids = lpBids(JSON.parse(m.source_snapshot!).referencePrices, JSON.parse(m.outcomes) as string[], terms.unitSats);
+            const base = lpBids(JSON.parse(m.source_snapshot!).referencePrices, JSON.parse(m.outcomes) as string[], terms.unitSats);
+            const bids = base && this.skewFor(offers, held, m, terms, base);
             if (!bids || (["yes", "no"] as const).some((outcome) => crossesLp(offers, lp, { marketId: m.id, outcome, side: "buy", price: bids[outcome] }, terms.unitSats))) continue;
             this.d.wf.enqueue(`lp:${m.id}:bids`, "lp-liquidity", m.id, { side: "buy", sets: String(this.d.cfg.LP_BID_SETS), yesBid: String(bids.yes), noBid: String(bids.no) });
+        }
+    }
+
+    /** A sold-out LP ask is re-posted from shares the LP already holds, else from new sets within LP_MAX_SETS_PER_MARKET. */
+    private planLpRefills(offers: ReturnType<typeof openOffers>, nowS: number, held: Map<string, bigint>): void {
+        const sets = BigInt(this.d.cfg.LP_BOOTSTRAP_SETS);
+        const max = BigInt(this.d.cfg.LP_MAX_SETS_PER_MARKET);
+        const lp = this.d.lp && hex.encode(this.d.lp.script);
+        if (!lp || sets <= 0n || max <= sets) return;
+        const busyLp = new Set(all<{ market_id: string }>(this.d.db,
+            "SELECT market_id FROM workflows WHERE kind IN ('lp-liquidity', 'lp-reprice') AND state IN ('pending', 'submitting') AND market_id IS NOT NULL").map((r) => r.market_id));
+        for (const m of all<MarketRow>(this.d.db, "SELECT * FROM markets WHERE kind = 'polymarket' AND status = 'open' AND terms IS NOT NULL AND source_snapshot IS NOT NULL AND oracle_policy IS NOT 'redstone'")) {
+            const terms = marketTerms(m);
+            if (!terms || busyLp.has(m.id) || this.d.wf.get(`lp:${m.id}:bootstrap`)?.state !== "done") continue;
+            // A refill adds risk, so it needs the same fresh, undecided source price a bid does.
+            if (quotesUntil(m) - nowS < LP_MIN_WINDOW_SECONDS || !this.lpWanted(m) || !bidQuotable(m, Date.now())) continue;
+            const live = (outcome: string) => offers.some((o) => o.maker_script === lp && o.market_id === m.id && o.side === "sell" && o.outcome === outcome && o.coin
+                && BigInt(o.remaining) * BigInt((JSON.parse(o.terms) as OfferTermsJson).priceSats) >= MIN_BET_SATS);
+            const soldOut = (["yes", "no"] as const).filter((x) => !live(x));
+            if (soldOut.length === 0) continue;
+            const base = lpAsks(JSON.parse(m.source_snapshot!).referencePrices, JSON.parse(m.outcomes) as string[], terms.unitSats, { yes: 0n, no: 0n });
+            const asks = base.yes === 0n ? undefined : this.skewFor(offers, held, m, terms, base);
+            if (!asks || soldOut.some((x) => crossesLp(offers, lp, { marketId: m.id, outcome: x, side: "sell", price: asks[x] }, terms.unitSats))) continue;
+            const done = all<{ payload: string }>(this.d.db, "SELECT payload FROM workflows WHERE id LIKE ? AND state = 'done'", `lp:${m.id}:refill:%`)
+                .map((r) => JSON.parse(r.payload) as { sets: string; minted?: string });
+            const minted = sets + done.filter((p) => p.minted && p.minted !== "wallet").reduce((s, p) => s + BigInt(p.sets), 0n);
+            const fromWallet = soldOut.every((x) => (held.get(terms.assets[x]) ?? 0n) >= sets);
+            if (!fromWallet && minted + sets > max) continue;
+            this.d.wf.enqueue(`lp:${m.id}:refill:${done.length + 1}`, "lp-liquidity", m.id, {
+                sets: String(sets), yesAsk: soldOut.includes("yes") ? String(asks.yes) : "0", noAsk: soldOut.includes("no") ? String(asks.no) : "0",
+                ...(fromWallet ? { minted: "wallet" } : {}),
+            });
         }
     }
 
@@ -811,6 +853,28 @@ export function lpBids(ref: { outcome: string; price: string }[] | null | undefi
     const yes = bid(ref!.find((r) => r.outcome === outcomes[0])!.price);
     const no = bid(ref!.find((r) => r.outcome === outcomes[1])!.price);
     return yes < asks.yes && no < asks.no && yes + no < unit ? { yes, no } : undefined;
+}
+
+const LP_MAX_SKEW_BPS = 1500n;
+
+/** The LP's net position on one market in shares, NO minus YES: what its wallet holds plus what its live asks still offer. */
+export function lpNetNo(held: Map<string, bigint>, offers: ReturnType<typeof openOffers>, lp: string, marketId: string, assets: { yes: string; no: string }): bigint {
+    const side = (outcome: "yes" | "no") => (held.get(assets[outcome]) ?? 0n)
+        + offers.filter((o) => o.maker_script === lp && o.market_id === marketId && o.side === "sell" && o.outcome === outcome && o.coin).reduce((s, o) => s + BigInt(o.remaining), 0n);
+    return side("no") - side("yes");
+}
+
+/**
+ * Shifts both outcomes' quotes toward the side the LP is short, so one-sided flow raises the price it pays for.
+ * The shift keeps each pair's sum, which is what stops merge and mint arbitrage; a shift that would leave the band is refused.
+ */
+export function skewed(q: { yes: bigint; no: bigint }, netNo: bigint, unit: bigint, bps: bigint): { yes: bigint; no: bigint } | undefined {
+    const cap = (unit * LP_MAX_SKEW_BPS) / 10_000n;
+    const raw = (netNo * unit * bps) / 10_000n;
+    const s = raw > cap ? cap : raw < -cap ? -cap : raw;
+    const yes = q.yes + s;
+    const no = q.no - s;
+    return yes < 1n || no < 1n || yes >= unit || no >= unit ? undefined : { yes, no };
 }
 
 /** Whether `q` would cross one of the LP's own live quotes: its ask on the same outcome, or its bid on the other. */

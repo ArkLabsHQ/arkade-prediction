@@ -65,7 +65,7 @@ describe("LP repricing", () => {
 
         const db = openDb(join(s.dataDir, "apm.sqlite"));
         run(db, "UPDATE markets SET kind = 'polymarket', outcomes = ?, source_snapshot = ? WHERE id = ?", JSON.stringify(["Yes", "No"]),
-            JSON.stringify({ provider: "polymarket", slug: "busy", volume24h: 50_000, referencePrices: [{ outcome: "Yes", price: "0.6" }, { outcome: "No", price: "0.4" }] }), m.marketId);
+            JSON.stringify({ provider: "polymarket", slug: "busy", volume24h: 50_000, fetchedAt: new Date().toISOString(), referencePrices: [{ outcome: "Yes", price: "0.6" }, { outcome: "No", price: "0.4" }] }), m.marketId);
         db.close();
 
         const bids = await waitFor(async () => {
@@ -82,5 +82,33 @@ describe("LP repricing", () => {
         await waitFor(async () => (await alice.party.coins()).reduce((t, c) => t + BigInt(c.value), 0n) === before + 580n, { what: "sale proceeds" });
         const after = await waitFor(async () => (await open()).find((o) => o.terms.side === "buy" && o.outcome === "yes" && o.remaining === "2"), { what: "LP bid partially filled", timeoutMs: 120_000, intervalMs: 3000 });
         expect(after.coin!.assets).toEqual([{ assetId: m.terms.assets.yes, amount: "1" }]);
+    });
+
+    it("refills a sold-out ask within the set budget, priced up by the LP's short position", { timeout: 900_000 }, async () => {
+        const ark = await connectArkade();
+        const ctx: Ctx = { ark, net: network(ark), indexer: indexerProvider };
+        const s = await startServer({ port: 37418, env: { LP_BOOTSTRAP_SETS: "2", LP_MAX_SETS_PER_MARKET: "4", LP_SKEW_BPS: "100" } });
+        servers.push(s);
+        const ov = await s.api<{ wallets: { operator: { address: string }; lp: { address: string } } }>("/api/admin/overview", { admin: true });
+        await faucet(ov.body.wallets.operator.address, 100_000);
+        await faucet(ov.body.wallets.lp.address, 100_000);
+        const alice = await faucetTrader(s, 40_000);
+        const m = await registeredMarket(s, ctx, alice, 3600);
+        const open = async () => (await s.api<{ offers: OfferJson[] }>(`/api/markets/${m.marketId}/offers?status=open`)).body.offers;
+        const quotes = async () => (await open()).map((o) => `${o.terms.side}:${o.outcome}:${o.terms.priceSats}:${o.remaining}`).sort().join(",");
+
+        const db = openDb(join(s.dataDir, "apm.sqlite"));
+        run(db, "UPDATE markets SET kind = 'polymarket', outcomes = ?, source_snapshot = ? WHERE id = ?", JSON.stringify(["Yes", "No"]),
+            JSON.stringify({ provider: "polymarket", slug: "busy", volume24h: 50_000, fetchedAt: new Date().toISOString(), referencePrices: [{ outcome: "Yes", price: "0.6" }, { outcome: "No", price: "0.4" }] }), m.marketId);
+        db.close();
+
+        await waitFor(async () => (await quotes()) === "sell:no:420:2,sell:yes:620:2", { what: "LP bootstrap asks", timeoutMs: 300_000, intervalMs: 3000 });
+        const yesAsk = (await open()).find((o) => o.outcome === "yes")!;
+        await takeOffers(ctx, alice.party, [{ offer: { terms: offerTermsFromJson(yesAsk.terms), coin: coinFromJson(yesAsk.coin!) }, qty: 2n }], { maxSpendSats: 1240n });
+
+        // Net 2 NO short at 1% per share: YES re-offered at 620 + 20 from two freshly minted sets.
+        await waitFor(async () => (await quotes()) === "sell:no:420:2,sell:yes:640:2", { what: "LP refill", timeoutMs: 300_000, intervalMs: 3000 });
+        await new Promise((r) => setTimeout(r, 45_000));
+        expect(await quotes()).toBe("sell:no:420:2,sell:yes:640:2");
     });
 });

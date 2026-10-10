@@ -114,6 +114,10 @@ const schema = z.object({
     LP_BUSY_ONLY: bool.default(true),
     // Shares per outcome the LP bids for on each wanted mirror, so holders can cash out early; 0 = no bids.
     LP_BID_SETS: int(0),
+    // Price shift per share of net LP position, in bps of the unit (capped at 1500); 0 = quote the source odds only.
+    LP_SKEW_BPS: int(100),
+    // Most sets the LP mints on one market, bootstrap included; above LP_BOOTSTRAP_SETS it refills sold-out asks.
+    LP_MAX_SETS_PER_MARKET: int(0),
     DEV_ENDPOINTS: bool,
     WORKERS: z.enum(["all", "none"]).default("all"),
     LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),

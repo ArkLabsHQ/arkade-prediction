@@ -49,7 +49,7 @@ export function harness(overrides: Partial<KeeperDeps> = {}): Harness {
         }),
     };
     const deps = {
-        cfg: { APM_NETWORK: "regtest", RENEW_THRESHOLD_SECONDS: 3600, MARKET_UNIT_SATS: 1000, LP_BOOTSTRAP_SETS: 0 },
+        cfg: { APM_NETWORK: "regtest", RENEW_THRESHOLD_SECONDS: 3600, MARKET_UNIT_SATS: 1000, LP_BOOTSTRAP_SETS: 0, LP_SKEW_BPS: 0, LP_MAX_SETS_PER_MARKET: 0 },
         db, bus, wf, lease, keeperScript: new Uint8Array(34),
         net: { indexer, ctx: {}, exitDelaySeconds: 512n },
         log: () => {},

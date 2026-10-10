@@ -85,7 +85,9 @@ One container runs the UI/API, the keeper and a local 1-of-1 attestor (started b
 7. **Fund** the operator and LP addresses shown in the admin console (`/api/admin/overview` on 37401) with
    Mutinynet test sats: per imported market the operator locks `MARKET_BASE_SATS` + one seed set + carriers;
    the LP locks `LP_BOOTSTRAP_SETS x MARKET_UNIT_SATS` + carriers, and with `LP_BID_SETS` set,
-   `LP_BID_SETS x bid price` + a 330-sat reserve per outcome.
+   `LP_BID_SETS x bid price` + a 330-sat reserve per outcome. With `LP_MAX_SETS_PER_MARKET` above
+   `LP_BOOTSTRAP_SETS`, a sold-out ask is refilled until the LP has minted that many sets on the market;
+   the worst-case loss per market is about `LP_MAX_SETS_PER_MARKET x MARKET_UNIT_SATS`.
 
 Not yet executed on Mutinynet: steps 6 to 8 (no hosted deployment has been made).
 
