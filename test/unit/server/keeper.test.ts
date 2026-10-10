@@ -432,3 +432,18 @@ describe("in-flight submissions", () => {
         expect(h.wf.get("activate:m1")).toMatchObject({ state: "submitting", txid: "bb".repeat(32), payload: { inputs: ["aa:0"] } });
     });
 });
+
+describe("activation retry", () => {
+    it("re-arms activations that failed for funds, but not ones the audit refused", async () => {
+        const h = harness({});
+        for (const id of ["funds", "audit"]) insertMarket(h.db, { id, status: "activating" });
+        const fail = (id: string, error: string) => run(h.db,
+            "INSERT INTO workflows(id, kind, market_id, state, payload, error, created_at, updated_at) VALUES (?, 'activate', ?, 'failed', ?, ?, ?, ?)",
+            `activate:${id}`, id, JSON.stringify({ genesisTxid: "aa".repeat(32) }), error, "2026-01-01T00:00:00.000Z", "2026-01-01T00:00:00.000Z");
+        fail("funds", "change of 120 sats is below the 330-sat carrier");
+        fail("audit", "CTRL did not move directly from genesis into the vault tx");
+        await inner(h.keeper).plan();
+        expect(h.wf.get("activate:funds")).toMatchObject({ state: "pending", payload: { genesisTxid: "aa".repeat(32), rearms: 1 } });
+        expect(h.wf.get("activate:audit")!.state).toBe("failed");
+    });
+});

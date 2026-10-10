@@ -40,6 +40,7 @@ const MULTI_STEP = new Set(["activate", "lp-liquidity", "lp-reprice"]);
 const MATCH_CANDIDATES = 5;
 const RENEW_DEADLINE_MS = 10 * 60_000;
 const LP_MIN_WINDOW_SECONDS = 60;
+const RETRYABLE_ACTIVATION = /insufficient funds|below the \d+-sat carrier|not visible|timed out|fetch failed|ECONNRESET/i;
 
 /** Classifies an ambiguous submission from authoritative indexer state; a timeout alone never means failure. */
 export async function reconcileSubmission(d: Deps, txid: string | null, inputs: string[]): Promise<Outcome> {
@@ -121,6 +122,7 @@ export class Keeper {
         this.planCancels(offers);
         this.planReprices(offers, nowS);
         this.retryLpBootstraps(nowS);
+        this.retryActivations(nowS);
         this.planLpBootstraps(nowS);
         this.planLpBids(offers, nowS);
         await this.planOwnRedemptions(offers);
@@ -176,6 +178,20 @@ export class Keeper {
         for (const wf of failed) {
             const m = getMarket(this.d.db, wf.market_id);
             if (m?.status === "open" && quotesUntil(m) - nowS >= LP_MIN_WINDOW_SECONDS && this.lpWanted(m)) this.d.wf.enqueue(wf.id, "lp-liquidity", wf.market_id, {});
+        }
+    }
+
+    /**
+     * Activation is enqueued once, at import, so one that failed on an underfunded operator would never resume.
+     * Only funding and timing failures come back; an audit refusal would only fail the same way again.
+     */
+    private retryActivations(nowS: number): void {
+        const failed = all<{ id: string; market_id: string; error: string | null }>(this.d.db,
+            "SELECT id, market_id, error FROM workflows WHERE kind = 'activate' AND state = 'failed' AND market_id IS NOT NULL");
+        for (const wf of failed) {
+            if (!RETRYABLE_ACTIVATION.test(wf.error ?? "")) continue;
+            const m = getMarket(this.d.db, wf.market_id);
+            if (m?.status === "activating" && m.close_at - nowS > LP_MIN_WINDOW_SECONDS) this.d.wf.enqueue(wf.id, "activate", wf.market_id, {});
         }
     }
 
