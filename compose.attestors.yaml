@@ -30,6 +30,14 @@ x-attestor-env: &attestor-env
   KALSHI_API_URL: ${KALSHI_API_URL:-https://api.elections.kalshi.com/trade-api/v2}
   MANIFOLD_ENABLED: ${MANIFOLD_ENABLED:-false}
   MANIFOLD_API_URL: ${MANIFOLD_API_URL:-https://api.manifold.markets/v0}
+  LIMITLESS_ENABLED: ${LIMITLESS_ENABLED:-false}
+  LIMITLESS_API_URL: ${LIMITLESS_API_URL:-https://api.limitless.exchange}
+  LIMITLESS_RESOLVERS: ${LIMITLESS_RESOLVERS:-}
+  BASE_RPC_URLS: ${BASE_RPC_URLS:-https://base.gateway.tenderly.co,https://base-mainnet.public.blastapi.io,https://mainnet.base.org}
+  OPINION_ENABLED: ${OPINION_ENABLED:-false}
+  OPINION_API_URL: ${OPINION_API_URL:-https://openapi.opinion.trade/openapi}
+  OPINION_ORACLES: ${OPINION_ORACLES:-}
+  BNB_RPC_URLS: ${BNB_RPC_URLS:-https://bsc-rpc.publicnode.com,https://bsc.blockrazor.xyz}
 
 services:
   oracle-2:

@@ -52,7 +52,7 @@ export type PriceTermsJson = { feedId: string; signers: string[]; quorum: number
 );
 
 export interface SourceJson {
-    provider: "polymarket" | "kalshi" | "manifold";
+    provider: "polymarket" | "kalshi" | "manifold" | "limitless" | "opinion";
     sourceId: string;
     url: string;
     slug: string;

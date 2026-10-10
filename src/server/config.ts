@@ -1,3 +1,5 @@
+import { DEFAULT_RESOLVERS as LIMITLESS_DEFAULT_RESOLVERS } from "./sources/limitless/index.js";
+import { DEFAULT_ORACLES as OPINION_DEFAULT_ORACLES } from "./sources/opinion/index.js";
 import { readFileSync } from "node:fs";
 import { attestorPublicKey, isAttestorKeyHex } from "../core/attestation.js";
 import { hex } from "@scure/base";
@@ -69,6 +71,15 @@ const schema = z.object({
     KALSHI_API_URL: z.url().default("https://api.elections.kalshi.com/trade-api/v2"),
     MANIFOLD_ENABLED: bool,
     MANIFOLD_API_URL: z.url().default("https://api.manifold.markets/v0"),
+    // Base and BNB Chain mirrors read their CTF result on-chain: each needs two RPCs that serve "finalized" reads.
+    LIMITLESS_ENABLED: bool,
+    LIMITLESS_API_URL: z.url().default("https://api.limitless.exchange"),
+    LIMITLESS_RESOLVERS: csv.default([...LIMITLESS_DEFAULT_RESOLVERS]),
+    BASE_RPC_URLS: csv.default(["https://base.gateway.tenderly.co", "https://base-mainnet.public.blastapi.io", "https://mainnet.base.org"]),
+    OPINION_ENABLED: bool,
+    OPINION_API_URL: z.url().default("https://openapi.opinion.trade/openapi"),
+    OPINION_ORACLES: csv.default([...OPINION_DEFAULT_ORACLES]),
+    BNB_RPC_URLS: csv.default(["https://bsc-rpc.publicnode.com", "https://bsc.blockrazor.xyz"]),
     // Polymarket tag slugs: each gets its own discovery pass, and imports must carry one of them.
     IMPORT_TAGS: csv,
     // Per provider.
@@ -135,7 +146,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     const attestorSecret = secret(env, "ORACLE_SECRET_KEY");
     if (c.POLYMARKET_ENABLED && c.POLYGON_RPC_URLS.length < 2) throw new Error("POLYGON_RPC_URLS needs at least two providers");
     // The embedded attestor serves Polymarket only with two RPCs; with no source at all it would exit in a loop.
-    if (attestorSecret && c.POLYGON_RPC_URLS.length < 2 && !c.KALSHI_ENABLED && !c.MANIFOLD_ENABLED) {
+    if (c.LIMITLESS_ENABLED && c.BASE_RPC_URLS.length < 2) throw new Error("BASE_RPC_URLS needs at least two providers");
+    if (c.OPINION_ENABLED && c.BNB_RPC_URLS.length < 2) throw new Error("BNB_RPC_URLS needs at least two providers");
+    if (attestorSecret && c.POLYGON_RPC_URLS.length < 2 && !c.KALSHI_ENABLED && !c.MANIFOLD_ENABLED && !c.LIMITLESS_ENABLED && !c.OPINION_ENABLED) {
         throw new Error("ORACLE_SECRET_KEY runs an attestor that needs a source: POLYGON_RPC_URLS (two providers), KALSHI_ENABLED or MANIFOLD_ENABLED");
     }
     if (attestorSecret !== undefined && !/^[0-9a-f]{64}$/.test(attestorSecret)) throw new Error(`ORACLE_SECRET_KEY must be 64 lowercase hex characters; ${hexProblem(attestorSecret)}`);

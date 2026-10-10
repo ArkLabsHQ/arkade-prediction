@@ -231,3 +231,12 @@ Each entry: decision, reason, rejected alternatives. Newest last.
     other side or another condition. Local CPU proving of Helios ran out of 30 GB of memory, so production proving
     goes to the Succinct prover network or a larger machine. The vault must pin the sync-committee anchor and the
     inner program key itself; upstream checks those in a Solidity contract we do not use.
+48. **Limitless (Base) and Opinion (BNB Chain) mirrors.** Both settle on a standard CTF contract that refuses a
+    second report, read at a finalized block across two RPCs, and each import is vetted on chain: the conditionId
+    must derive from an allowlisted reporter (Limitless's 2-of-11 Safe; Opinion's two adapter contracts, which only
+    Opinion's implementation can call) and the questionId. Limitless markets that copy Polymarket are skipped
+    (mirrored from Polymarket instead), as are its AMM, neg-risk and head-to-head markets; equal splits it records
+    as [50,50]/100 map to INVALID. Opinion's categorical children are tracked as parent-child ids checked against the
+    parent, and its API is throttled under its 5 req/s limit. Both are off by default (LIMITLESS_ENABLED,
+    OPINION_ENABLED). Limitless offers little beyond Polymarket today but anchors to Ethereum (a later ZK path);
+    Opinion adds coverage but rotates oracles (allowlist upkeep) and has no Ethereum anchor.

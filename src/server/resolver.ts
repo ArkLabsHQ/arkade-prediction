@@ -7,6 +7,7 @@ import { marketTerms, type Deps, type MarketRow } from "./markets.js";
 import { PROVIDER_LABEL, type MarketSourceProvider, type SourceMarket } from "./sources/types.js";
 
 type SourceDeps = Deps & { providers: MarketSourceProvider[]; log: (m: string, e?: Record<string, unknown>) => void };
+const CHAIN_NAME: Record<number, string> = { 137: "Polygon", 8453: "Base", 56: "BNB Chain" };
 const providerOf = (d: SourceDeps, m: MarketRow) => d.providers.find((p) => p.name === m.source_provider);
 type Snapshot = SourceMarket & { binding: MarketDefinition["source"] };
 
@@ -78,7 +79,7 @@ async function screenOpenMarkets(d: SourceDeps): Promise<void> {
             const outcome = n0 === n1 ? "50-50" : (JSON.parse(m.outcomes) as string[])[n0! > n1! ? 0 : 1];
             const block = evidence.chain ? { number: evidence.chain.blockNumber, hash: evidence.chain.blockHash } : null;
             run(d.db, "UPDATE markets SET resolution_status = 'source-final', resolution_detail = ?, updated_at = ? WHERE id = ?",
-                `${PROVIDER_LABEL[provider.name]} resolved early: ${outcome}${block ? ` at Polygon block ${block.number}` : ""}`, now(), m.id);
+                `${PROVIDER_LABEL[provider.name]} resolved early: ${outcome}${block ? ` at ${CHAIN_NAME[evidence.chain!.chainId] ?? "source-chain"} block ${block.number}` : ""}`, now(), m.id);
             d.bus.publish("market", m.id, { resolution: "source-final", outcome, sourceBlock: block });
         } catch (err) {
             d.log("early resolution check failed", { market: m.id, error: String(err) });

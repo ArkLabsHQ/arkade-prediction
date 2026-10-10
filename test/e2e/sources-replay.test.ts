@@ -25,9 +25,11 @@ afterAll(async () => {
 const CASES = [
     { provider: "kalshi", sourceId: "KXIDNSLSPREAD-26OCT09PKEMAU-PKE2", outcome: "yes" },
     { provider: "manifold", sourceId: "nRSlhy5c2L", outcome: "no" },
+    { provider: "limitless", sourceId: "malaga-and-espanyol-both-to-score-1791106206210", outcome: "yes" },
+    { provider: "opinion", sourceId: "45914", outcome: "no" },
 ] as const;
 
-describe.skipIf(!LIVE)("Kalshi and Manifold replays settle through the attestor (LIVE APIs)", () => {
+describe.skipIf(!LIVE)("Kalshi, Manifold, Limitless and Opinion replays settle through the attestor (LIVE APIs)", () => {
     it("replays a settled market from each source, resolves it on the source's result and pays the holder", { timeout: 1_500_000 }, async () => {
         const ark = await connectArkade();
         const secret = randomBytes(32).toString("hex");
@@ -36,7 +38,7 @@ describe.skipIf(!LIVE)("Kalshi and Manifold replays settle through the attestor 
                 ...process.env, ORACLE_SECRET_KEY: secret, ORACLE_PORT: String(ATTESTOR_PORT), ORACLE_HOST: "127.0.0.1",
                 ORACLE_DATA_DIR: mkdtempSync(join(tmpdir(), "apm-oracle-")), APM_NETWORK: "regtest",
                 ARK_SIGNER_XONLY: hex.encode(ark.serverKey), EMULATOR_PUBKEY: hex.encode(ark.emulatorKey!),
-                POLYGON_RPC_URLS: "", KALSHI_ENABLED: "true", MANIFOLD_ENABLED: "true",
+                POLYGON_RPC_URLS: "", KALSHI_ENABLED: "true", MANIFOLD_ENABLED: "true", LIMITLESS_ENABLED: "true", OPINION_ENABLED: "true",
             },
             stdio: "inherit",
         });
@@ -45,7 +47,7 @@ describe.skipIf(!LIVE)("Kalshi and Manifold replays settle through the attestor 
         server = await startServer({
             port: 37404,
             env: {
-                KALSHI_ENABLED: "true", MANIFOLD_ENABLED: "true", IMPORT_INTERVAL_SECONDS: "3600", RESOLUTION_INTERVAL_SECONDS: "10",
+                KALSHI_ENABLED: "true", MANIFOLD_ENABLED: "true", LIMITLESS_ENABLED: "true", OPINION_ENABLED: "true", IMPORT_INTERVAL_SECONDS: "3600", RESOLUTION_INTERVAL_SECONDS: "10",
                 ORACLE_URLS: `http://127.0.0.1:${ATTESTOR_PORT}`, ORACLE_PUBKEYS: hex.encode(schnorr.getPublicKey(hex.decode(secret))), ORACLE_THRESHOLD: "1",
             },
         });

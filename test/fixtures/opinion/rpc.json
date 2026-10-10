@@ -1,0 +1,765 @@
+{
+ "recordedAt": "2026-10-10T07:12:38.144Z",
+ "providers": [
+  "https://bsc-rpc.publicnode.com",
+  "https://bsc.blockrazor.xyz"
+ ],
+ "scenarios": {
+  "no": {
+   "sourceId": "45914",
+   "block": "126785715",
+   "exchanges": [
+    {
+     "rpcUrl": "https://bsc-rpc.publicnode.com",
+     "method": "eth_chainId",
+     "params": [],
+     "result": "0x38"
+    },
+    {
+     "rpcUrl": "https://bsc.blockrazor.xyz",
+     "method": "eth_chainId",
+     "params": [],
+     "result": "0x38"
+    },
+    {
+     "rpcUrl": "https://bsc.blockrazor.xyz",
+     "method": "eth_getBlockByNumber",
+     "params": [
+      "finalized",
+      false
+     ],
+     "result": {
+      "number": "0x78e98b3",
+      "hash": "0x221304f6d88809b0e68911de8163bb1c4208f332414a06e22a1dc2defc378dee",
+      "parentHash": "0xfd6de164e6d015a8a74e8a0929932bf31478115792386e88c7607a2598701dcf",
+      "timestamp": "0x6ac9e56c"
+     }
+    },
+    {
+     "rpcUrl": "https://bsc-rpc.publicnode.com",
+     "method": "eth_getBlockByNumber",
+     "params": [
+      "finalized",
+      false
+     ],
+     "result": {
+      "number": "0x78e98b3",
+      "hash": "0x221304f6d88809b0e68911de8163bb1c4208f332414a06e22a1dc2defc378dee",
+      "parentHash": "0xfd6de164e6d015a8a74e8a0929932bf31478115792386e88c7607a2598701dcf",
+      "timestamp": "0x6ac9e56c"
+     }
+    },
+    {
+     "rpcUrl": "https://bsc.blockrazor.xyz",
+     "method": "eth_getBlockByNumber",
+     "params": [
+      "0x78e98b3",
+      false
+     ],
+     "result": {
+      "number": "0x78e98b3",
+      "hash": "0x221304f6d88809b0e68911de8163bb1c4208f332414a06e22a1dc2defc378dee",
+      "parentHash": "0xfd6de164e6d015a8a74e8a0929932bf31478115792386e88c7607a2598701dcf",
+      "timestamp": "0x6ac9e56c"
+     }
+    },
+    {
+     "rpcUrl": "https://bsc-rpc.publicnode.com",
+     "method": "eth_getBlockByNumber",
+     "params": [
+      "0x78e98b3",
+      false
+     ],
+     "result": {
+      "number": "0x78e98b3",
+      "hash": "0x221304f6d88809b0e68911de8163bb1c4208f332414a06e22a1dc2defc378dee",
+      "parentHash": "0xfd6de164e6d015a8a74e8a0929932bf31478115792386e88c7607a2598701dcf",
+      "timestamp": "0x6ac9e56c"
+     }
+    },
+    {
+     "rpcUrl": "https://bsc.blockrazor.xyz",
+     "method": "eth_call",
+     "params": [
+      {
+       "to": "0xad1a38cec043e70e83a3ec30443db285ed10d774",
+       "data": "0xdd34de67ff391271b31fb37cfd8908dda0f35409c74c1fcfbc430f505a9d1c2f7428e9c1"
+      },
+      "0x78e98b3"
+     ],
+     "result": "0x0000000000000000000000000000000000000000000000000000000000000001"
+    },
+    {
+     "rpcUrl": "https://bsc-rpc.publicnode.com",
+     "method": "eth_call",
+     "params": [
+      {
+       "to": "0xad1a38cec043e70e83a3ec30443db285ed10d774",
+       "data": "0xdd34de67ff391271b31fb37cfd8908dda0f35409c74c1fcfbc430f505a9d1c2f7428e9c1"
+      },
+      "0x78e98b3"
+     ],
+     "result": "0x0000000000000000000000000000000000000000000000000000000000000001"
+    },
+    {
+     "rpcUrl": "https://bsc.blockrazor.xyz",
+     "method": "eth_call",
+     "params": [
+      {
+       "to": "0xad1a38cec043e70e83a3ec30443db285ed10d774",
+       "data": "0x0504c814ff391271b31fb37cfd8908dda0f35409c74c1fcfbc430f505a9d1c2f7428e9c10000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "0x78e98b3"
+     ],
+     "result": "0x0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+     "rpcUrl": "https://bsc-rpc.publicnode.com",
+     "method": "eth_call",
+     "params": [
+      {
+       "to": "0xad1a38cec043e70e83a3ec30443db285ed10d774",
+       "data": "0x0504c814ff391271b31fb37cfd8908dda0f35409c74c1fcfbc430f505a9d1c2f7428e9c10000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "0x78e98b3"
+     ],
+     "result": "0x0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+     "rpcUrl": "https://bsc.blockrazor.xyz",
+     "method": "eth_call",
+     "params": [
+      {
+       "to": "0xad1a38cec043e70e83a3ec30443db285ed10d774",
+       "data": "0x0504c814ff391271b31fb37cfd8908dda0f35409c74c1fcfbc430f505a9d1c2f7428e9c10000000000000000000000000000000000000000000000000000000000000001"
+      },
+      "0x78e98b3"
+     ],
+     "result": "0x0000000000000000000000000000000000000000000000000000000000000001"
+    },
+    {
+     "rpcUrl": "https://bsc-rpc.publicnode.com",
+     "method": "eth_call",
+     "params": [
+      {
+       "to": "0xad1a38cec043e70e83a3ec30443db285ed10d774",
+       "data": "0x0504c814ff391271b31fb37cfd8908dda0f35409c74c1fcfbc430f505a9d1c2f7428e9c10000000000000000000000000000000000000000000000000000000000000001"
+      },
+      "0x78e98b3"
+     ],
+     "result": "0x0000000000000000000000000000000000000000000000000000000000000001"
+    },
+    {
+     "rpcUrl": "https://bsc.blockrazor.xyz",
+     "method": "eth_call",
+     "params": [
+      {
+       "to": "0xad1a38cec043e70e83a3ec30443db285ed10d774",
+       "data": "0xd42dc0c2ff391271b31fb37cfd8908dda0f35409c74c1fcfbc430f505a9d1c2f7428e9c1"
+      },
+      "finalized"
+     ],
+     "result": "0x0000000000000000000000000000000000000000000000000000000000000002"
+    },
+    {
+     "rpcUrl": "https://bsc-rpc.publicnode.com",
+     "method": "eth_call",
+     "params": [
+      {
+       "to": "0xad1a38cec043e70e83a3ec30443db285ed10d774",
+       "data": "0xd42dc0c2ff391271b31fb37cfd8908dda0f35409c74c1fcfbc430f505a9d1c2f7428e9c1"
+      },
+      "finalized"
+     ],
+     "result": "0x0000000000000000000000000000000000000000000000000000000000000002"
+    }
+   ]
+  },
+  "yes": {
+   "sourceId": "45810",
+   "block": "126785716",
+   "exchanges": [
+    {
+     "rpcUrl": "https://bsc.blockrazor.xyz",
+     "method": "eth_chainId",
+     "params": [],
+     "result": "0x38"
+    },
+    {
+     "rpcUrl": "https://bsc-rpc.publicnode.com",
+     "method": "eth_chainId",
+     "params": [],
+     "result": "0x38"
+    },
+    {
+     "rpcUrl": "https://bsc.blockrazor.xyz",
+     "method": "eth_getBlockByNumber",
+     "params": [
+      "finalized",
+      false
+     ],
+     "result": {
+      "number": "0x78e98b4",
+      "hash": "0xb3fbe862c18bdbd9f786417add25c2abeafb6da4e7e5ee3010f81fe53347bad3",
+      "parentHash": "0x221304f6d88809b0e68911de8163bb1c4208f332414a06e22a1dc2defc378dee",
+      "timestamp": "0x6ac9e56c"
+     }
+    },
+    {
+     "rpcUrl": "https://bsc-rpc.publicnode.com",
+     "method": "eth_getBlockByNumber",
+     "params": [
+      "finalized",
+      false
+     ],
+     "result": {
+      "number": "0x78e98b5",
+      "hash": "0x784433b42facca0dae5d4b8f2fb9ddcd4cad1cd0f69b82e3a84c32db74a5e578",
+      "parentHash": "0xb3fbe862c18bdbd9f786417add25c2abeafb6da4e7e5ee3010f81fe53347bad3",
+      "timestamp": "0x6ac9e56d"
+     }
+    },
+    {
+     "rpcUrl": "https://bsc.blockrazor.xyz",
+     "method": "eth_getBlockByNumber",
+     "params": [
+      "0x78e98b4",
+      false
+     ],
+     "result": {
+      "number": "0x78e98b4",
+      "hash": "0xb3fbe862c18bdbd9f786417add25c2abeafb6da4e7e5ee3010f81fe53347bad3",
+      "parentHash": "0x221304f6d88809b0e68911de8163bb1c4208f332414a06e22a1dc2defc378dee",
+      "timestamp": "0x6ac9e56c"
+     }
+    },
+    {
+     "rpcUrl": "https://bsc-rpc.publicnode.com",
+     "method": "eth_getBlockByNumber",
+     "params": [
+      "0x78e98b4",
+      false
+     ],
+     "result": {
+      "number": "0x78e98b4",
+      "hash": "0xb3fbe862c18bdbd9f786417add25c2abeafb6da4e7e5ee3010f81fe53347bad3",
+      "parentHash": "0x221304f6d88809b0e68911de8163bb1c4208f332414a06e22a1dc2defc378dee",
+      "timestamp": "0x6ac9e56c"
+     }
+    },
+    {
+     "rpcUrl": "https://bsc.blockrazor.xyz",
+     "method": "eth_call",
+     "params": [
+      {
+       "to": "0xad1a38cec043e70e83a3ec30443db285ed10d774",
+       "data": "0xdd34de676d308b50e58248f184345472f4def8365fd7f77d6df3d936a487e1896460fcc2"
+      },
+      "0x78e98b4"
+     ],
+     "result": "0x0000000000000000000000000000000000000000000000000000000000000001"
+    },
+    {
+     "rpcUrl": "https://bsc-rpc.publicnode.com",
+     "method": "eth_call",
+     "params": [
+      {
+       "to": "0xad1a38cec043e70e83a3ec30443db285ed10d774",
+       "data": "0xdd34de676d308b50e58248f184345472f4def8365fd7f77d6df3d936a487e1896460fcc2"
+      },
+      "0x78e98b4"
+     ],
+     "result": "0x0000000000000000000000000000000000000000000000000000000000000001"
+    },
+    {
+     "rpcUrl": "https://bsc.blockrazor.xyz",
+     "method": "eth_call",
+     "params": [
+      {
+       "to": "0xad1a38cec043e70e83a3ec30443db285ed10d774",
+       "data": "0x0504c8146d308b50e58248f184345472f4def8365fd7f77d6df3d936a487e1896460fcc20000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "0x78e98b4"
+     ],
+     "result": "0x0000000000000000000000000000000000000000000000000000000000000001"
+    },
+    {
+     "rpcUrl": "https://bsc-rpc.publicnode.com",
+     "method": "eth_call",
+     "params": [
+      {
+       "to": "0xad1a38cec043e70e83a3ec30443db285ed10d774",
+       "data": "0x0504c8146d308b50e58248f184345472f4def8365fd7f77d6df3d936a487e1896460fcc20000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "0x78e98b4"
+     ],
+     "result": "0x0000000000000000000000000000000000000000000000000000000000000001"
+    },
+    {
+     "rpcUrl": "https://bsc.blockrazor.xyz",
+     "method": "eth_call",
+     "params": [
+      {
+       "to": "0xad1a38cec043e70e83a3ec30443db285ed10d774",
+       "data": "0x0504c8146d308b50e58248f184345472f4def8365fd7f77d6df3d936a487e1896460fcc20000000000000000000000000000000000000000000000000000000000000001"
+      },
+      "0x78e98b4"
+     ],
+     "result": "0x0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+     "rpcUrl": "https://bsc-rpc.publicnode.com",
+     "method": "eth_call",
+     "params": [
+      {
+       "to": "0xad1a38cec043e70e83a3ec30443db285ed10d774",
+       "data": "0x0504c8146d308b50e58248f184345472f4def8365fd7f77d6df3d936a487e1896460fcc20000000000000000000000000000000000000000000000000000000000000001"
+      },
+      "0x78e98b4"
+     ],
+     "result": "0x0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+     "rpcUrl": "https://bsc.blockrazor.xyz",
+     "method": "eth_call",
+     "params": [
+      {
+       "to": "0xad1a38cec043e70e83a3ec30443db285ed10d774",
+       "data": "0xd42dc0c26d308b50e58248f184345472f4def8365fd7f77d6df3d936a487e1896460fcc2"
+      },
+      "finalized"
+     ],
+     "result": "0x0000000000000000000000000000000000000000000000000000000000000002"
+    },
+    {
+     "rpcUrl": "https://bsc-rpc.publicnode.com",
+     "method": "eth_call",
+     "params": [
+      {
+       "to": "0xad1a38cec043e70e83a3ec30443db285ed10d774",
+       "data": "0xd42dc0c26d308b50e58248f184345472f4def8365fd7f77d6df3d936a487e1896460fcc2"
+      },
+      "finalized"
+     ],
+     "result": "0x0000000000000000000000000000000000000000000000000000000000000002"
+    }
+   ]
+  },
+  "open": {
+   "sourceId": "8453",
+   "block": "126785718",
+   "exchanges": [
+    {
+     "rpcUrl": "https://bsc.blockrazor.xyz",
+     "method": "eth_chainId",
+     "params": [],
+     "result": "0x38"
+    },
+    {
+     "rpcUrl": "https://bsc-rpc.publicnode.com",
+     "method": "eth_chainId",
+     "params": [],
+     "result": "0x38"
+    },
+    {
+     "rpcUrl": "https://bsc.blockrazor.xyz",
+     "method": "eth_getBlockByNumber",
+     "params": [
+      "finalized",
+      false
+     ],
+     "result": {
+      "number": "0x78e98b6",
+      "hash": "0x03d8baadb87c6132c0224c05806479ffe38a3a20c5fbcf4de779d60fa5793837",
+      "parentHash": "0x784433b42facca0dae5d4b8f2fb9ddcd4cad1cd0f69b82e3a84c32db74a5e578",
+      "timestamp": "0x6ac9e56d"
+     }
+    },
+    {
+     "rpcUrl": "https://bsc-rpc.publicnode.com",
+     "method": "eth_getBlockByNumber",
+     "params": [
+      "finalized",
+      false
+     ],
+     "result": {
+      "number": "0x78e98b6",
+      "hash": "0x03d8baadb87c6132c0224c05806479ffe38a3a20c5fbcf4de779d60fa5793837",
+      "parentHash": "0x784433b42facca0dae5d4b8f2fb9ddcd4cad1cd0f69b82e3a84c32db74a5e578",
+      "timestamp": "0x6ac9e56d"
+     }
+    },
+    {
+     "rpcUrl": "https://bsc.blockrazor.xyz",
+     "method": "eth_getBlockByNumber",
+     "params": [
+      "0x78e98b6",
+      false
+     ],
+     "result": {
+      "number": "0x78e98b6",
+      "hash": "0x03d8baadb87c6132c0224c05806479ffe38a3a20c5fbcf4de779d60fa5793837",
+      "parentHash": "0x784433b42facca0dae5d4b8f2fb9ddcd4cad1cd0f69b82e3a84c32db74a5e578",
+      "timestamp": "0x6ac9e56d"
+     }
+    },
+    {
+     "rpcUrl": "https://bsc-rpc.publicnode.com",
+     "method": "eth_getBlockByNumber",
+     "params": [
+      "0x78e98b6",
+      false
+     ],
+     "result": {
+      "number": "0x78e98b6",
+      "hash": "0x03d8baadb87c6132c0224c05806479ffe38a3a20c5fbcf4de779d60fa5793837",
+      "parentHash": "0x784433b42facca0dae5d4b8f2fb9ddcd4cad1cd0f69b82e3a84c32db74a5e578",
+      "timestamp": "0x6ac9e56d"
+     }
+    },
+    {
+     "rpcUrl": "https://bsc.blockrazor.xyz",
+     "method": "eth_call",
+     "params": [
+      {
+       "to": "0xad1a38cec043e70e83a3ec30443db285ed10d774",
+       "data": "0xdd34de67cc425e46280d6581d039d3e667838f4fb9c0c95b71f48f70ae50cc3da1998d8d"
+      },
+      "0x78e98b6"
+     ],
+     "result": "0x0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+     "rpcUrl": "https://bsc-rpc.publicnode.com",
+     "method": "eth_call",
+     "params": [
+      {
+       "to": "0xad1a38cec043e70e83a3ec30443db285ed10d774",
+       "data": "0xdd34de67cc425e46280d6581d039d3e667838f4fb9c0c95b71f48f70ae50cc3da1998d8d"
+      },
+      "0x78e98b6"
+     ],
+     "result": "0x0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+     "rpcUrl": "https://bsc.blockrazor.xyz",
+     "method": "eth_call",
+     "params": [
+      {
+       "to": "0xad1a38cec043e70e83a3ec30443db285ed10d774",
+       "data": "0x0504c814cc425e46280d6581d039d3e667838f4fb9c0c95b71f48f70ae50cc3da1998d8d0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "0x78e98b6"
+     ],
+     "result": "0x0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+     "rpcUrl": "https://bsc-rpc.publicnode.com",
+     "method": "eth_call",
+     "params": [
+      {
+       "to": "0xad1a38cec043e70e83a3ec30443db285ed10d774",
+       "data": "0x0504c814cc425e46280d6581d039d3e667838f4fb9c0c95b71f48f70ae50cc3da1998d8d0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "0x78e98b6"
+     ],
+     "result": "0x0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+     "rpcUrl": "https://bsc.blockrazor.xyz",
+     "method": "eth_call",
+     "params": [
+      {
+       "to": "0xad1a38cec043e70e83a3ec30443db285ed10d774",
+       "data": "0x0504c814cc425e46280d6581d039d3e667838f4fb9c0c95b71f48f70ae50cc3da1998d8d0000000000000000000000000000000000000000000000000000000000000001"
+      },
+      "0x78e98b6"
+     ],
+     "result": "0x0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+     "rpcUrl": "https://bsc-rpc.publicnode.com",
+     "method": "eth_call",
+     "params": [
+      {
+       "to": "0xad1a38cec043e70e83a3ec30443db285ed10d774",
+       "data": "0x0504c814cc425e46280d6581d039d3e667838f4fb9c0c95b71f48f70ae50cc3da1998d8d0000000000000000000000000000000000000000000000000000000000000001"
+      },
+      "0x78e98b6"
+     ],
+     "result": "0x0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+     "rpcUrl": "https://bsc.blockrazor.xyz",
+     "method": "eth_call",
+     "params": [
+      {
+       "to": "0xad1a38cec043e70e83a3ec30443db285ed10d774",
+       "data": "0xd42dc0c2cc425e46280d6581d039d3e667838f4fb9c0c95b71f48f70ae50cc3da1998d8d"
+      },
+      "finalized"
+     ],
+     "result": "0x0000000000000000000000000000000000000000000000000000000000000002"
+    },
+    {
+     "rpcUrl": "https://bsc-rpc.publicnode.com",
+     "method": "eth_call",
+     "params": [
+      {
+       "to": "0xad1a38cec043e70e83a3ec30443db285ed10d774",
+       "data": "0xd42dc0c2cc425e46280d6581d039d3e667838f4fb9c0c95b71f48f70ae50cc3da1998d8d"
+      },
+      "finalized"
+     ],
+     "result": "0x0000000000000000000000000000000000000000000000000000000000000002"
+    }
+   ]
+  },
+  "child-resolved": {
+   "sourceId": "337-5346",
+   "block": "126785719",
+   "exchanges": [
+    {
+     "rpcUrl": "https://bsc.blockrazor.xyz",
+     "method": "eth_chainId",
+     "params": [],
+     "result": "0x38"
+    },
+    {
+     "rpcUrl": "https://bsc-rpc.publicnode.com",
+     "method": "eth_chainId",
+     "params": [],
+     "result": "0x38"
+    },
+    {
+     "rpcUrl": "https://bsc.blockrazor.xyz",
+     "method": "eth_getBlockByNumber",
+     "params": [
+      "finalized",
+      false
+     ],
+     "result": {
+      "number": "0x78e98b7",
+      "hash": "0x879e644594bbce3ab88fd329d31b545ae8b908ad675bcf02418463005624ce77",
+      "parentHash": "0x03d8baadb87c6132c0224c05806479ffe38a3a20c5fbcf4de779d60fa5793837",
+      "timestamp": "0x6ac9e56e"
+     }
+    },
+    {
+     "rpcUrl": "https://bsc-rpc.publicnode.com",
+     "method": "eth_getBlockByNumber",
+     "params": [
+      "finalized",
+      false
+     ],
+     "result": {
+      "number": "0x78e98b7",
+      "hash": "0x879e644594bbce3ab88fd329d31b545ae8b908ad675bcf02418463005624ce77",
+      "parentHash": "0x03d8baadb87c6132c0224c05806479ffe38a3a20c5fbcf4de779d60fa5793837",
+      "timestamp": "0x6ac9e56e"
+     }
+    },
+    {
+     "rpcUrl": "https://bsc.blockrazor.xyz",
+     "method": "eth_getBlockByNumber",
+     "params": [
+      "0x78e98b7",
+      false
+     ],
+     "result": {
+      "number": "0x78e98b7",
+      "hash": "0x879e644594bbce3ab88fd329d31b545ae8b908ad675bcf02418463005624ce77",
+      "parentHash": "0x03d8baadb87c6132c0224c05806479ffe38a3a20c5fbcf4de779d60fa5793837",
+      "timestamp": "0x6ac9e56e"
+     }
+    },
+    {
+     "rpcUrl": "https://bsc-rpc.publicnode.com",
+     "method": "eth_getBlockByNumber",
+     "params": [
+      "0x78e98b7",
+      false
+     ],
+     "result": {
+      "number": "0x78e98b7",
+      "hash": "0x879e644594bbce3ab88fd329d31b545ae8b908ad675bcf02418463005624ce77",
+      "parentHash": "0x03d8baadb87c6132c0224c05806479ffe38a3a20c5fbcf4de779d60fa5793837",
+      "timestamp": "0x6ac9e56e"
+     }
+    },
+    {
+     "rpcUrl": "https://bsc.blockrazor.xyz",
+     "method": "eth_call",
+     "params": [
+      {
+       "to": "0xad1a38cec043e70e83a3ec30443db285ed10d774",
+       "data": "0xdd34de67466e471f58e04d7465f89d9c63385d372b194d79b75d20b89b6296a21e39fc96"
+      },
+      "0x78e98b7"
+     ],
+     "result": "0x0000000000000000000000000000000000000000000000000000000000000001"
+    },
+    {
+     "rpcUrl": "https://bsc-rpc.publicnode.com",
+     "method": "eth_call",
+     "params": [
+      {
+       "to": "0xad1a38cec043e70e83a3ec30443db285ed10d774",
+       "data": "0xdd34de67466e471f58e04d7465f89d9c63385d372b194d79b75d20b89b6296a21e39fc96"
+      },
+      "0x78e98b7"
+     ],
+     "result": "0x0000000000000000000000000000000000000000000000000000000000000001"
+    },
+    {
+     "rpcUrl": "https://bsc.blockrazor.xyz",
+     "method": "eth_call",
+     "params": [
+      {
+       "to": "0xad1a38cec043e70e83a3ec30443db285ed10d774",
+       "data": "0x0504c814466e471f58e04d7465f89d9c63385d372b194d79b75d20b89b6296a21e39fc960000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "0x78e98b7"
+     ],
+     "result": "0x0000000000000000000000000000000000000000000000000000000000000001"
+    },
+    {
+     "rpcUrl": "https://bsc-rpc.publicnode.com",
+     "method": "eth_call",
+     "params": [
+      {
+       "to": "0xad1a38cec043e70e83a3ec30443db285ed10d774",
+       "data": "0x0504c814466e471f58e04d7465f89d9c63385d372b194d79b75d20b89b6296a21e39fc960000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "0x78e98b7"
+     ],
+     "result": "0x0000000000000000000000000000000000000000000000000000000000000001"
+    },
+    {
+     "rpcUrl": "https://bsc.blockrazor.xyz",
+     "method": "eth_call",
+     "params": [
+      {
+       "to": "0xad1a38cec043e70e83a3ec30443db285ed10d774",
+       "data": "0x0504c814466e471f58e04d7465f89d9c63385d372b194d79b75d20b89b6296a21e39fc960000000000000000000000000000000000000000000000000000000000000001"
+      },
+      "0x78e98b7"
+     ],
+     "result": "0x0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+     "rpcUrl": "https://bsc-rpc.publicnode.com",
+     "method": "eth_call",
+     "params": [
+      {
+       "to": "0xad1a38cec043e70e83a3ec30443db285ed10d774",
+       "data": "0x0504c814466e471f58e04d7465f89d9c63385d372b194d79b75d20b89b6296a21e39fc960000000000000000000000000000000000000000000000000000000000000001"
+      },
+      "0x78e98b7"
+     ],
+     "result": "0x0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+     "rpcUrl": "https://bsc.blockrazor.xyz",
+     "method": "eth_call",
+     "params": [
+      {
+       "to": "0xad1a38cec043e70e83a3ec30443db285ed10d774",
+       "data": "0xd42dc0c2466e471f58e04d7465f89d9c63385d372b194d79b75d20b89b6296a21e39fc96"
+      },
+      "finalized"
+     ],
+     "result": "0x0000000000000000000000000000000000000000000000000000000000000002"
+    },
+    {
+     "rpcUrl": "https://bsc-rpc.publicnode.com",
+     "method": "eth_call",
+     "params": [
+      {
+       "to": "0xad1a38cec043e70e83a3ec30443db285ed10d774",
+       "data": "0xd42dc0c2466e471f58e04d7465f89d9c63385d372b194d79b75d20b89b6296a21e39fc96"
+      },
+      "finalized"
+     ],
+     "result": "0x0000000000000000000000000000000000000000000000000000000000000002"
+    }
+   ]
+  },
+  "screen": {
+   "exchanges": [
+    {
+     "rpcUrl": "https://bsc.blockrazor.xyz",
+     "method": "eth_call",
+     "params": [
+      {
+       "to": "0xad1a38cec043e70e83a3ec30443db285ed10d774",
+       "data": "0xdd34de67ff391271b31fb37cfd8908dda0f35409c74c1fcfbc430f505a9d1c2f7428e9c1"
+      },
+      "finalized"
+     ],
+     "result": "0x0000000000000000000000000000000000000000000000000000000000000001"
+    },
+    {
+     "rpcUrl": "https://bsc.blockrazor.xyz",
+     "method": "eth_call",
+     "params": [
+      {
+       "to": "0xad1a38cec043e70e83a3ec30443db285ed10d774",
+       "data": "0xdd34de67cc425e46280d6581d039d3e667838f4fb9c0c95b71f48f70ae50cc3da1998d8d"
+      },
+      "finalized"
+     ],
+     "result": "0x0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+     "rpcUrl": "https://bsc.blockrazor.xyz",
+     "method": "eth_call",
+     "params": [
+      {
+       "to": "0xad1a38cec043e70e83a3ec30443db285ed10d774",
+       "data": "0xdd34de676d308b50e58248f184345472f4def8365fd7f77d6df3d936a487e1896460fcc2"
+      },
+      "finalized"
+     ],
+     "result": "0x0000000000000000000000000000000000000000000000000000000000000001"
+    },
+    {
+     "rpcUrl": "https://bsc-rpc.publicnode.com",
+     "method": "eth_call",
+     "params": [
+      {
+       "to": "0xad1a38cec043e70e83a3ec30443db285ed10d774",
+       "data": "0xdd34de67ff391271b31fb37cfd8908dda0f35409c74c1fcfbc430f505a9d1c2f7428e9c1"
+      },
+      "finalized"
+     ],
+     "result": "0x0000000000000000000000000000000000000000000000000000000000000001"
+    },
+    {
+     "rpcUrl": "https://bsc-rpc.publicnode.com",
+     "method": "eth_call",
+     "params": [
+      {
+       "to": "0xad1a38cec043e70e83a3ec30443db285ed10d774",
+       "data": "0xdd34de67cc425e46280d6581d039d3e667838f4fb9c0c95b71f48f70ae50cc3da1998d8d"
+      },
+      "finalized"
+     ],
+     "result": "0x0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+     "rpcUrl": "https://bsc-rpc.publicnode.com",
+     "method": "eth_call",
+     "params": [
+      {
+       "to": "0xad1a38cec043e70e83a3ec30443db285ed10d774",
+       "data": "0xdd34de676d308b50e58248f184345472f4def8365fd7f77d6df3d936a487e1896460fcc2"
+      },
+      "finalized"
+     ],
+     "result": "0x0000000000000000000000000000000000000000000000000000000000000001"
+    }
+   ]
+  }
+ }
+}

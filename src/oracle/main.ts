@@ -13,6 +13,11 @@ import type { CertificateJson } from "../shared/api.js";
 import { DEFAULT_CREATORS, DEFAULT_NEG_RISK_ORACLES, createPolymarketProvider } from "../server/sources/polymarket/index.js";
 import { createKalshiProvider } from "../server/sources/kalshi/index.js";
 import { createManifoldProvider } from "../server/sources/manifold/index.js";
+import { DEFAULT_RESOLVERS as LIMITLESS_RESOLVERS, createLimitlessProvider } from "../server/sources/limitless/index.js";
+import { DEFAULT_ORACLES as OPINION_ORACLES, createOpinionProvider } from "../server/sources/opinion/index.js";
+// Same defaults as the server config (src/server/config.ts).
+const BASE_RPCS = ["https://base.gateway.tenderly.co", "https://base-mainnet.public.blastapi.io", "https://mainnet.base.org"];
+const BNB_RPCS = ["https://bsc-rpc.publicnode.com", "https://bsc.blockrazor.xyz"];
 import type { MarketSourceProvider } from "../server/sources/types.js";
 import { definitionMismatch } from "../server/sources/definition.js";
 
@@ -53,6 +58,11 @@ if (!["schnorr", "ecdsa-secp256k1", "ecdsa-p256"].includes(scheme)) throw new Er
 const pubkey = hex.encode(attestorPublicKey(scheme, hex.decode(secret)));
 const dataDir = env.ORACLE_DATA_DIR ?? "/data/oracle";
 mkdirSync(dataDir, { recursive: true });
+// URLs keep their case: RPC API keys in paths are case-sensitive.
+const urls = (name: string, fallback: readonly string[]) => {
+    const set = (env[name] ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+    return set.length > 0 ? set : [...fallback];
+};
 const csv = (name: string, fallback: readonly string[] = []) => {
     const set = (env[name] ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
     return set.length > 0 ? set : [...fallback];
@@ -73,8 +83,10 @@ const providers: MarketSourceProvider[] = [
         : []),
     ...(on(env.KALSHI_ENABLED) ? [createKalshiProvider({ apiUrl: env.KALSHI_API_URL || undefined })] : []),
     ...(on(env.MANIFOLD_ENABLED) ? [createManifoldProvider({ apiUrl: env.MANIFOLD_API_URL || undefined })] : []),
+    ...(on(env.LIMITLESS_ENABLED) ? [createLimitlessProvider({ apiUrl: env.LIMITLESS_API_URL || undefined, rpcUrls: urls("BASE_RPC_URLS", BASE_RPCS), resolverAllowlist: csv("LIMITLESS_RESOLVERS", LIMITLESS_RESOLVERS) })] : []),
+    ...(on(env.OPINION_ENABLED) ? [createOpinionProvider({ apiUrl: env.OPINION_API_URL || undefined, rpcUrls: urls("BNB_RPC_URLS", BNB_RPCS), resolverAllowlist: csv("OPINION_ORACLES", OPINION_ORACLES) })] : []),
 ];
-if (providers.length === 0) throw new Error("no source enabled: set POLYGON_RPC_URLS, KALSHI_ENABLED or MANIFOLD_ENABLED");
+if (providers.length === 0) throw new Error("no source enabled: set POLYGON_RPC_URLS, KALSHI_ENABLED, MANIFOLD_ENABLED, LIMITLESS_ENABLED or OPINION_ENABLED");
 const log = (msg: string, extra: Record<string, unknown> = {}) => console.log(JSON.stringify({ ts: new Date().toISOString(), service: "attestor", msg, ...extra }));
 
 const app = new Hono();

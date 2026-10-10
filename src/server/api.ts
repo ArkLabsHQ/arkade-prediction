@@ -237,7 +237,7 @@ export function createApi(d: ApiDeps): Hono {
     admin.post("/replay", async (c) => {
         if (!d.replay) throw new HttpError(409, "disabled", "historical replay needs DEV_ENDPOINTS and a source provider on regtest");
         const { sourceId, provider = "polymarket" } = await body<{ sourceId: string; provider?: string }>(c);
-        if (!["polymarket", "kalshi", "manifold"].includes(provider)) throw new HttpError(400, "provider", "provider must be polymarket, kalshi or manifold");
+        if (!["polymarket", "kalshi", "manifold", "limitless", "opinion"].includes(provider)) throw new HttpError(400, "provider", "provider must be polymarket, kalshi, manifold, limitless or opinion");
         if (!/^[A-Za-z0-9._-]{1,80}$/.test(String(sourceId))) throw new HttpError(400, "source-id", "source market id expected");
         return c.json({ marketId: await d.replay(String(sourceId), provider as ProviderName) }, 201);
     });

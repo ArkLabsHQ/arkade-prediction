@@ -61,7 +61,7 @@ export const isReplay = (m: MarketJson) => m.kind === "polymarket" && m.category
 /** Ops and test-network markets that should not lead the public board. */
 export const isTest = (m: MarketJson) => m.category === "test" || isReplay(m);
 
-const PROVIDERS = { polymarket: "Polymarket", kalshi: "Kalshi", manifold: "Manifold" } as const;
+const PROVIDERS = { polymarket: "Polymarket", kalshi: "Kalshi", manifold: "Manifold", limitless: "Limitless", opinion: "Opinion" } as const;
 export const providerName = (m: MarketJson) => (m.source ? PROVIDERS[m.source.provider] ?? m.source.provider : null);
 
 // Servers deployed before the section field existed omit it.

@@ -21,6 +21,8 @@ import { resolutionTick } from "./resolver.js";
 import { createPolymarketProvider } from "./sources/polymarket/index.js";
 import { createKalshiProvider } from "./sources/kalshi/index.js";
 import { createManifoldProvider } from "./sources/manifold/index.js";
+import { createLimitlessProvider } from "./sources/limitless/index.js";
+import { createOpinionProvider } from "./sources/opinion/index.js";
 import type { MarketSourceProvider, ProviderName } from "./sources/types.js";
 import { captureTick } from "./rounds.js";
 import { proofTick } from "./proofs.js";
@@ -146,6 +148,8 @@ async function main(): Promise<void> {
             : []),
         ...(cfg.KALSHI_ENABLED ? [createKalshiProvider({ apiUrl: cfg.KALSHI_API_URL })] : []),
         ...(cfg.MANIFOLD_ENABLED ? [createManifoldProvider({ apiUrl: cfg.MANIFOLD_API_URL })] : []),
+        ...(cfg.LIMITLESS_ENABLED ? [createLimitlessProvider({ apiUrl: cfg.LIMITLESS_API_URL, rpcUrls: cfg.BASE_RPC_URLS, resolverAllowlist: cfg.LIMITLESS_RESOLVERS })] : []),
+        ...(cfg.OPINION_ENABLED ? [createOpinionProvider({ apiUrl: cfg.OPINION_API_URL, rpcUrls: cfg.BNB_RPC_URLS, resolverAllowlist: cfg.OPINION_ORACLES })] : []),
     ];
     const polymarket = providers.find((p) => p.name === "polymarket");
     // How many configured attestors serve each source profile, refreshed at most once a minute.

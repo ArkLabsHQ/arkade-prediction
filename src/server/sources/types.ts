@@ -1,7 +1,7 @@
 /** Source-market adapter contract. Implementations must never infer settlement from titles or prices. */
 
-export type ProviderName = "polymarket" | "kalshi" | "manifold";
-export const PROVIDER_LABEL: Record<ProviderName, string> = { polymarket: "Polymarket", kalshi: "Kalshi", manifold: "Manifold" };
+export type ProviderName = "polymarket" | "kalshi" | "manifold" | "limitless" | "opinion";
+export const PROVIDER_LABEL: Record<ProviderName, string> = { polymarket: "Polymarket", kalshi: "Kalshi", manifold: "Manifold", limitless: "Limitless", opinion: "Opinion" };
 
 
 /** API sources (Kalshi, Manifold) use chainId 0, their API as settlementContract and their market key as conditionId. */
