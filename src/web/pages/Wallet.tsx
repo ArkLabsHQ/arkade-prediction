@@ -1,6 +1,7 @@
 import { generateMnemonic, validateMnemonic } from "@scure/bip39";
 import { wordlist } from "@scure/bip39/wordlists/english.js";
 import { useState } from "react";
+import { arkadeCallbackAllowed, arkadeConnectUrl, forgetLink } from "../arkLink.js";
 import { openSession, type Session } from "../chain.js";
 import { useApp } from "../ctx.js";
 import { MIN_PASSPHRASE, createKeystore, forgetKeystore, hasKeystore, isOpenKeystore, unlockKeystore } from "../keystore.js";
@@ -18,17 +19,29 @@ export function WalletPage() {
     );
 }
 
+function ArkadeConnect() {
+    const callback = `${location.origin}/wallet`;
+    const allowed = arkadeCallbackAllowed(callback);
+    return (
+        <>
+            <button type="button" className="btn wide" disabled={!allowed} onClick={() => location.assign(arkadeConnectUrl(callback))}>Use the Arkade wallet</button>
+            {!allowed && <p className="hint">The Arkade wallet only returns here over https, or http on localhost.</p>}
+        </>
+    );
+}
+
 function Onboarding() {
     const [mode, setMode] = useState<"choose" | "create" | "restore">("choose");
     if (mode === "create") return <CreateWallet onBack={() => setMode("choose")} />;
     if (mode === "restore") return <RestoreWallet onBack={() => setMode("choose")} />;
     return (
         <Panel title="Set up a wallet">
-            <p>Keys live only in this browser. The server never sees them: this page builds and signs every transaction itself.</p>
+            <p>Keys live only in this browser. The server never sees them: this page builds and signs every transaction itself. Or connect the Arkade wallet, which keeps the key and only shares an address.</p>
             <div className="row2">
                 <button type="button" className="btn primary" onClick={() => setMode("create")}>Create a new wallet</button>
                 <button type="button" className="btn" onClick={() => setMode("restore")}>Restore from a phrase</button>
             </div>
+            <ArkadeConnect />
         </Panel>
     );
 }
@@ -116,6 +129,7 @@ function Protect({ mnemonic, onBack }: { mnemonic: string; onBack(): void }) {
         : pass !== pass2 ? "The passphrases differ" : null;
     const submit = (passphrase: string) => act.run(async (step) => {
         step("Saving the recovery phrase");
+        forgetLink();
         const ks = await createKeystore(passphrase, mnemonic);
         step("Opening the wallet");
         setSession(await openSession(chain!, config, ks));
@@ -198,13 +212,16 @@ function Overview({ session }: { session: Session }) {
     const { index, error, reload } = useMarketIndex();
     return (
         <>
-            <Panel title="Account" actions={<button type="button" className="btn small" onClick={() => void lock()}>Lock</button>}>
+            <Panel title="Account" actions={session.external
+                ? <button type="button" className="btn small" onClick={() => { forgetLink(); void lock(); }}>Disconnect</button>
+                : <button type="button" className="btn small" onClick={() => void lock()}>Lock</button>}>
                 <dl className="kv">
                     <dt>Arkade address</dt><dd><span className="mono break">{session.address}</span> <Copy text={session.address} /></dd>
                 </dl>
+                {session.external && <p className="muted small">Connected through the Arkade wallet. It holds the key, so bets and other signatures need a wallet created in this browser.</p>}
             </Panel>
             <Balances />
-            <ExportPhrase session={session} />
+            {!session.external && <ExportPhrase session={session} />}
             <Panel title="Your bets">
                 {!holdings ? (holdingsError ? <p className="error">{holdingsError}</p> : <Loading what="bets" />)
                     : index ? <ClaimsTable index={index} holdings={holdings} />

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ConfigJson } from "../shared/api.js";
 import { api, startLive, useLive, useLiveState } from "./api.js";
+import { loadLink, openLinkedSession, saveLink, takeConnectReturn } from "./arkLink.js";
 import { connectChain, openSession, readHoldings, type Chain, type Holdings, type Session } from "./chain.js";
 import { AppCtx, useApp, type AppState } from "./ctx.js";
 import { errMsg, n, short } from "./format.js";
@@ -49,6 +50,22 @@ function Shell({ config }: { config: ConfigJson }) {
     useEffect(reconnect, [reconnect]);
 
     const [session, setSession] = useState<Session | null>(null);
+    const [linkEpoch, setLinkEpoch] = useState(0);
+    const [linkError, setLinkError] = useState<string | null>(null);
+    useEffect(() => {
+        const parsed = takeConnectReturn(location.search, config.arkSignerPubkey);
+        if (!parsed.result) return;
+        history.replaceState(null, "", `${location.pathname}${parsed.search}${location.hash}`);
+        if (!parsed.result.ok) {
+            setLinkError(parsed.result.error === "denied" ? "The Arkade wallet did not share an address."
+                : parsed.result.error === "mismatch" ? "That address is for a different Arkade server than this market."
+                    : "The Arkade wallet returned a link this app cannot use.");
+            return;
+        }
+        saveLink(parsed.result.link);
+        setLinkError(null);
+        setLinkEpoch((n) => n + 1);
+    }, [config.arkSignerPubkey]);
     const [holdings, setHoldings] = useState<Holdings | null>(null);
     const [holdingsError, setHoldingsError] = useState<string | null>(null);
     const refreshHoldings = useCallback(async () => {
@@ -74,6 +91,11 @@ function Shell({ config }: { config: ConfigJson }) {
         setAutoOpened(true);
         unlockKeystore("").then((ks) => openSession(chain, config, ks)).then(setSession, (e) => setChainError(errMsg(e)));
     }, [chain, config, autoOpened]);
+    useEffect(() => {
+        if (!chain || session || hasKeystore()) return;
+        const link = loadLink();
+        if (link) setSession(openLinkedSession(chain, link));
+    }, [chain, session, linkEpoch]);
     const lock = useCallback(async () => {
         setSession(null);
         await session?.wallet.dispose();
@@ -94,6 +116,7 @@ function Shell({ config }: { config: ConfigJson }) {
                 </div>
             )}
             {chain?.emulatorWarning && <div className="banner danger" role="alert">{chain.emulatorWarning}</div>}
+            {linkError && <div className="banner danger" role="alert">{linkError}</div>}
             {chainError && (
                 <div className="banner danger" role="alert">
                     Arkade service unreachable: {chainError}. Browsing works; wallet and trading are disabled.{" "}
