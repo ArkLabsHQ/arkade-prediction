@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ConfigJson } from "../shared/api.js";
 import { api, startLive, useLive, useLiveState } from "./api.js";
+import { finishArkadeTab, linkErrorText, loadLink, loadNote, openLinkedSession, saveLink, saveNote, takeConnectReturn, watchArkadeHandoff } from "./arkLink.js";
 import { connectChain, openSession, readHoldings, type Chain, type Holdings, type Session } from "./chain.js";
 import { AppCtx, useApp, type AppState } from "./ctx.js";
 import { errMsg, n, short } from "./format.js";
@@ -49,6 +50,25 @@ function Shell({ config }: { config: ConfigJson }) {
     useEffect(reconnect, [reconnect]);
 
     const [session, setSession] = useState<Session | null>(null);
+    const [linkEpoch, setLinkEpoch] = useState(0);
+    const [linkError, setLinkError] = useState<string | null>(null);
+    useEffect(() => {
+        const parsed = takeConnectReturn(location.search, config.arkSignerPubkey);
+        if (!parsed.result) return;
+        history.replaceState(null, "", `${location.pathname}${parsed.search}${location.hash}`);
+        if (!parsed.result.ok) saveNote(linkErrorText(parsed.result.error));
+        else {
+            if ("link" in parsed.result) saveLink(parsed.result.link);
+            saveNote(null);
+        }
+        setLinkError(loadNote());
+        setLinkEpoch((n) => n + 1);
+        finishArkadeTab();
+    }, [config.arkSignerPubkey]);
+    useEffect(() => watchArkadeHandoff(() => {
+        setLinkError(loadNote());
+        setLinkEpoch((n) => n + 1);
+    }), []);
     const [holdings, setHoldings] = useState<Holdings | null>(null);
     const [holdingsError, setHoldingsError] = useState<string | null>(null);
     const refreshHoldings = useCallback(async () => {
@@ -74,6 +94,11 @@ function Shell({ config }: { config: ConfigJson }) {
         setAutoOpened(true);
         unlockKeystore("").then((ks) => openSession(chain, config, ks)).then(setSession, (e) => setChainError(errMsg(e)));
     }, [chain, config, autoOpened]);
+    useEffect(() => {
+        if (!chain || session || hasKeystore()) return;
+        const link = loadLink();
+        if (link) setSession(openLinkedSession(chain, link));
+    }, [chain, session, linkEpoch]);
     const lock = useCallback(async () => {
         setSession(null);
         await session?.wallet.dispose();
@@ -94,6 +119,7 @@ function Shell({ config }: { config: ConfigJson }) {
                 </div>
             )}
             {chain?.emulatorWarning && <div className="banner danger" role="alert">{chain.emulatorWarning}</div>}
+            {linkError && <div className="banner danger" role="alert">{linkError}</div>}
             {chainError && (
                 <div className="banner danger" role="alert">
                     Arkade service unreachable: {chainError}. Browsing works; wallet and trading are disabled.{" "}

@@ -1,6 +1,6 @@
 import {
     EsploraProvider, IndexedDBContractRepository, IndexedDBWalletRepository, MnemonicIdentity, RestArkProvider,
-    RestEmulatorProvider, RestIndexerProvider, Wallet, arkade, networks, type WalletBalance,
+    RestEmulatorProvider, RestIndexerProvider, Wallet, arkade, networks, type Identity, type WalletBalance,
 } from "@arkade-os/sdk";
 import { hex } from "@scure/base";
 import {
@@ -19,6 +19,7 @@ import {
     type ConfigJson, type CreateMarketRequest, type MarketJson, type OfferJson, type Outcome, type PostOfferRequest, type RegisterBoxRequest,
 } from "../shared/api.js";
 import { api, enc } from "./api.js";
+import { EXTERNAL_SIGN } from "./arkLink.js";
 import { planFill, type Plan } from "./fills.js";
 import { errMsg } from "./format.js";
 import type { Keystore } from "./keystore.js";
@@ -69,12 +70,14 @@ export async function connectChain(config: ConfigJson): Promise<Chain> {
 
 export interface Session {
     wallet: Wallet;
-    identity: MnemonicIdentity;
+    identity: Identity;
     party: Party;
     keystore: Keystore;
     address: string;
     script: string;
     pubkey: string;
+    /** Address came from the Arkade app. That app holds the key. */
+    external?: boolean;
 }
 
 export async function openSession(chain: Chain, config: ConfigJson, keystore: Keystore): Promise<Session> {
@@ -130,6 +133,7 @@ export async function logged<T extends { txid: string }>(
     run: (ctx: Ctx) => Promise<T>,
     record?: (r: T) => Partial<LogEntry>,
 ): Promise<T & { logId: string }> {
+    if (s.external) throw new Error(EXTERNAL_SIGN);
     const logId = addLog(s.script, { ...entry, status: "signing" });
     const ctx: Ctx = { ...chain.ctx, beforeSubmit: ({ txid }) => updateLog(s.script, logId, { txid, status: "submitting" }) };
     try {
