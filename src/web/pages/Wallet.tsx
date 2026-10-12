@@ -1,7 +1,7 @@
 import { generateMnemonic, validateMnemonic } from "@scure/bip39";
 import { wordlist } from "@scure/bip39/wordlists/english.js";
 import { useState } from "react";
-import { arkadeCallbackAllowed, arkadeConnectUrl, forgetLink } from "../arkLink.js";
+import { arkadeCallbackAllowed, arkadeConnectUrl, forgetLink, openArkadeTab } from "../arkLink.js";
 import { openSession, type Session } from "../chain.js";
 import { useApp } from "../ctx.js";
 import { MIN_PASSPHRASE, createKeystore, forgetKeystore, hasKeystore, isOpenKeystore, unlockKeystore } from "../keystore.js";
@@ -24,8 +24,9 @@ function ArkadeConnect() {
     const allowed = arkadeCallbackAllowed(callback);
     return (
         <>
-            <button type="button" className="btn wide" disabled={!allowed} onClick={() => location.assign(arkadeConnectUrl(callback))}>Use the Arkade wallet</button>
-            {!allowed && <p className="hint">The Arkade wallet only returns here over https, or http on localhost.</p>}
+            <button type="button" className="btn wide" disabled={!allowed} onClick={() => openArkadeTab(arkadeConnectUrl(callback))}>Use the Arkade wallet</button>
+            {allowed ? <p className="muted small">Opens in a new tab. After you approve, switch back here.</p>
+                : <p className="hint">The Arkade wallet only returns here over https, or http on localhost.</p>}
         </>
     );
 }
@@ -218,7 +219,7 @@ function Overview({ session }: { session: Session }) {
                 <dl className="kv">
                     <dt>Arkade address</dt><dd><span className="mono break">{session.address}</span> <Copy text={session.address} /></dd>
                 </dl>
-                {session.external && <p className="muted small">Connected through the Arkade wallet. It holds the key, so bets and other signatures need a wallet created in this browser.</p>}
+                {session.external && <p className="muted small">Connected through the Arkade wallet, which still holds the key. A bet needs a wallet created in this browser: the Arkade link can approve a payment, not sign one of these transactions.</p>}
             </Panel>
             <Balances />
             {!session.external && <ExportPhrase session={session} />}

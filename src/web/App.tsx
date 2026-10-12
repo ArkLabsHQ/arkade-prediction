@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ConfigJson } from "../shared/api.js";
 import { api, startLive, useLive, useLiveState } from "./api.js";
-import { loadLink, openLinkedSession, saveLink, takeConnectReturn } from "./arkLink.js";
+import { finishArkadeTab, linkErrorText, loadLink, loadNote, openLinkedSession, saveLink, saveNote, takeConnectReturn, watchArkadeHandoff } from "./arkLink.js";
 import { connectChain, openSession, readHoldings, type Chain, type Holdings, type Session } from "./chain.js";
 import { AppCtx, useApp, type AppState } from "./ctx.js";
 import { errMsg, n, short } from "./format.js";
@@ -56,16 +56,19 @@ function Shell({ config }: { config: ConfigJson }) {
         const parsed = takeConnectReturn(location.search, config.arkSignerPubkey);
         if (!parsed.result) return;
         history.replaceState(null, "", `${location.pathname}${parsed.search}${location.hash}`);
-        if (!parsed.result.ok) {
-            setLinkError(parsed.result.error === "denied" ? "The Arkade wallet did not share an address."
-                : parsed.result.error === "mismatch" ? "That address is for a different Arkade server than this market."
-                    : "The Arkade wallet returned a link this app cannot use.");
-            return;
+        if (!parsed.result.ok) saveNote(linkErrorText(parsed.result.error));
+        else {
+            if ("link" in parsed.result) saveLink(parsed.result.link);
+            saveNote(null);
         }
-        saveLink(parsed.result.link);
-        setLinkError(null);
+        setLinkError(loadNote());
         setLinkEpoch((n) => n + 1);
+        finishArkadeTab();
     }, [config.arkSignerPubkey]);
+    useEffect(() => watchArkadeHandoff(() => {
+        setLinkError(loadNote());
+        setLinkEpoch((n) => n + 1);
+    }), []);
     const [holdings, setHoldings] = useState<Holdings | null>(null);
     const [holdingsError, setHoldingsError] = useState<string | null>(null);
     const refreshHoldings = useCallback(async () => {

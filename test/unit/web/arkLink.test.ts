@@ -1,7 +1,7 @@
 import { ArkAddress } from "@arkade-os/sdk";
 import { hex } from "@scure/base";
 import { describe, expect, it } from "vitest";
-import { arkadeCallbackAllowed, arkadeConnectUrl, arkadeSendUrl, openLinkedSession, takeConnectReturn } from "../../../src/web/arkLink.js";
+import { arkadeCallbackAllowed, arkadeConnectUrl, arkadeSendUrl, openArkadeTab, openLinkedSession, takeConnectReturn } from "../../../src/web/arkLink.js";
 import type { Chain } from "../../../src/web/chain.js";
 
 const server = new Uint8Array(32).map((_, i) => i + 1);
@@ -47,6 +47,18 @@ describe("arkade app links", () => {
         expect(takeConnectReturn(`?address=not-an-address&pubkey=${pubkey}`, serverHex).result).toEqual({ ok: false, error: "invalid" });
         const other = new ArkAddress(new Uint8Array(32).fill(9), new Uint8Array(32).fill(3), "tark").encode();
         expect(takeConnectReturn(`?address=${other}&pubkey=${pubkey}`, serverHex).result).toEqual({ ok: false, error: "mismatch" });
+        expect(takeConnectReturn("?status=sent&txid=abc&keep=1", serverHex)).toEqual({ result: { ok: true, sent: "abc" }, search: "?keep=1" });
+    });
+
+    it("opens the wallet in a new tab", () => {
+        const opened: string[] = [];
+        const assigned: string[] = [];
+        const url = arkadeConnectUrl("http://localhost/wallet");
+        openArkadeTab(url, { open: (href) => { opened.push(href); return {} as Window; }, assign: (href) => assigned.push(href) });
+        expect(opened).toEqual([url]);
+        expect(assigned).toEqual([]);
+        openArkadeTab(arkadeSendUrl("bitcoin:?ark=tark1qq", "http://localhost/wallet"), { open: () => null, assign: (href) => assigned.push(href) });
+        expect(assigned).toHaveLength(1);
     });
 
     it("identifies a linked wallet and refuses to sign", async () => {
@@ -56,6 +68,6 @@ describe("arkade app links", () => {
         expect(session.address).toBe(address);
         expect(session.pubkey).toBe(pubkey);
         expect((await session.wallet.getBalance()).available).toBe(500);
-        await expect(session.identity.sign(undefined as never)).rejects.toThrow(/Arkade app holds this key/);
+        await expect(session.identity.sign(undefined as never)).rejects.toThrow(/wallet in this browser/);
     });
 });
