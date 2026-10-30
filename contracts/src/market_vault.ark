@@ -14,9 +14,9 @@ contract MarketVault(
   bytes32 binding,
   int closeAt,
   int timeoutAt,
-  bytes32 resolvedYes,
-  bytes32 resolvedNo,
-  bytes32 resolvedInvalid,
+  ScriptPubKey resolvedYes,
+  ScriptPubKey resolvedNo,
+  ScriptPubKey resolvedInvalid,
   // BIP341 NUMS point: arkd needs an exit leaf to admit the vault to batches; nobody can sign it.
   pubkey noExitKey,
   int exit
@@ -42,7 +42,7 @@ contract MarketVault(
   }
 
   private function keepsCtrl() {
-    require(tx.outputs[0].witnessVersion == 1, "vault version");
+    require(tx.outputs[0].script.version == 1, "vault version");
     require(tx.outputs[0].assets.lookup(ctrlTxid, ctrlGidx) == 1, "ctrl");
     require(tx.outputs[0].assets.length == 1, "vault assets");
   }
@@ -52,7 +52,7 @@ contract MarketVault(
     require(n > 0, "n");
     sets(n, n);
     keepsCtrl();
-    require(tx.outputs[0].scriptPubKey == tx.input.current.scriptPubKey, "vault moved");
+    require(tx.outputs[0].script == tx.input.current.script, "vault moved");
     require(tx.outputs[0].value == tx.input.current.value + n * unit, "collateral");
     require(tx.outputs[0].value <= capValue, "cap");
   }
@@ -62,7 +62,7 @@ contract MarketVault(
     require(n > 0, "n");
     sets(0 - n, 0 - n);
     keepsCtrl();
-    require(tx.outputs[0].scriptPubKey == tx.input.current.scriptPubKey, "vault moved");
+    require(tx.outputs[0].script == tx.input.current.script, "vault moved");
     require(tx.outputs[0].value == tx.input.current.value - n * unit, "collateral");
   }
 
@@ -73,7 +73,7 @@ contract MarketVault(
     attested(message, oracleSigs);
     sets(0, 0);
     keepsCtrl();
-    require(tx.outputs[0].scriptPubKey == resolvedYes, "target");
+    require(tx.outputs[0].script == resolvedYes, "target");
     require(tx.outputs[0].value == tx.input.current.value, "value");
   }
 
@@ -83,7 +83,7 @@ contract MarketVault(
     attested(message, oracleSigs);
     sets(0, 0);
     keepsCtrl();
-    require(tx.outputs[0].scriptPubKey == resolvedNo, "target");
+    require(tx.outputs[0].script == resolvedNo, "target");
     require(tx.outputs[0].value == tx.input.current.value, "value");
   }
 
@@ -93,7 +93,7 @@ contract MarketVault(
     attested(message, oracleSigs);
     sets(0, 0);
     keepsCtrl();
-    require(tx.outputs[0].scriptPubKey == resolvedInvalid, "target");
+    require(tx.outputs[0].script == resolvedInvalid, "target");
     require(tx.outputs[0].value == tx.input.current.value, "value");
   }
 
@@ -102,7 +102,7 @@ contract MarketVault(
     require(timeoutAt > 0 && checkTime(timeoutAt), "not timed out");
     sets(0, 0);
     keepsCtrl();
-    require(tx.outputs[0].scriptPubKey == resolvedInvalid, "target");
+    require(tx.outputs[0].script == resolvedInvalid, "target");
     require(tx.outputs[0].value == tx.input.current.value, "value");
   }
 
